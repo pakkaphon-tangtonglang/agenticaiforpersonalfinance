@@ -1,0 +1,2 @@
+[mypy-google.generativeai]
+ignore_missing_imports = True
