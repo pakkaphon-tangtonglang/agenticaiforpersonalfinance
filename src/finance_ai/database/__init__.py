@@ -1,3 +1,17 @@
-"""Database models and CRUD operations."""
+"""Database models, session management, and CRUD operations."""
 
-# This module will be implemented in future milestones
+from finance_ai.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
+from finance_ai.database.session import (
+    create_database_engine,
+    create_session_factory,
+    get_database_session,
+)
+
+__all__ = [
+    "Base",
+    "TimestampMixin",
+    "UUIDPrimaryKeyMixin",
+    "create_database_engine",
+    "create_session_factory",
+    "get_database_session",
+]

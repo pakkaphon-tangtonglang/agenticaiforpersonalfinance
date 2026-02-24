@@ -1,0 +1,237 @@
+"""Router Agent that classifies user queries and routes to specialized agents.
+
+Currently supports routing to the Tax Agent, Expense Agent, and Investment Agent.
+Other intents return a polite message indicating the feature is not yet available.
+"""
+
+import json
+from collections.abc import Callable
+from decimal import Decimal
+from typing import Any
+
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import HumanMessage, SystemMessage
+from sqlalchemy.orm import Session
+
+from finance_ai.agents.prompts import ROUTER_SYSTEM_PROMPT
+from finance_ai.agents.schemas import RouterDecision
+from finance_ai.core.logging import get_logger
+
+logger = get_logger(__name__)
+
+DEFAULT_DECISION = RouterDecision(intent="unknown", confidence=Decimal("0"))
+
+
+def parse_router_response(content: Any) -> RouterDecision:
+    """Parse the LLM's JSON response into a RouterDecision.
+
+    Handles markdown code fences that LLMs sometimes wrap JSON in.
+
+    Args:
+        content: Raw response content from the LLM.
+
+    Returns:
+        Parsed RouterDecision, or default 'unknown' on failure.
+
+    Example:
+        >>> parse_router_response('{"intent": "tax", "confidence": 0.95}')
+        RouterDecision(intent='tax', confidence=Decimal('0.95'))
+    """
+    try:
+        text = str(content).strip()
+        text = _strip_code_fence(text)
+        data = json.loads(text)
+        return RouterDecision(**data)
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+        logger.warning("Failed to parse router response: %s", content)
+        return DEFAULT_DECISION
+
+
+def _strip_code_fence(text: str) -> str:
+    """Remove markdown code fence wrapping from text.
+
+    Args:
+        text: Text that may be wrapped in ```json ... ```.
+
+    Returns:
+        Text with code fences removed if present.
+
+    Example:
+        >>> _strip_code_fence('```json\\n{"a": 1}\\n```')
+        '{"a": 1}'
+    """
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    return text
+
+
+def classify_query(
+    query: str,
+    chat_model: BaseChatModel | None = None,
+) -> RouterDecision:
+    """Classify a user query into an intent category.
+
+    Args:
+        query: The user's natural language query.
+        chat_model: Optional ChatModel override for testing.
+
+    Returns:
+        RouterDecision with intent and confidence.
+
+    Example:
+        >>> decision = classify_query("คำนวณภาษีปี 2024")
+    """
+    if chat_model is None:
+        from finance_ai.agents.llm_factory import create_chat_model
+
+        chat_model = create_chat_model()
+    messages = [
+        SystemMessage(content=ROUTER_SYSTEM_PROMPT),
+        HumanMessage(content=query),
+    ]
+    response = chat_model.invoke(messages)
+    return parse_router_response(response.content)
+
+
+def execute_tax_agent(
+    query: str,
+    chat_model: BaseChatModel | None = None,
+) -> dict[str, Any]:
+    """Execute the Tax Agent for a tax-related query.
+
+    Args:
+        query: The user's tax-related query.
+        chat_model: Optional ChatModel override.
+
+    Returns:
+        Dict with intent='tax' and the agent's response.
+
+    Example:
+        >>> result = execute_tax_agent("คำนวณภาษี เงินเดือน 1 ล้าน")
+    """
+    from finance_ai.agents.tax_agent import build_tax_agent_graph
+
+    graph = build_tax_agent_graph(chat_model)
+    result = graph.invoke({"messages": [("user", query)]})
+    last_message = result["messages"][-1]
+    return {"intent": "tax", "response": last_message.content}
+
+
+def execute_expense_agent(
+    query: str,
+    chat_model: BaseChatModel | None = None,
+    user_id: str = "",
+    db_session_factory: Callable[[], Session] | None = None,
+) -> dict[str, Any]:
+    """Execute the Expense Agent for an expense-related query.
+
+    Args:
+        query: The user's expense-related query.
+        chat_model: Optional ChatModel override.
+        user_id: UUID of the user for DB operations.
+        db_session_factory: Optional session factory for DB access.
+
+    Returns:
+        Dict with intent='expense' and the agent's response.
+
+    Example:
+        >>> result = execute_expense_agent("จ่ายค่ากาแฟ 80 บาท")
+    """
+    from finance_ai.agents.expense_agent import build_expense_agent_graph  # noqa: PLC0415
+
+    graph = build_expense_agent_graph(chat_model)
+    result = graph.invoke(
+        {
+            "messages": [("user", query)],
+            "user_id": user_id,
+            "db_session_factory": db_session_factory,
+        }
+    )
+    last_message = result["messages"][-1]
+    return {"intent": "expense", "response": last_message.content}
+
+
+def execute_investment_agent(
+    query: str,
+    chat_model: BaseChatModel | None = None,
+    user_id: str = "",
+    db_session_factory: Callable[[], Session] | None = None,
+) -> dict[str, Any]:
+    """Execute the Investment Agent for an investment-related query.
+
+    Args:
+        query: The user's investment-related query.
+        chat_model: Optional ChatModel override.
+        user_id: UUID of the user for DB operations.
+        db_session_factory: Optional session factory for DB access.
+
+    Returns:
+        Dict with intent='investment' and the agent's response.
+
+    Example:
+        >>> result = execute_investment_agent("ดูพอร์ตของฉัน")
+    """
+    from finance_ai.agents.investment_agent import build_investment_agent_graph  # noqa: PLC0415
+
+    graph = build_investment_agent_graph(chat_model)
+    result = graph.invoke(
+        {
+            "messages": [("user", query)],
+            "user_id": user_id,
+            "db_session_factory": db_session_factory,
+        }
+    )
+    last_message = result["messages"][-1]
+    return {"intent": "investment", "response": last_message.content}
+
+
+def build_unsupported_response(decision: RouterDecision) -> dict[str, Any]:
+    """Build a response for unsupported intents.
+
+    Args:
+        decision: The router's classification decision.
+
+    Returns:
+        Dict with intent and a Thai message about the limitation.
+
+    Example:
+        >>> build_unsupported_response(RouterDecision(intent="unknown", confidence=Decimal("0")))
+    """
+    return {
+        "intent": decision.intent,
+        "response": ("ขออภัย ขณะนี้ระบบรองรับเฉพาะคำถามเกี่ยวกับภาษี" " ค่าใช้จ่าย และการลงทุนเท่านั้น"),
+    }
+
+
+def route_query(
+    query: str,
+    chat_model: BaseChatModel | None = None,
+    user_id: str = "",
+    db_session_factory: Callable[[], Session] | None = None,
+) -> dict[str, Any]:
+    """Route a user query to the appropriate agent.
+
+    Classifies the query intent and dispatches to the matching agent.
+    Currently supports Tax Agent, Expense Agent, and Investment Agent.
+
+    Args:
+        query: The user's natural language query.
+        chat_model: Optional ChatModel override for testing.
+        user_id: UUID of the user for DB-backed agents.
+        db_session_factory: Optional session factory for DB access.
+
+    Returns:
+        Dict with 'intent' and 'response' from the target agent.
+
+    Example:
+        >>> result = route_query("คำนวณภาษี เงินเดือน 1 ล้าน")
+    """
+    decision = classify_query(query, chat_model)
+    logger.info("Routed query to: %s (confidence: %s)", decision.intent, decision.confidence)
+    if decision.intent == "tax":
+        return execute_tax_agent(query, chat_model)
+    if decision.intent == "expense":
+        return execute_expense_agent(query, chat_model, user_id, db_session_factory)
+    if decision.intent == "investment":
+        return execute_investment_agent(query, chat_model, user_id, db_session_factory)
+    return build_unsupported_response(decision)
