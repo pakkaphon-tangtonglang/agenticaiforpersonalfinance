@@ -21,7 +21,7 @@ def _import_yfinance() -> object:
         ImportError: If yfinance is not installed.
     """
     try:
-        import yfinance  # type: ignore[import-untyped]  # noqa: PLC0415
+        import yfinance  # noqa: PLC0415
 
         return yfinance
     except ImportError as exc:
@@ -47,7 +47,7 @@ def fetch_current_price(symbol: str) -> Decimal | None:
     """
     yf = _import_yfinance()
     try:
-        ticker = yf.Ticker(symbol)  # type: ignore[union-attr]
+        ticker = yf.Ticker(symbol)  # type: ignore[attr-defined]
         info = ticker.info or {}
         price_value = info.get("currentPrice") or info.get("regularMarketPrice")
         if price_value is None:

@@ -44,7 +44,7 @@ class TestRouterDecision:
     def test_invalid_intent_raises(self) -> None:
         """RouterDecision rejects invalid intent values."""
         with pytest.raises(ValidationError):
-            RouterDecision(intent="budgeting", confidence=Decimal("0.5"))
+            RouterDecision(intent="budgeting", confidence=Decimal("0.5"))  # type: ignore[arg-type]
 
     def test_confidence_below_zero_raises(self) -> None:
         """RouterDecision rejects confidence below 0."""
@@ -114,6 +114,7 @@ class TestExpenseAgentState:
             "messages": [],
             "expense_result": None,
             "user_id": "test-user-123",
+            "db_session_factory": None,
         }
         assert state["messages"] == []
         assert state["expense_result"] is None
@@ -126,6 +127,7 @@ class TestExpenseAgentState:
             "messages": [],
             "expense_result": result,
             "user_id": "test-user-456",
+            "db_session_factory": None,
         }
         assert state["expense_result"] is not None
         assert state["expense_result"]["total_amount"] == "400.00"

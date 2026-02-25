@@ -3,7 +3,7 @@
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from langchain_core.messages import AIMessage  # type: ignore[import-untyped]
+from langchain_core.messages import AIMessage
 
 from finance_ai.agents.router_agent import (
     build_unsupported_response,
