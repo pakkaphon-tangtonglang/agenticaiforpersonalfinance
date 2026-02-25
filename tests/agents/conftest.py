@@ -6,8 +6,8 @@ from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
-from langchain_core.language_models.chat_models import BaseChatModel  # type: ignore[import-untyped]
-from langchain_core.messages import AIMessage  # type: ignore[import-untyped]
+from langchain_core.language_models.chat_models import BaseChatModel
+from langchain_core.messages import AIMessage
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 

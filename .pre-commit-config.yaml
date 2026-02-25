@@ -20,6 +20,7 @@ repos:
       - id: pylint
         name: Lint with pylint
         args: ["--fail-under=9.0", "--disable=duplicate-code"]
+        exclude: ^alembic/
         additional_dependencies:
           - pydantic
           - pydantic-settings
@@ -28,6 +29,10 @@ repos:
           - httpx
           - pytest
           - google-genai
+          - langchain-core
+          - langchain-google-genai
+          - langgraph
+          - yfinance
 
   # Type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -42,6 +47,11 @@ repos:
           - httpx
           - pytest
           - google-genai
+          - sqlalchemy
+          - langchain-core
+          - langgraph
+          - alembic
+          - yfinance
         args: ["--strict", "--ignore-missing-imports"]
 
   # Basic file checks

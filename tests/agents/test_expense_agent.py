@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from unittest.mock import MagicMock
 
-from langchain_core.messages import AIMessage, HumanMessage  # type: ignore[import-untyped]
+from langchain_core.messages import AIMessage, HumanMessage
 from sqlalchemy.orm import Session
 
 from finance_ai.agents.expense_agent import (
@@ -30,7 +30,7 @@ class TestShouldContinue:
             "user_id": "test-user",
             "db_session_factory": None,
         }
-        assert should_continue(state) == "tools"
+        assert should_continue(state) == "tools"  # type: ignore[arg-type]
 
     def test_returns_end_when_no_tool_calls(
         self,
@@ -43,7 +43,7 @@ class TestShouldContinue:
             "user_id": "test-user",
             "db_session_factory": None,
         }
-        assert should_continue(state) == "end"
+        assert should_continue(state) == "end"  # type: ignore[arg-type]
 
     def test_returns_end_for_empty_tool_calls(self) -> None:
         """Routes to 'end' when tool_calls is an empty list."""
@@ -54,7 +54,7 @@ class TestShouldContinue:
             "user_id": "test-user",
             "db_session_factory": None,
         }
-        assert should_continue(state) == "end"
+        assert should_continue(state) == "end"  # type: ignore[arg-type]
 
 
 class TestCreateLlmNode:

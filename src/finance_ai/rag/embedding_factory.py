@@ -52,9 +52,9 @@ def create_google_embeddings(settings: Settings) -> Embeddings:
     if not settings.google_api_key:
         raise ValueError("google_api_key is required when rag_embedding_provider is 'google'.")
     logger.info("Creating Google Embeddings with model=%s", settings.rag_embedding_model)
-    return GoogleGenerativeAIEmbeddings(
+    return GoogleGenerativeAIEmbeddings(  # type: ignore[no-any-return]
         model=settings.rag_embedding_model,
-        google_api_key=settings.google_api_key,  # type: ignore[arg-type]
+        google_api_key=settings.google_api_key,
     )
 
 
