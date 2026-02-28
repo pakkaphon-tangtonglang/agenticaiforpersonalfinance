@@ -65,6 +65,35 @@ class UserCRUD(BaseCRUD[User]):
         statement = select(User).where(User.is_active.is_(True)).offset(skip).limit(limit)
         return list(session.execute(statement).scalars().all())
 
+    def get_or_create_demo_user(self, session: Session, user_id: str) -> User:
+        """Get an existing user by ID, or create a demo user if not found.
+
+        Used by the Streamlit app to ensure a valid user record exists
+        before expense/investment agents try to write transactions.
+
+        Args:
+            session: Database session.
+            user_id: UUID string for the user.
+
+        Returns:
+            Existing or newly created User instance.
+
+        Example:
+            >>> user = user_crud.get_or_create_demo_user(session, "abc123")
+            >>> user.email
+            'demo-abc123@finance-ai.local'
+        """
+        existing = self.get_by_id(session, user_id)
+        if existing is not None:
+            return existing
+        return self.create(
+            session,
+            id=user_id,
+            email=f"demo-{user_id[:8]}@finance-ai.local",
+            hashed_password="demo-not-for-production",
+            full_name="Demo User",
+        )
+
     def deactivate(self, session: Session, user_id: str) -> bool:
         """
         Soft-delete a user by setting is_active to False.

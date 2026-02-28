@@ -63,3 +63,20 @@ class TestUserCRUD:
         crud = UserCRUD()
         result = crud.deactivate(test_session, "fake-id")
         assert result is False
+
+    def test_get_or_create_demo_user_creates_new(self, test_session: Session) -> None:
+        """Test creating a new demo user when ID doesn't exist."""
+        crud = UserCRUD()
+        user = crud.get_or_create_demo_user(test_session, "new-demo-id-123")
+        assert user.id == "new-demo-id-123"
+        assert user.email == "demo-new-demo@finance-ai.local"
+        assert user.full_name == "Demo User"
+
+    def test_get_or_create_demo_user_returns_existing(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """Test returning existing user without creating a duplicate."""
+        crud = UserCRUD()
+        user = crud.get_or_create_demo_user(test_session, sample_user.id)
+        assert user.id == sample_user.id
+        assert user.email == "test@example.com"
