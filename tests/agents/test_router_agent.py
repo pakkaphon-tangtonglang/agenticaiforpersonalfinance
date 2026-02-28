@@ -10,6 +10,7 @@ from finance_ai.agents.router_agent import (
     classify_query,
     execute_expense_agent,
     execute_investment_agent,
+    execute_planning_agent,
     parse_router_response,
     route_query,
 )
@@ -31,6 +32,13 @@ class TestParseRouterResponse:
         content = '{"intent": "expense", "confidence": 0.9}'
         result = parse_router_response(content)
         assert result.intent == "expense"
+        assert result.confidence == Decimal("0.9")
+
+    def test_valid_planning_json(self) -> None:
+        """Parses valid planning JSON into RouterDecision."""
+        content = '{"intent": "planning", "confidence": 0.9}'
+        result = parse_router_response(content)
+        assert result.intent == "planning"
         assert result.confidence == Decimal("0.9")
 
     def test_json_with_code_fence(self) -> None:
@@ -139,6 +147,24 @@ class TestRouteQuery:
         assert result["intent"] == "investment"
         mock_execute.assert_called_once()
 
+    @patch("finance_ai.agents.router_agent.execute_planning_agent")
+    @patch("finance_ai.agents.router_agent.classify_query")
+    def test_routes_planning_to_planning_agent(
+        self,
+        mock_classify: MagicMock,
+        mock_execute: MagicMock,
+    ) -> None:
+        """Routes planning intent to the planning agent."""
+        mock_classify.return_value = RouterDecision(
+            intent="planning",
+            confidence=Decimal("0.9"),
+        )
+        mock_execute.return_value = {"intent": "planning", "response": "สร้างเป้าหมายแล้ว"}
+
+        result = route_query("อยากออมเงิน 100,000 บาท")
+        assert result["intent"] == "planning"
+        mock_execute.assert_called_once()
+
     @patch("finance_ai.agents.router_agent.classify_query")
     def test_unsupported_intent_returns_message(
         self,
@@ -182,6 +208,37 @@ class TestExecuteInvestmentAgent:
         assert "db_session_factory" in call_args
 
 
+class TestExecutePlanningAgent:
+    """Tests for execute_planning_agent."""
+
+    @patch("finance_ai.agents.planning_agent.build_planning_agent_graph")
+    def test_returns_planning_response(self, mock_build: MagicMock) -> None:
+        """Returns dict with intent='planning' and response."""
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = {
+            "messages": [AIMessage(content="สร้างเป้าหมายออมเงิน 100,000 บาท สำเร็จ")],
+        }
+        mock_build.return_value = mock_graph
+
+        result = execute_planning_agent("อยากออมเงิน", user_id="user-1")
+        assert result["intent"] == "planning"
+        assert "100,000" in result["response"]
+
+    @patch("finance_ai.agents.planning_agent.build_planning_agent_graph")
+    def test_passes_user_id_and_session_factory(self, mock_build: MagicMock) -> None:
+        """Passes user_id and db_session_factory to the graph invoke."""
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = {
+            "messages": [AIMessage(content="ok")],
+        }
+        mock_build.return_value = mock_graph
+
+        execute_planning_agent("test", user_id="user-123")
+        call_args = mock_graph.invoke.call_args[0][0]
+        assert call_args["user_id"] == "user-123"
+        assert "db_session_factory" in call_args
+
+
 class TestBuildUnsupportedResponse:
     """Tests for unsupported intent responses."""
 
@@ -193,6 +250,7 @@ class TestBuildUnsupportedResponse:
         assert "ภาษี" in result["response"]
         assert "ค่าใช้จ่าย" in result["response"]
         assert "การลงทุน" in result["response"]
+        assert "วางแผนการเงิน" in result["response"]
 
     def test_unknown_intent(self) -> None:
         """Handles unknown intent gracefully."""

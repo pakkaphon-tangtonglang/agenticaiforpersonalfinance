@@ -1,6 +1,6 @@
 """Router Agent that classifies user queries and routes to specialized agents.
 
-Currently supports routing to the Tax Agent, Expense Agent, and Investment Agent.
+Supports routing to Tax, Expense, Investment, and Planning agents.
 Other intents return a polite message indicating the feature is not yet available.
 """
 
@@ -185,6 +185,40 @@ def execute_investment_agent(
     return {"intent": "investment", "response": last_message.content}
 
 
+def execute_planning_agent(
+    query: str,
+    chat_model: BaseChatModel | None = None,
+    user_id: str = "",
+    db_session_factory: Callable[[], Session] | None = None,
+) -> dict[str, Any]:
+    """Execute the Planning Agent for a planning-related query.
+
+    Args:
+        query: The user's planning-related query.
+        chat_model: Optional ChatModel override.
+        user_id: UUID of the user for DB operations.
+        db_session_factory: Optional session factory for DB access.
+
+    Returns:
+        Dict with intent='planning' and the agent's response.
+
+    Example:
+        >>> result = execute_planning_agent("อยากออมเงิน 100,000 บาท")
+    """
+    from finance_ai.agents.planning_agent import build_planning_agent_graph  # noqa: PLC0415
+
+    graph = build_planning_agent_graph(chat_model)
+    result = graph.invoke(
+        {
+            "messages": [("user", query)],
+            "user_id": user_id,
+            "db_session_factory": db_session_factory,
+        }
+    )
+    last_message = result["messages"][-1]
+    return {"intent": "planning", "response": last_message.content}
+
+
 def build_unsupported_response(decision: RouterDecision) -> dict[str, Any]:
     """Build a response for unsupported intents.
 
@@ -199,7 +233,9 @@ def build_unsupported_response(decision: RouterDecision) -> dict[str, Any]:
     """
     return {
         "intent": decision.intent,
-        "response": ("ขออภัย ขณะนี้ระบบรองรับเฉพาะคำถามเกี่ยวกับภาษี" " ค่าใช้จ่าย และการลงทุนเท่านั้น"),
+        "response": (
+            "ขออภัย ขณะนี้ระบบรองรับเฉพาะคำถามเกี่ยวกับภาษี" " ค่าใช้จ่าย การลงทุน และวางแผนการเงินเท่านั้น"
+        ),
     }
 
 
@@ -212,7 +248,7 @@ def route_query(
     """Route a user query to the appropriate agent.
 
     Classifies the query intent and dispatches to the matching agent.
-    Currently supports Tax Agent, Expense Agent, and Investment Agent.
+    Supports Tax, Expense, Investment, and Planning agents.
 
     Args:
         query: The user's natural language query.
@@ -234,4 +270,6 @@ def route_query(
         return execute_expense_agent(query, chat_model, user_id, db_session_factory)
     if decision.intent == "investment":
         return execute_investment_agent(query, chat_model, user_id, db_session_factory)
+    if decision.intent == "planning":
+        return execute_planning_agent(query, chat_model, user_id, db_session_factory)
     return build_unsupported_response(decision)
