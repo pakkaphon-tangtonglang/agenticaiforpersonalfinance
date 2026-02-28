@@ -13,7 +13,11 @@ load_dotenv()  # Load .env BEFORE any LangChain imports
 
 from finance_ai.agents.llm_factory import create_chat_model  # noqa: E402
 from finance_ai.agents.router_agent import route_query  # noqa: E402
-from finance_ai.database.session import create_database_engine, create_session_factory  # noqa: E402
+from finance_ai.database.crud.user_crud import UserCRUD  # noqa: E402
+from finance_ai.database.session import (  # noqa: E402
+    create_database_engine,
+    create_session_factory,
+)
 
 INTENT_LABELS: dict[str, str] = {
     "tax": "ภาษี",
@@ -45,23 +49,41 @@ def get_session_factory():  # type: ignore[no-untyped-def]
     return create_session_factory(engine)
 
 
+def ensure_user_exists(user_id: str) -> None:
+    """Create a demo user record in DB if it doesn't exist.
+
+    Args:
+        user_id: UUID hex string for the user.
+    """
+    factory = get_session_factory()
+    session = factory()
+    try:
+        UserCRUD().get_or_create_demo_user(session, user_id)
+    finally:
+        session.close()
+
+
 def init_session_state() -> None:
     """Initialize session state variables."""
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "user_id" not in st.session_state:
         st.session_state.user_id = uuid.uuid4().hex
+        ensure_user_exists(st.session_state.user_id)
 
 
 def render_sidebar() -> None:
     """Render the sidebar with settings and sample queries."""
     with st.sidebar:
         st.header("ตั้งค่า")
-        st.session_state.user_id = st.text_input(
+        new_user_id = st.text_input(
             "User ID",
             value=st.session_state.user_id,
             help="ใช้สำหรับ Expense/Investment Agent",
         )
+        if new_user_id != st.session_state.user_id:
+            st.session_state.user_id = new_user_id
+            ensure_user_exists(new_user_id)
 
         st.divider()
         st.header("ตัวอย่างคำถาม")
