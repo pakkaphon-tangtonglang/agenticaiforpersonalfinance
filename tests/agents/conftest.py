@@ -162,6 +162,39 @@ def investment_formatted_response() -> AIMessage:
 
 
 @pytest.fixture
+def planning_tool_call_message() -> AIMessage:
+    """Create an AIMessage with a tool call for create_financial_goal.
+
+    Returns:
+        AIMessage with tool_calls for creating a financial goal.
+    """
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "id": "call_1",
+                "name": "create_financial_goal",
+                "args": {
+                    "goal_type": "savings",
+                    "name": "เงินฉุกเฉิน",
+                    "target_amount": "100000",
+                },
+            }
+        ],
+    )
+
+
+@pytest.fixture
+def planning_formatted_response() -> AIMessage:
+    """Create an AIMessage with a formatted planning response.
+
+    Returns:
+        AIMessage with Thai-language planning result summary.
+    """
+    return AIMessage(content="สร้างเป้าหมาย: ออมเงินฉุกเฉิน 100,000 บาท สำเร็จ")
+
+
+@pytest.fixture
 def test_engine() -> Engine:
     """Create an in-memory SQLite engine for agent testing.
 
