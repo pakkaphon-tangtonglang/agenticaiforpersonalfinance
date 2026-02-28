@@ -157,3 +157,8 @@ secrets.yaml
 tmp/
 temp/
 *.tmp
+
+# Personal docs (not part of the project)
+docs/interview_prep.md
+docs/learning_guide.md
+docs/project_explanation.md
