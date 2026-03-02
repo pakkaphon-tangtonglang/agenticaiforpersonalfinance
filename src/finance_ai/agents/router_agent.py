@@ -96,12 +96,16 @@ def classify_query(
 def execute_tax_agent(
     query: str,
     chat_model: BaseChatModel | None = None,
+    user_id: str = "",
+    db_session_factory: Callable[[], Session] | None = None,
 ) -> dict[str, Any]:
     """Execute the Tax Agent for a tax-related query.
 
     Args:
         query: The user's tax-related query.
         chat_model: Optional ChatModel override.
+        user_id: UUID of the user for cross-agent DB operations.
+        db_session_factory: Optional session factory for DB access.
 
     Returns:
         Dict with intent='tax' and the agent's response.
@@ -109,10 +113,16 @@ def execute_tax_agent(
     Example:
         >>> result = execute_tax_agent("คำนวณภาษี เงินเดือน 1 ล้าน")
     """
-    from finance_ai.agents.tax_agent import build_tax_agent_graph
+    from finance_ai.agents.tax_agent import build_tax_agent_graph  # noqa: PLC0415
 
     graph = build_tax_agent_graph(chat_model)
-    result = graph.invoke({"messages": [("user", query)]})
+    result = graph.invoke(
+        {
+            "messages": [("user", query)],
+            "user_id": user_id,
+            "db_session_factory": db_session_factory,
+        }
+    )
     last_message = result["messages"][-1]
     return {"intent": "tax", "response": last_message.content}
 
@@ -265,7 +275,7 @@ def route_query(
     decision = classify_query(query, chat_model)
     logger.info("Routed query to: %s (confidence: %s)", decision.intent, decision.confidence)
     if decision.intent == "tax":
-        return execute_tax_agent(query, chat_model)
+        return execute_tax_agent(query, chat_model, user_id, db_session_factory)
     if decision.intent == "expense":
         return execute_expense_agent(query, chat_model, user_id, db_session_factory)
     if decision.intent == "investment":

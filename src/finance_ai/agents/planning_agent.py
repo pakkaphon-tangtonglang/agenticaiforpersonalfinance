@@ -11,6 +11,7 @@ from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from finance_ai.agents.cross_agent_tools import PLANNING_CROSS_TOOLS
 from finance_ai.agents.planning_tools import (
     calculate_saving_plan,
     create_financial_goal,
@@ -30,7 +31,7 @@ PLANNING_TOOLS = [
     update_goal_progress,
     calculate_saving_plan,
     search_finance_knowledge,
-]
+] + PLANNING_CROSS_TOOLS
 
 
 def should_continue(state: PlanningAgentState) -> str:

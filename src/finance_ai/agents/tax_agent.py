@@ -11,6 +11,7 @@ from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from finance_ai.agents.cross_agent_tools import TAX_CROSS_TOOLS
 from finance_ai.agents.prompts import TAX_AGENT_SYSTEM_PROMPT
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.schemas import TaxAgentState
@@ -19,7 +20,7 @@ from finance_ai.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-TAX_TOOLS = [calculate_thai_tax, search_finance_knowledge]
+TAX_TOOLS = [calculate_thai_tax, search_finance_knowledge] + TAX_CROSS_TOOLS
 
 
 def should_continue(state: TaxAgentState) -> str:

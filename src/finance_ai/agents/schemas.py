@@ -15,13 +15,20 @@ class TaxAgentState(TypedDict):
     Attributes:
         messages: Conversation messages (LangGraph manages append via add_messages).
         tax_result: The computed TaxCalculationResult dict, if available.
+        user_id: UUID of the user for cross-agent DB operations.
+        db_session_factory: Optional session factory for DB access (injected into tools).
 
     Example:
-        >>> state: TaxAgentState = {"messages": [], "tax_result": None}
+        >>> state: TaxAgentState = {
+        ...     "messages": [], "tax_result": None, "user_id": "",
+        ...     "db_session_factory": None,
+        ... }
     """
 
     messages: Annotated[list[Any], add_messages]
     tax_result: dict[str, Any] | None
+    user_id: str
+    db_session_factory: Callable[[], Session] | None
 
 
 class ExpenseAgentState(TypedDict):
