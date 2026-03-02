@@ -11,6 +11,7 @@ from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from finance_ai.agents.cross_agent_tools import INVESTMENT_CROSS_TOOLS
 from finance_ai.agents.investment_tools import (
     add_holding,
     get_investment_advice,
@@ -34,7 +35,7 @@ INVESTMENT_TOOLS = [
     lookup_holding,
     get_investment_advice,
     search_finance_knowledge,
-]
+] + INVESTMENT_CROSS_TOOLS
 
 
 def should_continue(state: InvestmentAgentState) -> str:

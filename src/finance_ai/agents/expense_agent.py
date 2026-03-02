@@ -11,6 +11,7 @@ from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from finance_ai.agents.cross_agent_tools import EXPENSE_CROSS_TOOLS
 from finance_ai.agents.expense_tools import (
     add_expense,
     query_expenses_by_category,
@@ -28,7 +29,7 @@ EXPENSE_TOOLS = [
     summarize_monthly_expenses,
     query_expenses_by_category,
     search_finance_knowledge,
-]
+] + EXPENSE_CROSS_TOOLS
 
 
 def should_continue(state: ExpenseAgentState) -> str:
