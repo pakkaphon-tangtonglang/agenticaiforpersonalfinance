@@ -195,6 +195,37 @@ def planning_formatted_response() -> AIMessage:
 
 
 @pytest.fixture
+def recommendation_tool_call_message() -> AIMessage:
+    """Create an AIMessage with a tool call for generate_financial_recommendations.
+
+    Returns:
+        AIMessage with tool_calls for generating recommendations.
+    """
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {
+                "id": "call_1",
+                "name": "generate_financial_recommendations",
+                "args": {},
+            }
+        ],
+    )
+
+
+@pytest.fixture
+def recommendation_formatted_response() -> AIMessage:
+    """Create an AIMessage with a formatted recommendation response.
+
+    Returns:
+        AIMessage with Thai-language recommendation summary.
+    """
+    return AIMessage(
+        content="คำแนะนำการเงิน: พบ 3 ข้อแนะนำ คะแนนสุขภาพ 75/100",
+    )
+
+
+@pytest.fixture
 def test_engine() -> Engine:
     """Create an in-memory SQLite engine for agent testing.
 

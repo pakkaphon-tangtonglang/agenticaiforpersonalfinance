@@ -23,9 +23,22 @@ INTENT_LABELS: dict[str, str] = {
     "tax": "ภาษี",
     "expense": "ค่าใช้จ่าย",
     "investment": "การลงทุน",
+    "planning": "วางแผนการเงิน",
+    "recommendation": "คำแนะนำการเงิน",
     "general": "ทั่วไป",
     "unknown": "ไม่ทราบ",
 }
+
+MULTI_AGENT_QUERIES: list[str] = [
+    "วิเคราะห์ภาษีพร้อมดูพอร์ตการลงทุน",
+    "วางแผนการเงิน ดูรายจ่ายและรายได้",
+    "ดูค่าใช้จ่ายเทียบเป้าหมาย",
+]
+
+RECOMMENDATION_QUERIES: list[str] = [
+    "วิเคราะห์การเงินและแนะนำทั้งหมด",
+    "ตรวจสุขภาพการเงินของฉัน",
+]
 
 SAMPLE_QUERIES: list[str] = [
     "คำนวณภาษี เงินเดือน 50,000 บาท/เดือน มีลูก 1 คน ซื้อ SSF 100,000",
@@ -89,6 +102,18 @@ def render_sidebar() -> None:
         st.header("ตัวอย่างคำถาม")
         for query in SAMPLE_QUERIES:
             if st.button(query, use_container_width=True):
+                st.session_state.pending_query = query
+
+        st.divider()
+        st.header("ทดสอบ Multi-Agent")
+        for query in MULTI_AGENT_QUERIES:
+            if st.button(query, use_container_width=True, key=f"multi_{query}"):
+                st.session_state.pending_query = query
+
+        st.divider()
+        st.header("ทดสอบคำแนะนำเชิงรุก")
+        for query in RECOMMENDATION_QUERIES:
+            if st.button(query, use_container_width=True, key=f"rec_{query}"):
                 st.session_state.pending_query = query
 
         st.divider()

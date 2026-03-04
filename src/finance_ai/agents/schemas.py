@@ -64,9 +64,9 @@ class RouterDecision(BaseModel):
         >>> decision = RouterDecision(intent="tax", confidence=Decimal("0.95"))
     """
 
-    intent: Literal["tax", "investment", "expense", "planning", "general", "unknown"] = Field(
-        description="The classified intent of the user query."
-    )
+    intent: Literal[
+        "tax", "investment", "expense", "planning", "recommendation", "general", "unknown"
+    ] = Field(description="The classified intent of the user query.")
     confidence: Decimal = Field(
         ge=Decimal("0"),
         le=Decimal("1"),
@@ -114,6 +114,28 @@ class PlanningAgentState(TypedDict):
 
     messages: Annotated[list[Any], add_messages]
     planning_result: dict[str, Any] | None
+    user_id: str
+    db_session_factory: Callable[[], Session] | None
+
+
+class RecommendationAgentState(TypedDict):
+    """State for the Recommendation Agent LangGraph graph.
+
+    Attributes:
+        messages: Conversation messages (LangGraph manages append via add_messages).
+        recommendation_result: The computed recommendation result dict, if available.
+        user_id: UUID of the user for DB operations.
+        db_session_factory: Optional session factory for DB access (injected into tools).
+
+    Example:
+        >>> state: RecommendationAgentState = {
+        ...     "messages": [], "recommendation_result": None,
+        ...     "user_id": "abc-123", "db_session_factory": None,
+        ... }
+    """
+
+    messages: Annotated[list[Any], add_messages]
+    recommendation_result: dict[str, Any] | None
     user_id: str
     db_session_factory: Callable[[], Session] | None
 
