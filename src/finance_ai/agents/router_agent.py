@@ -229,6 +229,42 @@ def execute_planning_agent(
     return {"intent": "planning", "response": last_message.content}
 
 
+def execute_recommendation_agent(
+    query: str,
+    chat_model: BaseChatModel | None = None,
+    user_id: str = "",
+    db_session_factory: Callable[[], Session] | None = None,
+) -> dict[str, Any]:
+    """Execute the Recommendation Agent for a recommendation query.
+
+    Args:
+        query: The user's recommendation-related query.
+        chat_model: Optional ChatModel override.
+        user_id: UUID of the user for DB operations.
+        db_session_factory: Optional session factory for DB access.
+
+    Returns:
+        Dict with intent='recommendation' and the agent's response.
+
+    Example:
+        >>> result = execute_recommendation_agent("วิเคราะห์การเงินของฉัน")
+    """
+    from finance_ai.agents.recommendation_agent import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        build_recommendation_agent_graph,
+    )
+
+    graph = build_recommendation_agent_graph(chat_model)
+    result = graph.invoke(
+        {
+            "messages": [("user", query)],
+            "user_id": user_id,
+            "db_session_factory": db_session_factory,
+        }
+    )
+    last_message = result["messages"][-1]
+    return {"intent": "recommendation", "response": last_message.content}
+
+
 def build_unsupported_response(decision: RouterDecision) -> dict[str, Any]:
     """Build a response for unsupported intents.
 
@@ -244,7 +280,8 @@ def build_unsupported_response(decision: RouterDecision) -> dict[str, Any]:
     return {
         "intent": decision.intent,
         "response": (
-            "ขออภัย ขณะนี้ระบบรองรับเฉพาะคำถามเกี่ยวกับภาษี" " ค่าใช้จ่าย การลงทุน และวางแผนการเงินเท่านั้น"
+            "ขออภัย ขณะนี้ระบบรองรับเฉพาะคำถามเกี่ยวกับภาษี"
+            " ค่าใช้จ่าย การลงทุน วางแผนการเงิน และคำแนะนำการเงินเท่านั้น"
         ),
     }
 
@@ -282,4 +319,6 @@ def route_query(
         return execute_investment_agent(query, chat_model, user_id, db_session_factory)
     if decision.intent == "planning":
         return execute_planning_agent(query, chat_model, user_id, db_session_factory)
+    if decision.intent == "recommendation":
+        return execute_recommendation_agent(query, chat_model, user_id, db_session_factory)
     return build_unsupported_response(decision)
