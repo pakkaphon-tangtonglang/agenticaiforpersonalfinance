@@ -6,11 +6,13 @@ from unittest.mock import MagicMock, patch
 from langchain_core.messages import AIMessage
 
 from finance_ai.agents.router_agent import (
+    _build_messages,
     build_unsupported_response,
     classify_query,
     execute_expense_agent,
     execute_investment_agent,
     execute_planning_agent,
+    execute_tax_agent,
     parse_router_response,
     route_query,
 )
@@ -237,6 +239,91 @@ class TestExecutePlanningAgent:
         call_args = mock_graph.invoke.call_args[0][0]
         assert call_args["user_id"] == "user-123"
         assert "db_session_factory" in call_args
+
+
+class TestBuildMessages:
+    """Tests for _build_messages helper."""
+
+    def test_query_only(self) -> None:
+        """Builds messages with just the current query."""
+        result = _build_messages("สวัสดี")
+        assert result == [("user", "สวัสดี")]
+
+    def test_with_history(self) -> None:
+        """Prepends chat history before the current query."""
+        history = [("user", "ถามก่อน"), ("assistant", "ตอบก่อน")]
+        result = _build_messages("ถามใหม่", chat_history=history)
+        assert len(result) == 3
+        assert result[0] == ("user", "ถามก่อน")
+        assert result[1] == ("assistant", "ตอบก่อน")
+        assert result[2] == ("user", "ถามใหม่")
+
+    def test_none_history(self) -> None:
+        """None history treated as empty."""
+        result = _build_messages("test", chat_history=None)
+        assert result == [("user", "test")]
+
+    def test_empty_history(self) -> None:
+        """Empty history list works correctly."""
+        result = _build_messages("test", chat_history=[])
+        assert result == [("user", "test")]
+
+    def test_does_not_mutate_input(self) -> None:
+        """Original history list is not modified."""
+        history = [("user", "original")]
+        _build_messages("new", chat_history=history)
+        assert len(history) == 1
+
+
+class TestChatHistoryPassing:
+    """Tests that chat_history is correctly passed through to agents."""
+
+    @patch("finance_ai.agents.tax_agent.build_tax_agent_graph")
+    def test_tax_agent_receives_history(self, mock_build: MagicMock) -> None:
+        """Tax agent receives chat history in messages."""
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = {
+            "messages": [AIMessage(content="ok")],
+        }
+        mock_build.return_value = mock_graph
+        history = [("user", "prev"), ("assistant", "resp")]
+
+        execute_tax_agent("new query", chat_history=history)
+        call_args = mock_graph.invoke.call_args[0][0]
+        messages = call_args["messages"]
+        assert len(messages) == 3
+        assert messages[0] == ("user", "prev")
+        assert messages[2] == ("user", "new query")
+
+    @patch("finance_ai.agents.tax_agent.build_tax_agent_graph")
+    def test_tax_agent_no_history(self, mock_build: MagicMock) -> None:
+        """Tax agent works without history (backward compatible)."""
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = {
+            "messages": [AIMessage(content="ok")],
+        }
+        mock_build.return_value = mock_graph
+
+        execute_tax_agent("query only")
+        call_args = mock_graph.invoke.call_args[0][0]
+        messages = call_args["messages"]
+        assert len(messages) == 1
+        assert messages[0] == ("user", "query only")
+
+    @patch("finance_ai.agents.router_agent.execute_tax_agent")
+    @patch("finance_ai.agents.router_agent.classify_query")
+    def test_route_query_passes_history(
+        self, mock_classify: MagicMock, mock_execute: MagicMock
+    ) -> None:
+        """route_query forwards chat_history to agent."""
+        mock_classify.return_value = RouterDecision(intent="tax", confidence=Decimal("0.9"))
+        mock_execute.return_value = {"intent": "tax", "response": "ok"}
+        history = [("user", "prev")]
+
+        route_query("query", chat_history=history)
+        mock_execute.assert_called_once()
+        call_kwargs = mock_execute.call_args
+        assert call_kwargs[0][4] == history  # 5th positional arg is chat_history
 
 
 class TestBuildUnsupportedResponse:
