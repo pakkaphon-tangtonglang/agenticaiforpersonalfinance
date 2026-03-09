@@ -1,6 +1,6 @@
 """Router Agent that classifies user queries and routes to specialized agents.
 
-Supports routing to Tax, Expense, Investment, and Planning agents.
+Supports routing to Tax, Expense, Investment, Planning, and Recommendation agents.
 Other intents return a polite message indicating the feature is not yet available.
 """
 
@@ -65,6 +65,28 @@ def _strip_code_fence(text: str) -> str:
     return text
 
 
+def _build_messages(
+    query: str,
+    chat_history: list[tuple[str, str]] | None = None,
+) -> list[tuple[str, str]]:
+    """Build message list from chat history and current query.
+
+    Args:
+        query: The user's current query.
+        chat_history: Optional previous messages as (role, content) tuples.
+
+    Returns:
+        Combined message list for graph invocation.
+
+    Example:
+        >>> _build_messages("hello", [("user", "hi"), ("assistant", "hey")])
+        [('user', 'hi'), ('assistant', 'hey'), ('user', 'hello')]
+    """
+    history = list(chat_history or [])
+    history.append(("user", query))
+    return history
+
+
 def classify_query(
     query: str,
     chat_model: BaseChatModel | None = None,
@@ -98,6 +120,7 @@ def execute_tax_agent(
     chat_model: BaseChatModel | None = None,
     user_id: str = "",
     db_session_factory: Callable[[], Session] | None = None,
+    chat_history: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Execute the Tax Agent for a tax-related query.
 
@@ -106,6 +129,7 @@ def execute_tax_agent(
         chat_model: Optional ChatModel override.
         user_id: UUID of the user for cross-agent DB operations.
         db_session_factory: Optional session factory for DB access.
+        chat_history: Optional previous messages for context.
 
     Returns:
         Dict with intent='tax' and the agent's response.
@@ -118,7 +142,7 @@ def execute_tax_agent(
     graph = build_tax_agent_graph(chat_model)
     result = graph.invoke(
         {
-            "messages": [("user", query)],
+            "messages": _build_messages(query, chat_history),
             "user_id": user_id,
             "db_session_factory": db_session_factory,
         }
@@ -132,6 +156,7 @@ def execute_expense_agent(
     chat_model: BaseChatModel | None = None,
     user_id: str = "",
     db_session_factory: Callable[[], Session] | None = None,
+    chat_history: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Execute the Expense Agent for an expense-related query.
 
@@ -140,6 +165,7 @@ def execute_expense_agent(
         chat_model: Optional ChatModel override.
         user_id: UUID of the user for DB operations.
         db_session_factory: Optional session factory for DB access.
+        chat_history: Optional previous messages for context.
 
     Returns:
         Dict with intent='expense' and the agent's response.
@@ -152,7 +178,7 @@ def execute_expense_agent(
     graph = build_expense_agent_graph(chat_model)
     result = graph.invoke(
         {
-            "messages": [("user", query)],
+            "messages": _build_messages(query, chat_history),
             "user_id": user_id,
             "db_session_factory": db_session_factory,
         }
@@ -166,6 +192,7 @@ def execute_investment_agent(
     chat_model: BaseChatModel | None = None,
     user_id: str = "",
     db_session_factory: Callable[[], Session] | None = None,
+    chat_history: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Execute the Investment Agent for an investment-related query.
 
@@ -174,6 +201,7 @@ def execute_investment_agent(
         chat_model: Optional ChatModel override.
         user_id: UUID of the user for DB operations.
         db_session_factory: Optional session factory for DB access.
+        chat_history: Optional previous messages for context.
 
     Returns:
         Dict with intent='investment' and the agent's response.
@@ -186,7 +214,7 @@ def execute_investment_agent(
     graph = build_investment_agent_graph(chat_model)
     result = graph.invoke(
         {
-            "messages": [("user", query)],
+            "messages": _build_messages(query, chat_history),
             "user_id": user_id,
             "db_session_factory": db_session_factory,
         }
@@ -200,6 +228,7 @@ def execute_planning_agent(
     chat_model: BaseChatModel | None = None,
     user_id: str = "",
     db_session_factory: Callable[[], Session] | None = None,
+    chat_history: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Execute the Planning Agent for a planning-related query.
 
@@ -208,6 +237,7 @@ def execute_planning_agent(
         chat_model: Optional ChatModel override.
         user_id: UUID of the user for DB operations.
         db_session_factory: Optional session factory for DB access.
+        chat_history: Optional previous messages for context.
 
     Returns:
         Dict with intent='planning' and the agent's response.
@@ -220,7 +250,7 @@ def execute_planning_agent(
     graph = build_planning_agent_graph(chat_model)
     result = graph.invoke(
         {
-            "messages": [("user", query)],
+            "messages": _build_messages(query, chat_history),
             "user_id": user_id,
             "db_session_factory": db_session_factory,
         }
@@ -234,6 +264,7 @@ def execute_recommendation_agent(
     chat_model: BaseChatModel | None = None,
     user_id: str = "",
     db_session_factory: Callable[[], Session] | None = None,
+    chat_history: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Execute the Recommendation Agent for a recommendation query.
 
@@ -242,6 +273,7 @@ def execute_recommendation_agent(
         chat_model: Optional ChatModel override.
         user_id: UUID of the user for DB operations.
         db_session_factory: Optional session factory for DB access.
+        chat_history: Optional previous messages for context.
 
     Returns:
         Dict with intent='recommendation' and the agent's response.
@@ -256,7 +288,7 @@ def execute_recommendation_agent(
     graph = build_recommendation_agent_graph(chat_model)
     result = graph.invoke(
         {
-            "messages": [("user", query)],
+            "messages": _build_messages(query, chat_history),
             "user_id": user_id,
             "db_session_factory": db_session_factory,
         }
@@ -291,17 +323,19 @@ def route_query(
     chat_model: BaseChatModel | None = None,
     user_id: str = "",
     db_session_factory: Callable[[], Session] | None = None,
+    chat_history: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Route a user query to the appropriate agent.
 
     Classifies the query intent and dispatches to the matching agent.
-    Supports Tax, Expense, Investment, and Planning agents.
+    Passes chat_history for conversation context.
 
     Args:
         query: The user's natural language query.
         chat_model: Optional ChatModel override for testing.
         user_id: UUID of the user for DB-backed agents.
         db_session_factory: Optional session factory for DB access.
+        chat_history: Optional previous messages for context.
 
     Returns:
         Dict with 'intent' and 'response' from the target agent.
@@ -311,14 +345,15 @@ def route_query(
     """
     decision = classify_query(query, chat_model)
     logger.info("Routed query to: %s (confidence: %s)", decision.intent, decision.confidence)
-    if decision.intent == "tax":
-        return execute_tax_agent(query, chat_model, user_id, db_session_factory)
-    if decision.intent == "expense":
-        return execute_expense_agent(query, chat_model, user_id, db_session_factory)
-    if decision.intent == "investment":
-        return execute_investment_agent(query, chat_model, user_id, db_session_factory)
-    if decision.intent == "planning":
-        return execute_planning_agent(query, chat_model, user_id, db_session_factory)
-    if decision.intent == "recommendation":
-        return execute_recommendation_agent(query, chat_model, user_id, db_session_factory)
+    args = (query, chat_model, user_id, db_session_factory, chat_history)
+    agent_map: dict[str, Callable[..., dict[str, Any]]] = {
+        "tax": execute_tax_agent,
+        "expense": execute_expense_agent,
+        "investment": execute_investment_agent,
+        "planning": execute_planning_agent,
+        "recommendation": execute_recommendation_agent,
+    }
+    agent_fn = agent_map.get(decision.intent)
+    if agent_fn is not None:
+        return agent_fn(*args)
     return build_unsupported_response(decision)

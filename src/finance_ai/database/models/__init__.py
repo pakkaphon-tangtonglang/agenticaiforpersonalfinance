@@ -7,6 +7,8 @@ from finance_ai.database.models.investment_holding import InvestmentHolding
 from finance_ai.database.models.transaction import Transaction
 from finance_ai.database.models.tax_filing import TaxFiling
 from finance_ai.database.models.financial_goal import FinancialGoal
+from finance_ai.database.models.conversation import Conversation
+from finance_ai.database.models.conversation_message import ConversationMessage
 
 __all__ = [
     "User",
@@ -16,4 +18,6 @@ __all__ = [
     "Transaction",
     "TaxFiling",
     "FinancialGoal",
+    "Conversation",
+    "ConversationMessage",
 ]

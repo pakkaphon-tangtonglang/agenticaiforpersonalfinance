@@ -8,6 +8,8 @@ from alembic import context
 from finance_ai.core.config import get_settings
 from finance_ai.database.base import Base
 from finance_ai.database.models import (  # noqa: F401  # pylint: disable=unused-import
+    Conversation,
+    ConversationMessage,
     Deduction,
     FinancialGoal,
     Income,
