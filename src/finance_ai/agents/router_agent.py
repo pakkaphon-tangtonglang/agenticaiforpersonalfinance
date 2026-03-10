@@ -297,6 +297,44 @@ def execute_recommendation_agent(
     return {"intent": "recommendation", "response": last_message.content}
 
 
+def execute_report_agent(
+    query: str,
+    chat_model: BaseChatModel | None = None,
+    user_id: str = "",
+    db_session_factory: Callable[[], Session] | None = None,
+    chat_history: list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Execute the Report Agent for a financial report query.
+
+    Args:
+        query: The user's report-related query.
+        chat_model: Optional ChatModel override.
+        user_id: UUID of the user for DB operations.
+        db_session_factory: Optional session factory for DB access.
+        chat_history: Optional previous messages for context.
+
+    Returns:
+        Dict with intent='report' and the agent's response.
+
+    Example:
+        >>> result = execute_report_agent("สร้างรายงานการเงิน")
+    """
+    from finance_ai.agents.report_agent import (  # noqa: PLC0415
+        build_report_agent_graph,
+    )
+
+    graph = build_report_agent_graph(chat_model)
+    result = graph.invoke(
+        {
+            "messages": _build_messages(query, chat_history),
+            "user_id": user_id,
+            "db_session_factory": db_session_factory,
+        }
+    )
+    last_message = result["messages"][-1]
+    return {"intent": "report", "response": last_message.content}
+
+
 def build_unsupported_response(decision: RouterDecision) -> dict[str, Any]:
     """Build a response for unsupported intents.
 
@@ -313,7 +351,8 @@ def build_unsupported_response(decision: RouterDecision) -> dict[str, Any]:
         "intent": decision.intent,
         "response": (
             "ขออภัย ขณะนี้ระบบรองรับเฉพาะคำถามเกี่ยวกับภาษี"
-            " ค่าใช้จ่าย การลงทุน วางแผนการเงิน และคำแนะนำการเงินเท่านั้น"
+            " ค่าใช้จ่าย การลงทุน วางแผนการเงิน คำแนะนำการเงิน"
+            " และรายงานการเงินเท่านั้น"
         ),
     }
 
@@ -352,6 +391,7 @@ def route_query(
         "investment": execute_investment_agent,
         "planning": execute_planning_agent,
         "recommendation": execute_recommendation_agent,
+        "report": execute_report_agent,
     }
     agent_fn = agent_map.get(decision.intent)
     if agent_fn is not None:

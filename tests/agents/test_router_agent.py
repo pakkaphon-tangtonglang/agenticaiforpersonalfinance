@@ -12,6 +12,7 @@ from finance_ai.agents.router_agent import (
     execute_expense_agent,
     execute_investment_agent,
     execute_planning_agent,
+    execute_report_agent,
     execute_tax_agent,
     parse_router_response,
     route_query,
@@ -326,6 +327,53 @@ class TestChatHistoryPassing:
         assert call_kwargs[0][4] == history  # 5th positional arg is chat_history
 
 
+class TestExecuteReportAgent:
+    """Tests for execute_report_agent."""
+
+    @patch("finance_ai.agents.report_agent.build_report_agent_graph")
+    def test_returns_report_response(self, mock_build: MagicMock) -> None:
+        """Returns dict with intent='report' and response."""
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = {
+            "messages": [AIMessage(content="รายงานการเงินประจำเดือน")],
+        }
+        mock_build.return_value = mock_graph
+
+        result = execute_report_agent("สร้างรายงานการเงิน", user_id="user-1")
+        assert result["intent"] == "report"
+        assert "รายงาน" in result["response"]
+
+    @patch("finance_ai.agents.report_agent.build_report_agent_graph")
+    def test_passes_user_id(self, mock_build: MagicMock) -> None:
+        """Passes user_id to the graph invoke."""
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = {
+            "messages": [AIMessage(content="ok")],
+        }
+        mock_build.return_value = mock_graph
+
+        execute_report_agent("test", user_id="user-123")
+        call_args = mock_graph.invoke.call_args[0][0]
+        assert call_args["user_id"] == "user-123"
+
+
+class TestRouteQueryReport:
+    """Tests for routing to report agent."""
+
+    @patch("finance_ai.agents.router_agent.execute_report_agent")
+    @patch("finance_ai.agents.router_agent.classify_query")
+    def test_routes_to_report_agent(
+        self, mock_classify: MagicMock, mock_execute: MagicMock
+    ) -> None:
+        """Report intent routes to execute_report_agent."""
+        mock_classify.return_value = RouterDecision(intent="report", confidence=Decimal("0.9"))
+        mock_execute.return_value = {"intent": "report", "response": "รายงาน"}
+
+        result = route_query("สร้างรายงานการเงิน")
+        assert result["intent"] == "report"
+        mock_execute.assert_called_once()
+
+
 class TestBuildUnsupportedResponse:
     """Tests for unsupported intent responses."""
 
@@ -338,6 +386,12 @@ class TestBuildUnsupportedResponse:
         assert "ค่าใช้จ่าย" in result["response"]
         assert "การลงทุน" in result["response"]
         assert "วางแผนการเงิน" in result["response"]
+
+    def test_mentions_report(self) -> None:
+        """Response mentions report feature."""
+        decision = RouterDecision(intent="general", confidence=Decimal("0.5"))
+        result = build_unsupported_response(decision)
+        assert "รายงาน" in result["response"]
 
     def test_unknown_intent(self) -> None:
         """Handles unknown intent gracefully."""

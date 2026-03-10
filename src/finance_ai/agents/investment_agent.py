@@ -20,6 +20,7 @@ from finance_ai.agents.investment_tools import (
     refresh_prices,
     view_portfolio,
 )
+from finance_ai.agents.market_data_tools import MARKET_DATA_TOOLS
 from finance_ai.agents.prompts import INVESTMENT_AGENT_SYSTEM_PROMPT
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.schemas import InvestmentAgentState
@@ -27,15 +28,19 @@ from finance_ai.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-INVESTMENT_TOOLS = [
-    view_portfolio,
-    add_holding,
-    import_csv,
-    refresh_prices,
-    lookup_holding,
-    get_investment_advice,
-    search_finance_knowledge,
-] + INVESTMENT_CROSS_TOOLS
+INVESTMENT_TOOLS = (
+    [
+        view_portfolio,
+        add_holding,
+        import_csv,
+        refresh_prices,
+        lookup_holding,
+        get_investment_advice,
+        search_finance_knowledge,
+    ]
+    + INVESTMENT_CROSS_TOOLS
+    + MARKET_DATA_TOOLS
+)
 
 
 def should_continue(state: InvestmentAgentState) -> str:

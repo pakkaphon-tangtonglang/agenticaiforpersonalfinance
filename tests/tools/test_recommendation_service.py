@@ -17,7 +17,6 @@ from finance_ai.tools.recommendation_service import (
     generate_recommendations,
 )
 
-
 # -- Fixtures for test data --
 
 

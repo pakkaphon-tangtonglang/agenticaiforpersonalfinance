@@ -12,6 +12,7 @@ from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from finance_ai.agents.market_data_tools import get_finance_news
 from finance_ai.agents.prompts import RECOMMENDATION_AGENT_SYSTEM_PROMPT
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.recommendation_tools import (
@@ -27,6 +28,7 @@ RECOMMENDATION_AGENT_TOOLS = [
     generate_financial_recommendations,
     get_financial_health_score,
     search_finance_knowledge,
+    get_finance_news,
 ]
 
 
