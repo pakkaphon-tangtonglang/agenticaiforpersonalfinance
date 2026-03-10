@@ -111,13 +111,14 @@ class TestBuildRecommendationAgentGraph:
 class TestRecommendationAgentTools:
     """Tests for the RECOMMENDATION_AGENT_TOOLS list."""
 
-    def test_has_three_tools(self) -> None:
-        """Should contain exactly 3 tools."""
-        assert len(RECOMMENDATION_AGENT_TOOLS) == 3
+    def test_has_four_tools(self) -> None:
+        """Should contain exactly 4 tools."""
+        assert len(RECOMMENDATION_AGENT_TOOLS) == 4
 
     def test_contains_expected_tool_names(self) -> None:
-        """Should contain recommendation, health score, and RAG tools."""
+        """Should contain recommendation, health score, RAG, and news tools."""
         names = [t.name for t in RECOMMENDATION_AGENT_TOOLS]
         assert "generate_financial_recommendations" in names
         assert "get_financial_health_score" in names
         assert "search_finance_knowledge" in names
+        assert "get_finance_news" in names

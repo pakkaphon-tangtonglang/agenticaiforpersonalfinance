@@ -36,6 +36,7 @@ INTENT_LABELS: dict[str, str] = {
     "investment": "การลงทุน",
     "planning": "วางแผนการเงิน",
     "recommendation": "คำแนะนำการเงิน",
+    "report": "รายงานการเงิน",
     "general": "ทั่วไป",
     "unknown": "ไม่ทราบ",
 }
@@ -57,6 +58,15 @@ MULTI_AGENT_QUERIES: list[str] = [
         " แล้วดูเป้าหมายการเงินของฉันด้วยว่าค่าใช้จ่ายที่เป็นอยู่"
         " กระทบกับเป้าหมายการออมไหม ถ้ากระทบแนะนำวิธีลดรายจ่ายด้วย"
     ),
+]
+
+REPORT_QUERIES: list[str] = [
+    (
+        "สร้างรายงานการเงินประจำเดือนนี้ให้หน่อย"
+        " อยากเห็นภาพรวมรายรับรายจ่าย พอร์ตการลงทุน"
+        " เป้าหมายการเงิน และสถานะภาษีทั้งหมด"
+    ),
+    ("ขอดูรายงานสรุปสุขภาพการเงินของฉัน" " พร้อมคะแนนสุขภาพการเงินและไฮไลท์สำคัญ"),
 ]
 
 RECOMMENDATION_QUERIES: list[str] = [
@@ -219,6 +229,12 @@ def render_sidebar() -> None:
         st.header("ทดสอบ Multi-Agent")
         for query in MULTI_AGENT_QUERIES:
             if st.button(query, use_container_width=True, key=f"multi_{query}"):
+                st.session_state.pending_query = query
+
+        st.divider()
+        st.header("ทดสอบรายงานการเงิน")
+        for query in REPORT_QUERIES:
+            if st.button(query, use_container_width=True, key=f"report_{query}"):
                 st.session_state.pending_query = query
 
         st.divider()

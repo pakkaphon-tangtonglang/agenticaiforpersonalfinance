@@ -9,6 +9,7 @@ from finance_ai.rag.document_loader import (
     infer_domain_from_filename,
     load_document,
     load_markdown_file,
+    load_pdf_file,
     load_text_file,
 )
 
@@ -113,6 +114,52 @@ class TestLoadTextFile:
         assert metadata.title == "investment_stocks"
 
 
+@pytest.fixture
+def sample_pdf_file(tmp_path: Path) -> Path:
+    """Create a sample PDF file for testing."""
+    from pypdf import PdfWriter  # noqa: PLC0415
+
+    writer = PdfWriter()
+    writer.add_blank_page(width=200, height=200)
+    # pypdf blank pages have no text; we'll test with a real-ish approach
+    file_path = tmp_path / "investment_guide.pdf"
+    with open(file_path, "wb") as f:
+        writer.write(f)
+    return file_path
+
+
+class TestLoadPdfFile:
+    """Tests for loading PDF files."""
+
+    def test_loads_pdf_returns_metadata(self, sample_pdf_file: Path) -> None:
+        """Test that PDF metadata is set correctly."""
+        _, metadata = load_pdf_file(sample_pdf_file)
+        assert metadata.source_file == "investment_guide.pdf"
+        assert metadata.title == "investment_guide"
+
+    def test_infers_domain_from_filename(self, sample_pdf_file: Path) -> None:
+        """Test that domain is inferred from the filename prefix."""
+        _, metadata = load_pdf_file(sample_pdf_file)
+        assert metadata.domain == "investment"
+
+    def test_blank_pdf_returns_empty_content(self, sample_pdf_file: Path) -> None:
+        """Test that a blank PDF returns empty content."""
+        content, _ = load_pdf_file(sample_pdf_file)
+        assert content == ""
+
+    def test_general_domain_for_non_prefixed(self, tmp_path: Path) -> None:
+        """Test that non-prefixed PDF defaults to general domain."""
+        from pypdf import PdfWriter  # noqa: PLC0415
+
+        writer = PdfWriter()
+        writer.add_blank_page(width=200, height=200)
+        file_path = tmp_path / "random_doc.pdf"
+        with open(file_path, "wb") as f:
+            writer.write(f)
+        _, metadata = load_pdf_file(file_path)
+        assert metadata.domain == "general"
+
+
 class TestLoadDocument:
     """Tests for the dispatch function."""
 
@@ -125,6 +172,11 @@ class TestLoadDocument:
         """Test dispatch to text loader."""
         content, metadata = load_document(sample_text_file)
         assert metadata.source_file == "investment_stocks.txt"
+
+    def test_loads_pdf(self, sample_pdf_file: Path) -> None:
+        """Test dispatch to PDF loader."""
+        content, metadata = load_document(sample_pdf_file)
+        assert metadata.source_file == "investment_guide.pdf"
 
     def test_unsupported_extension_raises_error(self, tmp_path: Path) -> None:
         """Test that unsupported file extensions raise ValueError."""
@@ -150,8 +202,15 @@ class TestDiscoverDocuments:
         paths = discover_documents(tmp_path)
         assert len(paths) == 1
 
+    def test_finds_pdf_files(self, tmp_path: Path) -> None:
+        """Test that PDF files are discovered."""
+        (tmp_path / "doc.pdf").write_bytes(b"%PDF-1.4")
+        paths = discover_documents(tmp_path)
+        assert len(paths) == 1
+        assert paths[0].name == "doc.pdf"
+
     def test_ignores_unsupported_files(self, tmp_path: Path) -> None:
-        """Test that non-md/txt files are ignored."""
+        """Test that non-md/txt/pdf files are ignored."""
         (tmp_path / "doc.md").write_text("content", encoding="utf-8")
         (tmp_path / "data.csv").write_text("a,b", encoding="utf-8")
         (tmp_path / "image.png").write_bytes(b"\x89PNG")

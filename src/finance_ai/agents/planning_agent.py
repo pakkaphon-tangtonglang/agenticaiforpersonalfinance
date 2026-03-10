@@ -12,6 +12,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from finance_ai.agents.cross_agent_tools import PLANNING_CROSS_TOOLS
+from finance_ai.agents.market_data_tools import convert_currency_tool
 from finance_ai.agents.planning_tools import (
     calculate_saving_plan,
     create_financial_goal,
@@ -31,6 +32,7 @@ PLANNING_TOOLS = [
     update_goal_progress,
     calculate_saving_plan,
     search_finance_knowledge,
+    convert_currency_tool,
 ] + PLANNING_CROSS_TOOLS
 
 

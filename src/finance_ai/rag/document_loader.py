@@ -5,7 +5,7 @@ Loads Markdown and text files, extracting metadata from filenames and headings.
 
 import re
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from finance_ai.rag.document_models import DocumentMetadata
 
@@ -15,7 +15,7 @@ DOMAIN_PREFIXES: dict[str, Literal["tax", "expense", "investment"]] = {
     "expense_": "expense",
 }
 
-SUPPORTED_EXTENSIONS = {".md", ".txt"}
+SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf"}
 
 
 def infer_domain_from_filename(
@@ -101,6 +101,50 @@ def load_text_file(file_path: Path) -> tuple[str, DocumentMetadata]:
     return content, metadata
 
 
+def _import_pdf_reader() -> Any:
+    """Lazy-import PdfReader from pypdf.
+
+    Returns:
+        The PdfReader class.
+
+    Raises:
+        ImportError: If pypdf is not installed.
+    """
+    try:
+        from pypdf import PdfReader  # noqa: PLC0415
+
+        return PdfReader
+    except ImportError as exc:
+        raise ImportError(
+            "pypdf is required for PDF loading. Install it with: pip install pypdf"
+        ) from exc
+
+
+def load_pdf_file(file_path: Path) -> tuple[str, DocumentMetadata]:
+    """Load a PDF file and extract text from all pages.
+
+    Args:
+        file_path: Path to the .pdf file.
+
+    Returns:
+        Tuple of (raw_text, metadata).
+
+    Example:
+        >>> content, meta = load_pdf_file(Path("investment_guide.pdf"))
+    """
+    pdf_reader_class = _import_pdf_reader()
+    reader = pdf_reader_class(file_path)
+    pages = [page.extract_text() or "" for page in reader.pages]
+    content = "\n\n".join(pages).strip()
+    filename = file_path.name
+    metadata = DocumentMetadata(
+        source_file=filename,
+        domain=infer_domain_from_filename(filename),
+        title=file_path.stem,
+    )
+    return content, metadata
+
+
 def load_document(file_path: Path) -> tuple[str, DocumentMetadata]:
     """Load a document, dispatching to the appropriate loader by extension.
 
@@ -121,6 +165,8 @@ def load_document(file_path: Path) -> tuple[str, DocumentMetadata]:
         return load_markdown_file(file_path)
     if extension == ".txt":
         return load_text_file(file_path)
+    if extension == ".pdf":
+        return load_pdf_file(file_path)
     raise ValueError(
         f"Unsupported file extension: '{extension}'. "
         f"Supported: {', '.join(sorted(SUPPORTED_EXTENSIONS))}"
