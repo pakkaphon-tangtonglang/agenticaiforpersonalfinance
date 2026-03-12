@@ -70,8 +70,15 @@ def stream_agent_response(
                     full_response += event.content
                 yield event
     except Exception as exc:  # noqa: BLE001
-        logger.error("Stream error: %s", exc)
-        full_response = f"เกิดข้อผิดพลาด: {exc}"
+        logger.error("Stream error: %s", exc, exc_info=True)
+        full_response = (
+            "ขออภัยครับ ระบบเกิดข้อผิดพลาด "
+            "กรุณาลองถามใหม่อีกครั้ง\n\n"
+            "ลองถามในรูปแบบอื่น เช่น:\n"
+            '- "ช่วยวางแผนออมเงินซื้อรถ'
+            'ราคา 800,000 บาท"\n'
+            '- "คำนวณภาษีเงินได้ 500,000 บาท"'
+        )
         yield StreamEvent(event_type="token", content=full_response)
 
     yield StreamEvent(

@@ -158,10 +158,8 @@ tmp/
 temp/
 *.tmp
 
-# Personal docs (not part of the project)
-docs/interview_prep.md
-docs/learning_guide.md
-docs/project_explanation.md
+# Internal docs (not part of the project)
+docs/internal/
 
 # Merge staging area
 need to merge/
