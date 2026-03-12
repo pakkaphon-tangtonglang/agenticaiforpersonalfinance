@@ -1,4 +1,4 @@
-"""Streamlit demo app for Personal Finance AI.
+"""Streamlit app for Personal Finance AI.
 
 Usage:
     streamlit run app.py
@@ -10,10 +10,10 @@ from typing import Any
 import streamlit as st
 from dotenv import load_dotenv
 
-load_dotenv()  # Load .env BEFORE any LangChain imports
+load_dotenv()
 
 from finance_ai.agents.llm_factory import create_chat_model  # noqa: E402
-from finance_ai.agents.router_agent import route_query  # noqa: E402
+from finance_ai.agents.stream_utils import route_query_stream  # noqa: E402
 from finance_ai.database.crud.user_crud import UserCRUD  # noqa: E402
 from finance_ai.database.session import (  # noqa: E402
     create_database_engine,
@@ -29,68 +29,19 @@ from finance_ai.tools.conversation_service import (  # noqa: E402
     save_user_message,
     update_conversation_title,
 )
+from finance_ai.ui.app_constants import (  # noqa: E402
+    CUSTOM_CSS,
+    FEATURE_CARDS,
+    INTENT_CONFIG,
+    MULTI_AGENT_QUERIES,
+    RECOMMENDATION_QUERIES,
+    REPORT_QUERIES,
+    SAMPLE_QUERIES,
+)
+from finance_ai.ui.dashboard import render_dashboard  # noqa: E402
+from finance_ai.ui.upload import render_upload_view  # noqa: E402
 
-INTENT_LABELS: dict[str, str] = {
-    "tax": "ภาษี",
-    "expense": "ค่าใช้จ่าย",
-    "investment": "การลงทุน",
-    "planning": "วางแผนการเงิน",
-    "recommendation": "คำแนะนำการเงิน",
-    "report": "รายงานการเงิน",
-    "general": "ทั่วไป",
-    "unknown": "ไม่ทราบ",
-}
-
-MULTI_AGENT_QUERIES: list[str] = [
-    (
-        "ช่วยคำนวณภาษีปี 2026 ให้หน่อย เงินเดือนเดือนละ 60,000 บาท"
-        " มีลูก 1 คน ซื้อ SSF 100,000 บาท"
-        " แล้วช่วยดูพอร์ตการลงทุนของฉันด้วยว่ามีกำไรขาดทุนเท่าไหร่"
-        " อยากรู้ว่ามีผลกระทบทางภาษีไหม"
-    ),
-    (
-        "อยากวางแผนการเงินปีนี้ ช่วยดูเป้าหมายทั้งหมดของฉันให้หน่อย"
-        " แล้วดึงข้อมูลรายจ่ายเดือนนี้กับรายได้ปีนี้มาเทียบด้วย"
-        " ว่าฉันออมเงินได้ตามเป้าไหม ต้องปรับอะไรบ้าง"
-    ),
-    (
-        "สรุปค่าใช้จ่ายเดือนนี้ให้หน่อย แยกตามหมวดหมู่"
-        " แล้วดูเป้าหมายการเงินของฉันด้วยว่าค่าใช้จ่ายที่เป็นอยู่"
-        " กระทบกับเป้าหมายการออมไหม ถ้ากระทบแนะนำวิธีลดรายจ่ายด้วย"
-    ),
-]
-
-REPORT_QUERIES: list[str] = [
-    (
-        "สร้างรายงานการเงินประจำเดือนนี้ให้หน่อย"
-        " อยากเห็นภาพรวมรายรับรายจ่าย พอร์ตการลงทุน"
-        " เป้าหมายการเงิน และสถานะภาษีทั้งหมด"
-    ),
-    ("ขอดูรายงานสรุปสุขภาพการเงินของฉัน" " พร้อมคะแนนสุขภาพการเงินและไฮไลท์สำคัญ"),
-]
-
-RECOMMENDATION_QUERIES: list[str] = [
-    (
-        "ช่วยวิเคราะห์การเงินทั้งหมดของฉันให้หน่อย"
-        " ดูรายจ่าย รายได้ ภาษี พอร์ตการลงทุน และเป้าหมายทุกอย่าง"
-        " แล้วให้คำแนะนำเชิงรุกว่าควรปรับปรุงจุดไหนบ้าง"
-        " เรียงตามความเร่งด่วนจากมากไปน้อย"
-    ),
-    (
-        "ตรวจสุขภาพการเงินของฉันให้หน่อย"
-        " อยากรู้คะแนนสุขภาพการเงินของฉัน"
-        " และปัญหาเร่งด่วนที่ต้องแก้ไขก่อน 3 อันดับแรก"
-        " พร้อมแนะนำว่าต้องทำอะไรบ้างเพื่อเพิ่มคะแนน"
-    ),
-]
-
-SAMPLE_QUERIES: list[str] = [
-    "คำนวณภาษี เงินเดือน 50,000 บาท/เดือน มีลูก 1 คน ซื้อ SSF 100,000",
-    "จ่ายค่าอาหาร 350 บาท",
-    "สรุปรายจ่ายเดือนนี้",
-    "เพิ่มหุ้น PTT.BK 100 หุ้น ราคา 35 บาท",
-    "ดูพอร์ตของฉัน",
-]
+# ──────────────────────── Cached Resources ────────────────────────
 
 
 @st.cache_resource
@@ -106,24 +57,21 @@ def get_session_factory():  # type: ignore[no-untyped-def]
     return create_session_factory(engine)
 
 
-def ensure_user_exists(user_id: str) -> None:
-    """Create a demo user record in DB if it doesn't exist.
+# ──────────────────── Session & Conversation ──────────────────────
 
-    Args:
-        user_id: UUID hex string for the user.
-    """
-    factory = get_session_factory()
-    session = factory()
+
+def _ensure_user(user_id: str) -> None:
+    """Create demo user in DB if needed."""
+    session = get_session_factory()()
     try:
         UserCRUD().get_or_create_demo_user(session, user_id)
     finally:
         session.close()
 
 
-def load_or_create_conversation() -> None:
-    """Load the latest conversation from DB or create a new one."""
-    factory = get_session_factory()
-    session = factory()
+def _load_or_create_conv() -> None:
+    """Load latest conversation or create a new one."""
+    session = get_session_factory()()
     try:
         conv = get_or_create_active_conversation(session, st.session_state.user_id)
         st.session_state.conversation_id = conv.id
@@ -132,10 +80,9 @@ def load_or_create_conversation() -> None:
         session.close()
 
 
-def start_new_conversation() -> None:
-    """Create a new conversation and reset chat state."""
-    factory = get_session_factory()
-    session = factory()
+def _start_new_conv() -> None:
+    """Create new conversation and reset messages."""
+    session = get_session_factory()()
     try:
         conv = create_conversation(session, st.session_state.user_id)
         st.session_state.conversation_id = conv.id
@@ -144,14 +91,9 @@ def start_new_conversation() -> None:
         session.close()
 
 
-def switch_to_conversation(conversation_id: str) -> None:
-    """Switch to an existing conversation, loading its messages.
-
-    Args:
-        conversation_id: UUID of the conversation to switch to.
-    """
-    factory = get_session_factory()
-    session = factory()
+def _switch_conv(conversation_id: str) -> None:
+    """Switch to an existing conversation."""
+    session = get_session_factory()()
     try:
         st.session_state.conversation_id = conversation_id
         st.session_state.messages = load_conversation_messages(session, conversation_id)
@@ -165,229 +107,243 @@ def init_session_state() -> None:
         st.session_state.messages = []
     if "user_id" not in st.session_state:
         st.session_state.user_id = uuid.uuid4().hex
-        ensure_user_exists(st.session_state.user_id)
+        _ensure_user(st.session_state.user_id)
     if "conversation_id" not in st.session_state:
-        load_or_create_conversation()
+        _load_or_create_conv()
 
 
-def render_conversation_sidebar() -> None:
-    """Render conversation management section in sidebar."""
-    if st.button("สร้างแชทใหม่", use_container_width=True):
-        start_new_conversation()
-        st.rerun()
-
-    factory = get_session_factory()
-    session = factory()
-    try:
-        conversations = list_user_conversations(session, st.session_state.user_id, limit=10)
-    finally:
-        session.close()
-
-    _render_conversation_list(conversations)
+# ──────────────────────────── Sidebar ─────────────────────────────
 
 
-def _render_conversation_list(
-    conversations: list[Any],
-) -> None:
-    """Render clickable conversation list in sidebar.
-
-    Args:
-        conversations: List of Conversation objects.
-    """
+def _render_conv_list(conversations: list[Any]) -> None:
+    """Render clickable conversation list."""
     current_id = st.session_state.get("conversation_id", "")
     for conv in conversations:
-        label = f"{'→ ' if conv.id == current_id else ''}{conv.title}"
-        if st.button(label, key=f"conv_{conv.id}", use_container_width=True):
-            switch_to_conversation(conv.id)
+        active = conv.id == current_id
+        prefix = "💬 " if active else "○ "
+        label = conv.title or "แชทใหม่"
+        if st.button(
+            f"{prefix}{label}",
+            key=f"conv_{conv.id}",
+            use_container_width=True,
+        ):
+            _switch_conv(conv.id)
             st.rerun()
+
+
+def _render_query_buttons(queries: list[dict[str, str]], prefix: str) -> None:
+    """Render sample query buttons."""
+    for q in queries:
+        if st.button(
+            q["short"],
+            key=f"{prefix}_{q['short']}",
+            use_container_width=True,
+        ):
+            st.session_state.pending_query = q["full"]
 
 
 def render_sidebar() -> None:
-    """Render the sidebar with settings and sample queries."""
+    """Render the sidebar."""
     with st.sidebar:
-        st.header("ตั้งค่า")
-        new_user_id = st.text_input(
-            "User ID",
-            value=st.session_state.user_id,
-            help="ใช้สำหรับ Expense/Investment Agent",
-        )
-        if new_user_id != st.session_state.user_id:
-            st.session_state.user_id = new_user_id
-            ensure_user_exists(new_user_id)
-
-        st.divider()
-        st.header("ประวัติแชท")
-        render_conversation_sidebar()
-
-        st.divider()
-        st.header("ตัวอย่างคำถาม")
-        for query in SAMPLE_QUERIES:
-            if st.button(query, use_container_width=True):
-                st.session_state.pending_query = query
-
-        st.divider()
-        st.header("ทดสอบ Multi-Agent")
-        for query in MULTI_AGENT_QUERIES:
-            if st.button(query, use_container_width=True, key=f"multi_{query}"):
-                st.session_state.pending_query = query
-
-        st.divider()
-        st.header("ทดสอบรายงานการเงิน")
-        for query in REPORT_QUERIES:
-            if st.button(query, use_container_width=True, key=f"report_{query}"):
-                st.session_state.pending_query = query
-
-        st.divider()
-        st.header("ทดสอบคำแนะนำเชิงรุก")
-        for query in RECOMMENDATION_QUERIES:
-            if st.button(query, use_container_width=True, key=f"rec_{query}"):
-                st.session_state.pending_query = query
-
-        st.divider()
-        if st.button("ล้างประวัติแชท", use_container_width=True):
-            start_new_conversation()
+        st.markdown("### 💬 ประวัติแชท")
+        st.markdown('<div class="new-chat-btn">', unsafe_allow_html=True)
+        if st.button("✨ สร้างแชทใหม่", use_container_width=True):
+            _start_new_conv()
             st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        session = get_session_factory()()
+        try:
+            convs = list_user_conversations(session, st.session_state.user_id, limit=10)
+        finally:
+            session.close()
+        if convs:
+            _render_conv_list(convs)
+
+        st.divider()
+        with st.expander("🚀 ตัวอย่างคำถาม"):
+            _render_query_buttons(SAMPLE_QUERIES, "sample")
+        with st.expander("🤝 Multi-Agent"):
+            _render_query_buttons(MULTI_AGENT_QUERIES, "multi")
+        with st.expander("📊 รายงานการเงิน"):
+            _render_query_buttons(REPORT_QUERIES, "report")
+        with st.expander("💡 คำแนะนำเชิงรุก"):
+            _render_query_buttons(RECOMMENDATION_QUERIES, "rec")
+
+        st.divider()
+        with st.expander("⚙️ ตั้งค่า"):
+            new_uid = st.text_input("User ID", value=st.session_state.user_id)
+            if new_uid != st.session_state.user_id:
+                st.session_state.user_id = new_uid
+                _ensure_user(new_uid)
+
+        st.markdown('<div class="clear-btn">', unsafe_allow_html=True)
+        if st.button("🗑️ ล้างประวัติแชท", use_container_width=True):
+            _start_new_conv()
+            st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
+# ───────────────────────── Chat View ──────────────────────────────
+
+
+def _render_intent_badge(intent: str) -> None:
+    """Render a colored intent badge."""
+    cfg = INTENT_CONFIG.get(intent, INTENT_CONFIG["unknown"])
+    html = (
+        f'<span class="intent-badge" style="background:{cfg["color"]}">'
+        f'{cfg["icon"]} {cfg["label"]}</span>'
+    )
+    st.markdown(html, unsafe_allow_html=True)
+
+
+def _render_welcome() -> None:
+    """Render welcome screen with feature cards."""
+    _, center, _ = st.columns([1, 2, 1])
+    with center:
+        st.markdown("### 🤖 สวัสดีครับ! ยินดีต้อนรับสู่ Finance AI\n" "พิมพ์คำถาม หรือเลือกตัวอย่างจากเมนูด้านซ้าย")
+    cols = st.columns(3) + st.columns(3)
+    for col, card in zip(cols, FEATURE_CARDS):
+        with col:
+            st.info(f"**{card['icon']} {card['title']}**\n\n{card['desc']}")
 
 
 def render_chat_history() -> None:
-    """Render all previous chat messages."""
+    """Render previous chat messages or welcome screen."""
+    if not st.session_state.messages:
+        _render_welcome()
+        return
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             if msg.get("intent"):
-                label = INTENT_LABELS.get(msg["intent"], msg["intent"])
-                st.caption(f"Agent: {label}")
+                _render_intent_badge(msg["intent"])
             st.markdown(msg["content"])
 
 
-def _load_chat_history() -> list[tuple[str, str]]:
-    """Load recent chat history from DB for LLM context.
-
-    Returns:
-        List of (role, content) tuples.
-    """
-    factory = get_session_factory()
-    session = factory()
-    try:
-        return get_recent_history_as_tuples(session, st.session_state.conversation_id)
-    finally:
-        session.close()
+# ──────────────────── DB Message Helpers ──────────────────────────
 
 
-def _save_user_message_to_db(query: str) -> None:
-    """Save user message to DB and auto-title if first message.
-
-    Args:
-        query: The user's query text.
-    """
-    factory = get_session_factory()
-    session = factory()
+def _save_user_msg(query: str) -> None:
+    """Save user message to DB and auto-title."""
+    session = get_session_factory()()
     try:
         save_user_message(session, st.session_state.conversation_id, query)
-        _auto_title_if_first(session, query)
+        if not st.session_state.messages:
+            update_conversation_title(session, st.session_state.conversation_id, query)
     finally:
         session.close()
 
 
-def _auto_title_if_first(session: Any, query: str) -> None:
-    """Update conversation title from first user message.
-
-    Args:
-        session: Database session.
-        query: The user's query text.
-    """
-    if len(st.session_state.messages) == 0:
-        update_conversation_title(session, st.session_state.conversation_id, query)
-
-
-def _save_assistant_message_to_db(response: str, intent: str) -> None:
-    """Save assistant message to DB.
-
-    Args:
-        response: The assistant's response text.
-        intent: The classified intent.
-    """
-    factory = get_session_factory()
-    session = factory()
+def _save_assistant_msg(response: str, intent: str) -> None:
+    """Save assistant message to DB."""
+    session = get_session_factory()()
     try:
         save_assistant_message(session, st.session_state.conversation_id, response, intent)
     finally:
         session.close()
 
 
+def _load_history() -> list[tuple[str, str]]:
+    """Load recent chat history from DB."""
+    session = get_session_factory()()
+    try:
+        return get_recent_history_as_tuples(session, st.session_state.conversation_id)
+    finally:
+        session.close()
+
+
+# ──────────────────── Streaming Query ─────────────────────────────
+
+
 def process_query(query: str) -> None:
-    """Process a user query through the router agent.
-
-    Flow: load history → save user msg → route → save assistant msg.
-
-    Args:
-        query: The user's natural language query.
-    """
-    chat_history = _load_chat_history()
-    _save_user_message_to_db(query)
+    """Process a user query with streaming response."""
+    chat_history = _load_history()
+    _save_user_msg(query)
 
     st.session_state.messages.append({"role": "user", "content": query})
     with st.chat_message("user"):
         st.markdown(query)
 
-    intent, response = _execute_query(query, chat_history)
+    intent, response = _stream_response(query, chat_history)
 
-    with st.chat_message("assistant"):
-        label = INTENT_LABELS.get(intent, intent)
-        st.caption(f"Agent: {label}")
-        st.markdown(response)
-
-    _save_assistant_message_to_db(response, intent)
+    _save_assistant_msg(response, intent)
     st.session_state.messages.append({"role": "assistant", "content": response, "intent": intent})
 
 
-def _execute_query(query: str, chat_history: list[tuple[str, str]]) -> tuple[str, str]:
-    """Execute query through router and return (intent, response).
+def _stream_response(
+    query: str,
+    chat_history: list[tuple[str, str]],
+) -> tuple[str, str]:
+    """Stream the agent response, return (intent, response)."""
+    intent = "unknown"
+    full_response = ""
 
-    Args:
-        query: The user's query.
-        chat_history: Previous messages for context.
+    with st.chat_message("assistant"):
+        status_box = st.empty()
+        message_box = st.empty()
 
-    Returns:
-        Tuple of (intent, response).
-    """
-    try:
-        model = get_chat_model()
-        result = route_query(
+        for event in route_query_stream(
             query,
-            chat_model=model,
+            chat_model=get_chat_model(),
             user_id=st.session_state.user_id,
             db_session_factory=get_session_factory(),
             chat_history=chat_history,
-        )
-        intent = result.get("intent", "unknown")
-        response = result.get("response", "ไม่สามารถประมวลผลได้")
-    except Exception as exc:  # noqa: BLE001
-        intent = "error"
-        response = f"เกิดข้อผิดพลาด: {exc}"
-    return intent, response
+        ):
+            if event.event_type == "status":
+                status_box.caption(f"⏳ {event.content}")
+            elif event.event_type == "token":
+                full_response += event.content
+                message_box.markdown(full_response + "▌")
+            elif event.event_type == "complete":
+                intent = event.intent
+                status_box.empty()
+                message_box.empty()
+
+        _render_intent_badge(intent)
+        st.markdown(full_response)
+
+    return intent, full_response
+
+
+# ─────────────────────────── Main ─────────────────────────────────
 
 
 def main() -> None:
     """Main entry point for the Streamlit app."""
     st.set_page_config(
-        page_title="Finance AI - ผู้ช่วยการเงินส่วนบุคคล",
+        page_title="Finance AI",
         page_icon="💰",
-        layout="centered",
+        layout="wide",
     )
-    st.title("💰 Finance AI")
-    st.caption("ผู้ช่วยการเงินส่วนบุคคลสำหรับคนไทย — ภาษี, ค่าใช้จ่าย, การลงทุน")
+    st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+    st.markdown(
+        '<div class="main-header">'
+        "<h1>💰 Finance AI</h1>"
+        "<p>ผู้ช่วยการเงินส่วนบุคคลอัจฉริยะ"
+        " — ภาษี · ค่าใช้จ่าย · การลงทุน · วางแผน</p>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
 
     init_session_state()
     render_sidebar()
-    render_chat_history()
 
-    pending = st.session_state.pop("pending_query", None)
-    if pending:
-        process_query(pending)
+    tab_chat, tab_dashboard, tab_upload = st.tabs(["💬 แชท", "📊 แดชบอร์ด", "📂 นำเข้าข้อมูล"])
 
-    user_input = st.chat_input("พิมพ์คำถามของคุณที่นี่...")
-    if user_input:
-        process_query(user_input)
+    with tab_chat:
+        render_chat_history()
+        pending = st.session_state.pop("pending_query", None)
+        if pending:
+            process_query(pending)
+        user_input = st.chat_input("💬 พิมพ์คำถามของคุณที่นี่...")
+        if user_input:
+            process_query(user_input)
+
+    with tab_dashboard:
+        render_dashboard(st.session_state.user_id, get_session_factory())
+
+    with tab_upload:
+        render_upload_view(st.session_state.user_id, get_session_factory())
 
 
 if __name__ == "__main__":
