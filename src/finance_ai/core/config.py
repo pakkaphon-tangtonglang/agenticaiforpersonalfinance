@@ -32,9 +32,9 @@ class Settings(BaseSettings):
     # Database
     db_url: str = Field(default="sqlite:///./finance_ai.db", description="Database connection URL")
 
-    # LLM Provider Selection (Google Gemini or OLLAMA/THALLE only)
-    llm_provider: Literal["google", "ollama"] = Field(
-        default="google", description="LLM provider to use (google or ollama)"
+    # LLM Provider Selection
+    llm_provider: Literal["google", "ollama", "openrouter"] = Field(
+        default="google", description="LLM provider to use (google, ollama, or openrouter)"
     )
 
     # Google Gemini Configuration
@@ -44,6 +44,12 @@ class Settings(BaseSettings):
     # OLLAMA Configuration (for THALLE and other local models)
     ollama_base_url: str = Field(default="http://localhost:11434", description="OLLAMA base URL")
     ollama_model: str = Field(default="THALLE", description="OLLAMA model name")
+
+    # OpenRouter Configuration (OpenAI-compatible API)
+    openrouter_api_key: Optional[str] = Field(default=None, description="OpenRouter API key")
+    openrouter_model: str = Field(
+        default="deepseek/deepseek-chat-v3-0324", description="OpenRouter model name"
+    )
 
     # General LLM Settings
     llm_max_tokens: int = Field(default=4000, ge=1, le=8000, description="Max tokens")

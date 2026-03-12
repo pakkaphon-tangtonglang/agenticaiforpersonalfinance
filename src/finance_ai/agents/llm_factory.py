@@ -81,6 +81,57 @@ def create_ollama_chat_model(settings: Settings) -> BaseChatModel:
     )
 
 
+def import_chat_openai() -> type:
+    """Import ChatOpenAI class, raising ImportError if not installed.
+
+    Returns:
+        The ChatOpenAI class.
+
+    Raises:
+        ImportError: If langchain-openai is not installed.
+    """
+    try:
+        from langchain_openai import ChatOpenAI
+    except ImportError as exc:
+        raise ImportError(
+            "langchain-openai is required for OpenRouter provider. "
+            "Install with: pip install langchain-openai"
+        ) from exc
+    return ChatOpenAI  # type: ignore[no-any-return]
+
+
+def create_openrouter_chat_model(settings: Settings) -> BaseChatModel:
+    """Create a ChatOpenAI instance configured for OpenRouter.
+
+    Args:
+        settings: Application settings with OpenRouter config.
+
+    Returns:
+        Configured ChatOpenAI instance pointing to OpenRouter API.
+
+    Raises:
+        ValueError: If openrouter_api_key is not set.
+        ImportError: If langchain-openai is not installed.
+
+    Example:
+        >>> model = create_openrouter_chat_model(settings)
+    """
+    if not settings.openrouter_api_key:
+        raise ValueError("openrouter_api_key is required when llm_provider is 'openrouter'.")
+    chat_openai_cls = import_chat_openai()
+    logger.info(
+        "Creating OpenRouter ChatModel with model=%s",
+        settings.openrouter_model,
+    )
+    return chat_openai_cls(  # type: ignore[no-any-return]
+        model=settings.openrouter_model,
+        api_key=settings.openrouter_api_key,
+        base_url="https://openrouter.ai/api/v1",
+        temperature=settings.llm_temperature,
+        max_tokens=settings.llm_max_tokens,
+    )
+
+
 def create_chat_model(settings: Settings | None = None) -> BaseChatModel:
     """Create a LangChain ChatModel based on the configured provider.
 
@@ -102,4 +153,6 @@ def create_chat_model(settings: Settings | None = None) -> BaseChatModel:
         return create_google_chat_model(settings)
     if settings.llm_provider == "ollama":
         return create_ollama_chat_model(settings)
+    if settings.llm_provider == "openrouter":
+        return create_openrouter_chat_model(settings)
     raise ValueError(f"Unsupported LLM provider: {settings.llm_provider}")
