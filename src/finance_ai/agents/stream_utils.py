@@ -228,6 +228,7 @@ def _get_builder_map() -> dict[str, Callable[..., CompiledStateGraph]]:  # type:
         "expense": build_expense_agent_graph,
         "investment": build_investment_agent_graph,
         "planning": build_planning_agent_graph,
+        "general": build_planning_agent_graph,
         "recommendation": build_recommendation_agent_graph,
         "report": build_report_agent_graph,
     }

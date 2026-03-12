@@ -168,15 +168,33 @@ class TestRouteQuery:
         assert result["intent"] == "planning"
         mock_execute.assert_called_once()
 
+    @patch("finance_ai.agents.router_agent.execute_planning_agent")
     @patch("finance_ai.agents.router_agent.classify_query")
-    def test_unsupported_intent_returns_message(
+    def test_general_intent_routes_to_planning(
+        self,
+        mock_classify: MagicMock,
+        mock_execute: MagicMock,
+    ) -> None:
+        """Routes general intent to the planning agent."""
+        mock_classify.return_value = RouterDecision(
+            intent="general",
+            confidence=Decimal("0.7"),
+        )
+        mock_execute.return_value = {"intent": "general", "response": "คำแนะนำทั่วไป"}
+
+        result = route_query("ออมเงินยังไงดี")
+        assert result["response"] == "คำแนะนำทั่วไป"
+        mock_execute.assert_called_once()
+
+    @patch("finance_ai.agents.router_agent.classify_query")
+    def test_unknown_intent_returns_unsupported(
         self,
         mock_classify: MagicMock,
     ) -> None:
-        """Non-supported intents return unsupported message."""
-        mock_classify.return_value = RouterDecision(intent="general", confidence=Decimal("0.7"))
-        result = route_query("สวัสดี")
-        assert result["intent"] == "general"
+        """Non-finance intents return unsupported message."""
+        mock_classify.return_value = RouterDecision(intent="unknown", confidence=Decimal("0.3"))
+        result = route_query("สูตรทำผัดไทย")
+        assert result["intent"] == "unknown"
         assert "ค่าใช้จ่าย" in result["response"]
 
 

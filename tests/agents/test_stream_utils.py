@@ -186,3 +186,29 @@ class TestRouteQueryStream:
         assert events[0].event_type == "status"
         assert events[-1].event_type == "complete"
         assert events[-1].intent == "tax"
+
+    @patch("finance_ai.agents.stream_utils.classify_query")
+    @patch("finance_ai.agents.stream_utils._get_agent_graph")
+    def test_general_intent_streams_via_planning(
+        self,
+        mock_get_graph: MagicMock,
+        mock_classify: MagicMock,
+    ) -> None:
+        """General intent streams through planning agent graph."""
+        from decimal import Decimal
+
+        from finance_ai.agents.schemas import RouterDecision
+
+        mock_classify.return_value = RouterDecision(
+            intent="general",
+            confidence=Decimal("0.8"),
+        )
+        mock_graph = MagicMock()
+        mock_graph.stream.return_value = iter([])
+        mock_get_graph.return_value = mock_graph
+
+        events = list(route_query_stream("ออมเงินยังไงดี"))
+        assert events[0].event_type == "status"
+        assert events[-1].event_type == "complete"
+        assert events[-1].intent == "general"
+        mock_get_graph.assert_called_once_with("general", None)
