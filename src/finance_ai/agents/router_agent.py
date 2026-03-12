@@ -390,6 +390,7 @@ def route_query(
         "expense": execute_expense_agent,
         "investment": execute_investment_agent,
         "planning": execute_planning_agent,
+        "general": execute_planning_agent,
         "recommendation": execute_recommendation_agent,
         "report": execute_report_agent,
     }
