@@ -328,6 +328,8 @@ def main() -> None:
     init_session_state()
     render_sidebar()
 
+    user_input = st.chat_input("💬 พิมพ์คำถามของคุณที่นี่...")
+
     tab_chat, tab_dashboard, tab_upload = st.tabs(["💬 แชท", "📊 แดชบอร์ด", "📂 นำเข้าข้อมูล"])
 
     with tab_chat:
@@ -335,7 +337,6 @@ def main() -> None:
         pending = st.session_state.pop("pending_query", None)
         if pending:
             process_query(pending)
-        user_input = st.chat_input("💬 พิมพ์คำถามของคุณที่นี่...")
         if user_input:
             process_query(user_input)
 
