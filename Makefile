@@ -91,5 +91,19 @@ shell:  ## Open IPython shell with app context
 	@echo "Opening IPython shell..."
 	$(PYTHON) -m IPython
 
-.PHONY: all
+evaluate:  ## Run all evaluations
+	@echo "Running evaluation framework..."
+	$(PYTHON) -m finance_ai.evaluation.cli --eval all
+
+evaluate-routing:  ## Run routing evaluation only
+	$(PYTHON) -m finance_ai.evaluation.cli --eval routing
+
+evaluate-rag:  ## Run RAG evaluation only
+	$(PYTHON) -m finance_ai.evaluation.cli --eval rag
+
+evaluate-compare:  ## Compare multiple models
+	$(PYTHON) -m finance_ai.evaluation.cli --provider google --eval all
+	$(PYTHON) -m finance_ai.evaluation.cli --provider openrouter --eval all
+
+.PHONY: all evaluate evaluate-routing evaluate-rag evaluate-compare
 all: check  ## Alias for 'check' target

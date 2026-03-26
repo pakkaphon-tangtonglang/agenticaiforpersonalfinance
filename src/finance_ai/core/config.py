@@ -60,7 +60,7 @@ class Settings(BaseSettings):
         default="google", description="Embedding provider (google or sentence_transformers)"
     )
     rag_embedding_model: str = Field(
-        default="models/embedding-001", description="Google embedding model name"
+        default="models/gemini-embedding-001", description="Google embedding model name"
     )
     rag_sentence_transformer_model: str = Field(
         default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",

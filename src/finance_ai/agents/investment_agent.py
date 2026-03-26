@@ -22,6 +22,7 @@ from finance_ai.agents.investment_tools import (
 )
 from finance_ai.agents.market_data_tools import MARKET_DATA_TOOLS
 from finance_ai.agents.prompts import INVESTMENT_AGENT_SYSTEM_PROMPT
+from finance_ai.agents.psychology_tools import detect_psychological_cues
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.schemas import InvestmentAgentState
 from finance_ai.core.logging import get_logger
@@ -37,6 +38,7 @@ INVESTMENT_TOOLS = (
         lookup_holding,
         get_investment_advice,
         search_finance_knowledge,
+        detect_psychological_cues,
     ]
     + INVESTMENT_CROSS_TOOLS
     + MARKET_DATA_TOOLS

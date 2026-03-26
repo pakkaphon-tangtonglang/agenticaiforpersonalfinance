@@ -39,6 +39,7 @@ from finance_ai.ui.app_constants import (  # noqa: E402
     SAMPLE_QUERIES,
 )
 from finance_ai.ui.dashboard import render_dashboard  # noqa: E402
+from finance_ai.ui.evaluation_view import render_evaluation_view  # noqa: E402
 from finance_ai.ui.upload import render_upload_view  # noqa: E402
 
 # ──────────────────────── Cached Resources ────────────────────────
@@ -330,7 +331,9 @@ def main() -> None:
 
     user_input = st.chat_input("💬 พิมพ์คำถามของคุณที่นี่...")
 
-    tab_chat, tab_dashboard, tab_upload = st.tabs(["💬 แชท", "📊 แดชบอร์ด", "📂 นำเข้าข้อมูล"])
+    tab_chat, tab_dashboard, tab_upload, tab_eval = st.tabs(
+        ["💬 แชท", "📊 แดชบอร์ด", "📂 นำเข้าข้อมูล", "🔬 ประเมินระบบ"]
+    )
 
     with tab_chat:
         render_chat_history()
@@ -345,6 +348,9 @@ def main() -> None:
 
     with tab_upload:
         render_upload_view(st.session_state.user_id, get_session_factory())
+
+    with tab_eval:
+        render_evaluation_view(get_chat_model(), get_session_factory())
 
 
 if __name__ == "__main__":

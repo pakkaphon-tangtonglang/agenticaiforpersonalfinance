@@ -11,6 +11,8 @@ from pydantic import BaseModel
 from finance_ai.tools.tax_constants import (
     DEDUCTION_LIMITS,
     DONATION_CAP_PERCENTAGE,
+    EXPENSE_DEDUCTION_MAX,
+    EXPENSE_DEDUCTION_RATE,
     PERCENTAGE_CAPPED_DEDUCTIONS,
     TAX_BRACKETS,
 )
@@ -30,6 +32,7 @@ class TaxCalculationResult(BaseModel):
     """Complete tax calculation result with breakdown."""
 
     gross_income: Decimal
+    expense_deduction: Decimal
     total_deductions: Decimal
     net_income: Decimal
     tax_breakdown: list[TaxBracketResult]
@@ -230,6 +233,22 @@ def calculate_effective_rate(total_tax: Decimal, gross_income: Decimal) -> Decim
     return (total_tax / gross_income).quantize(Decimal("0.0001"))
 
 
+def calculate_expense_deduction(gross_income: Decimal) -> Decimal:
+    """Calculate standard expense deduction (50% of income, max 100,000 THB).
+
+    Args:
+        gross_income: Total gross income for the tax year.
+
+    Returns:
+        Expense deduction amount (capped at 100,000 THB).
+
+    Example:
+        >>> calculate_expense_deduction(Decimal("600000"))
+        Decimal('100000')
+    """
+    return min(gross_income * EXPENSE_DEDUCTION_RATE, EXPENSE_DEDUCTION_MAX)
+
+
 def calculate_tax(
     gross_income: Decimal,
     deductions_by_type: dict[str, Decimal],
@@ -255,14 +274,16 @@ def calculate_tax(
         True
     """
     validate_non_negative_income(gross_income)
+    expense_deduction = calculate_expense_deduction(gross_income)
     total_deductions, _ = sum_capped_deductions(deductions_by_type, gross_income)
-    net_income = max(gross_income - total_deductions, Decimal("0"))
+    net_income = max(gross_income - expense_deduction - total_deductions, Decimal("0"))
     breakdown = calculate_progressive_tax(net_income)
     total_tax = calculate_total_tax_from_breakdown(breakdown)
     effective_rate = calculate_effective_rate(total_tax, gross_income)
     tax_due_or_refund = total_tax - withholding_tax_paid
     return TaxCalculationResult(
         gross_income=gross_income,
+        expense_deduction=expense_deduction,
         total_deductions=total_deductions,
         net_income=net_income,
         tax_breakdown=breakdown,

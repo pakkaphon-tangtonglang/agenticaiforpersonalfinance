@@ -7,10 +7,12 @@ from langchain_core.messages import AIMessage, HumanMessage
 from finance_ai.agents.prompts import TAX_AGENT_SYSTEM_PROMPT
 from finance_ai.agents.tax_agent import (
     TAX_TOOLS,
+    _create_first_turn_node,
+    _create_respond_node,
     build_tax_agent_graph,
-    create_llm_node,
     should_continue,
 )
+from finance_ai.agents.tax_tools import calculate_thai_tax
 
 
 class TestShouldContinue:
@@ -39,13 +41,13 @@ class TestShouldContinue:
         assert should_continue(state) == "end"  # type: ignore[arg-type]
 
 
-class TestCreateLlmNode:
-    """Tests for the LLM node factory."""
+class TestCreateFirstTurnNode:
+    """Tests for the first turn node (forced tool calling)."""
 
     def test_prepends_system_prompt(self, mock_chat_model: MagicMock) -> None:
         """System prompt is prepended to messages sent to the LLM."""
         mock_chat_model.invoke.return_value = AIMessage(content="response")
-        node = create_llm_node(mock_chat_model)
+        node = _create_first_turn_node(mock_chat_model)
 
         state = {
             "messages": [HumanMessage(content="คำนวณภาษี")],
@@ -57,18 +59,30 @@ class TestCreateLlmNode:
         assert call_args[0].content == TAX_AGENT_SYSTEM_PROMPT
         assert call_args[1].content == "คำนวณภาษี"
 
+    def test_forces_tool_choice(self, mock_chat_model: MagicMock) -> None:
+        """First turn binds only calculate_thai_tax with tool_choice='any'."""
+        _create_first_turn_node(mock_chat_model)
+        mock_chat_model.bind_tools.assert_called_once_with(
+            [calculate_thai_tax],
+            tool_choice="any",
+        )
+
+
+class TestCreateRespondNode:
+    """Tests for the respond node (after tool results)."""
+
     def test_returns_message_list(self, mock_chat_model: MagicMock) -> None:
         """Node returns dict with messages list."""
         response = AIMessage(content="ผลลัพธ์")
         mock_chat_model.invoke.return_value = response
-        node = create_llm_node(mock_chat_model)
+        node = _create_respond_node(mock_chat_model)
 
         result = node({"messages": [HumanMessage(content="test")], "tax_result": None})
         assert result == {"messages": [response]}
 
-    def test_binds_tools_to_model(self, mock_chat_model: MagicMock) -> None:
-        """LLM node binds tax tools to the model."""
-        create_llm_node(mock_chat_model)
+    def test_binds_tools_without_force(self, mock_chat_model: MagicMock) -> None:
+        """Respond node binds tools without forcing tool_choice."""
+        _create_respond_node(mock_chat_model)
         mock_chat_model.bind_tools.assert_called_once_with(TAX_TOOLS)
 
 
@@ -85,7 +99,7 @@ class TestBuildTaxAgentGraph:
         """Custom chat model is used instead of factory."""
         graph = build_tax_agent_graph(chat_model=mock_chat_model)
         assert graph is not None
-        mock_chat_model.bind_tools.assert_called_once()
+        assert mock_chat_model.bind_tools.call_count == 2
 
     def test_full_react_loop(
         self,
@@ -93,7 +107,7 @@ class TestBuildTaxAgentGraph:
         tax_tool_call_message: AIMessage,
         tax_formatted_response: AIMessage,
     ) -> None:
-        """Full ReAct loop: LLM calls tool, tool executes, LLM formats response."""
+        """Full loop: first_turn (force tool) -> tools -> respond."""
         mock_chat_model.invoke.side_effect = [
             tax_tool_call_message,
             tax_formatted_response,

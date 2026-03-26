@@ -20,6 +20,7 @@ from finance_ai.agents.planning_tools import (
     view_financial_goals,
 )
 from finance_ai.agents.prompts import PLANNING_AGENT_SYSTEM_PROMPT
+from finance_ai.agents.psychology_tools import detect_psychological_cues
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.schemas import PlanningAgentState
 from finance_ai.core.logging import get_logger
@@ -33,6 +34,7 @@ PLANNING_TOOLS = [
     calculate_saving_plan,
     search_finance_knowledge,
     convert_currency_tool,
+    detect_psychological_cues,
 ] + PLANNING_CROSS_TOOLS
 
 
