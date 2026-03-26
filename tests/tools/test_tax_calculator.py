@@ -10,6 +10,7 @@ from finance_ai.tools.tax_calculator import (
     calculate_bracket_tax,
     calculate_donation_cap,
     calculate_effective_rate,
+    calculate_expense_deduction,
     calculate_progressive_tax,
     calculate_tax,
     calculate_total_tax_from_breakdown,
@@ -282,7 +283,8 @@ class TestCalculateTax:
             Decimal("200000"),
             {"personal_allowance": Decimal("60000")},
         )
-        assert result.net_income == Decimal("140000")
+        assert result.expense_deduction == Decimal("100000")
+        assert result.net_income == Decimal("40000")
         assert result.total_tax == Decimal("0")
 
     def test_typical_salary_earner(self) -> None:
@@ -293,8 +295,9 @@ class TestCalculateTax:
         }
         result = calculate_tax(Decimal("960000"), deductions)
         assert result.gross_income == Decimal("960000")
+        assert result.expense_deduction == Decimal("100000")
         assert result.total_deductions == Decimal("69000")
-        assert result.net_income == Decimal("891000")
+        assert result.net_income == Decimal("791000")
         assert result.total_tax > Decimal("0")
         assert len(result.tax_breakdown) == 8
 
@@ -319,8 +322,9 @@ class TestCalculateTax:
     def test_no_deductions(self) -> None:
         """Test calculation with no deductions at all."""
         result = calculate_tax(Decimal("500000"), {})
+        assert result.expense_deduction == Decimal("100000")
         assert result.total_deductions == Decimal("0")
-        assert result.net_income == Decimal("500000")
+        assert result.net_income == Decimal("400000")
 
     def test_result_is_pydantic_model(self) -> None:
         """Test that result is a proper Pydantic model."""
@@ -340,5 +344,31 @@ class TestCalculateTax:
             Decimal("50000"),
             {"personal_allowance": Decimal("60000")},
         )
+        assert result.expense_deduction == Decimal("25000")
         assert result.net_income == Decimal("0")
         assert result.total_tax == Decimal("0")
+
+
+class TestExpenseDeduction:
+    """Tests for standard expense deduction (50% of income, max 100,000)."""
+
+    def test_fifty_percent_below_cap(self) -> None:
+        """Test 50% deduction when income is low (below 200k cap threshold)."""
+        result = calculate_expense_deduction(Decimal("100000"))
+        assert result == Decimal("50000")
+
+    def test_at_cap(self) -> None:
+        """Test deduction capped at 100,000 for higher incomes."""
+        result = calculate_expense_deduction(Decimal("500000"))
+        assert result == Decimal("100000")
+
+    def test_zero_income(self) -> None:
+        """Test zero expense deduction for zero income."""
+        result = calculate_expense_deduction(Decimal("0"))
+        assert result == Decimal("0")
+
+    def test_result_includes_expense_deduction(self) -> None:
+        """Test that TaxCalculationResult includes expense_deduction field."""
+        result = calculate_tax(Decimal("600000"), {"personal_allowance": Decimal("60000")})
+        assert result.expense_deduction == Decimal("100000")
+        assert result.net_income == Decimal("440000")

@@ -92,12 +92,12 @@ class FinanceVectorStore:
         return _convert_search_results(docs_with_scores)
 
     def clear_collection(self) -> None:
-        """Delete all documents from the collection.
+        """Delete all documents and recreate the collection.
 
         Example:
             >>> store.clear_collection()
         """
-        self._store.delete_collection()
+        self._store.reset_collection()
         logger.info("Cleared vector store collection")
 
     def get_document_count(self) -> int:

@@ -14,6 +14,7 @@ from langgraph.prebuilt import ToolNode
 
 from finance_ai.agents.market_data_tools import get_finance_news
 from finance_ai.agents.prompts import RECOMMENDATION_AGENT_SYSTEM_PROMPT
+from finance_ai.agents.psychology_tools import detect_psychological_cues
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.recommendation_tools import (
     generate_financial_recommendations,
@@ -29,6 +30,7 @@ RECOMMENDATION_AGENT_TOOLS = [
     get_financial_health_score,
     search_finance_knowledge,
     get_finance_news,
+    detect_psychological_cues,
 ]
 
 

@@ -42,6 +42,11 @@ PERCENTAGE_CAPPED_DEDUCTIONS: dict[str, Decimal] = {
     "ssf": Decimal("0.30"),
 }
 
+# Standard expense deduction for employment income (40(1))
+# 50% of gross income, capped at 100,000 THB
+EXPENSE_DEDUCTION_RATE: Decimal = Decimal("0.50")
+EXPENSE_DEDUCTION_MAX: Decimal = Decimal("100000")
+
 # Donation cap: max 10% of net income (after all other deductions)
 DONATION_CAP_PERCENTAGE: Decimal = Decimal("0.10")
 

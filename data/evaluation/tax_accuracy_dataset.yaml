@@ -1,0 +1,241 @@
+name: tax_accuracy_evaluation
+version: "1.0"
+cases:
+  - case_id: "tax_acc_001"
+    query: "คำนวณภาษี เงินเดือน 50,000 บาทต่อเดือน ค่าลดหย่อนส่วนตัว 60,000"
+    description: "Simple salary with personal allowance only"
+    gross_income: "600000"
+    deductions_by_type:
+      personal_allowance: "60000"
+    expected_total_tax: "21500"
+    expected_effective_rate: "0.0358"
+    tolerance_thb: "500"
+    tags: ["simple", "salary"]
+
+  - case_id: "tax_acc_002"
+    query: "รายได้ 300,000 บาทต่อปี ลดหย่อนส่วนตัว 60,000"
+    description: "Low income, no tax after expense deduction"
+    gross_income: "300000"
+    deductions_by_type:
+      personal_allowance: "60000"
+    expected_total_tax: "0"
+    expected_effective_rate: "0.0000"
+    tolerance_thb: "500"
+    tags: ["simple", "low_income"]
+
+  - case_id: "tax_acc_003"
+    query: "รายได้ 1,200,000 บาท ลดหย่อนส่วนตัว 60,000 RMF 200,000"
+    description: "High income with RMF deduction"
+    gross_income: "1200000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      rmf: "200000"
+    expected_total_tax: "83000"
+    expected_effective_rate: "0.0692"
+    tolerance_thb: "1000"
+    tags: ["complex", "rmf"]
+
+  - case_id: "tax_acc_004"
+    query: "เงินเดือน 30,000 ค่าลดหย่อนส่วนตัว 60,000 ประกันสังคม 9,000"
+    description: "Moderate income with social security"
+    gross_income: "360000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      social_security: "9000"
+    expected_total_tax: "2050"
+    expected_effective_rate: "0.0057"
+    tolerance_thb: "500"
+    tags: ["moderate", "social_security"]
+
+  - case_id: "tax_acc_005"
+    query: "รายได้ 2,000,000 บาท ลดหย่อนส่วนตัว 60,000 ประกันชีวิต 100,000 RMF 500,000"
+    description: "High income with multiple deductions"
+    gross_income: "2000000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      life_insurance: "100000"
+      rmf: "500000"
+    expected_total_tax: "175000"
+    expected_effective_rate: "0.0875"
+    tolerance_thb: "2000"
+    tags: ["complex", "multiple_deductions"]
+
+  - case_id: "tax_acc_006"
+    query: "รายได้ 150,000 ลดหย่อนส่วนตัว 60,000"
+    description: "Very low income, no tax"
+    gross_income: "150000"
+    deductions_by_type:
+      personal_allowance: "60000"
+    expected_total_tax: "0"
+    expected_effective_rate: "0.0000"
+    tolerance_thb: "100"
+    tags: ["simple", "no_tax"]
+
+  - case_id: "tax_acc_007"
+    query: "รายได้ 5,000,000 บาท ค่าลดหย่อนส่วนตัว 60,000"
+    description: "Very high income, top bracket"
+    gross_income: "5000000"
+    deductions_by_type:
+      personal_allowance: "60000"
+    expected_total_tax: "1217000"
+    expected_effective_rate: "0.2434"
+    tolerance_thb: "5000"
+    tags: ["high_income", "top_bracket"]
+
+  - case_id: "tax_acc_008"
+    query: "เงินเดือน 80,000 ลดหย่อนส่วนตัว 60,000 ลูก 1 คน"
+    description: "Income with child allowance"
+    gross_income: "960000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      child_allowance: "30000"
+    expected_total_tax: "69000"
+    expected_effective_rate: "0.0719"
+    tolerance_thb: "1000"
+    tags: ["moderate", "child_allowance"]
+
+  - case_id: "tax_acc_009"
+    query: "รายได้ 800,000 ลดหย่อนส่วนตัว 60,000 SSF 200,000 ประกันสุขภาพ 15,000"
+    description: "Multiple deductions including SSF"
+    gross_income: "800000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      ssf: "200000"
+      health_insurance: "15000"
+    expected_total_tax: "20000"
+    expected_effective_rate: "0.0250"
+    tolerance_thb: "1000"
+    tags: ["complex", "ssf"]
+
+  - case_id: "tax_acc_010"
+    query: "รายได้ 500,000 ลดหย่อนส่วนตัว 60,000 เงินบริจาค 20,000"
+    description: "Income with donations"
+    gross_income: "500000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      donations: "20000"
+    expected_total_tax: "9500"
+    expected_effective_rate: "0.0190"
+    tolerance_thb: "500"
+    tags: ["moderate", "donations"]
+
+  - case_id: "tax_acc_011"
+    query: "รายได้ 100,000 บาท ไม่มีค่าลดหย่อน"
+    description: "Very low income, no deductions, no tax"
+    gross_income: "100000"
+    deductions_by_type: {}
+    expected_total_tax: "0"
+    expected_effective_rate: "0.0000"
+    tolerance_thb: "100"
+    tags: ["simple", "no_tax", "no_deductions"]
+
+  - case_id: "tax_acc_012"
+    query: "รายได้ 250,000 บาท ลดหย่อนส่วนตัว 60,000"
+    description: "Income just above expense+allowance, still no tax"
+    gross_income: "250000"
+    deductions_by_type:
+      personal_allowance: "60000"
+    expected_total_tax: "0"
+    expected_effective_rate: "0.0000"
+    tolerance_thb: "100"
+    tags: ["simple", "no_tax"]
+
+  - case_id: "tax_acc_013"
+    query: "รายได้ 700,000 บาท ลดหย่อนส่วนตัว 60,000 คู่สมรส 60,000"
+    description: "Income with spouse allowance"
+    gross_income: "700000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      spouse_allowance: "60000"
+    expected_total_tax: "25500"
+    expected_effective_rate: "0.0364"
+    tolerance_thb: "500"
+    tags: ["moderate", "spouse"]
+
+  - case_id: "tax_acc_014"
+    query: "รายได้ 450,000 บาท ลดหย่อนส่วนตัว 60,000 บิดามารดา 60,000"
+    description: "Income with parent allowance (2 parents)"
+    gross_income: "450000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      parent_allowance: "60000"
+    expected_total_tax: "5500"
+    expected_effective_rate: "0.0122"
+    tolerance_thb: "500"
+    tags: ["moderate", "parent"]
+
+  - case_id: "tax_acc_015"
+    query: "รายได้ 900,000 บาท ลดหย่อนส่วนตัว 60,000 ดอกเบี้ยบ้าน 100,000"
+    description: "Income with mortgage interest deduction"
+    gross_income: "900000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      mortgage_interest: "100000"
+    expected_total_tax: "48500"
+    expected_effective_rate: "0.0539"
+    tolerance_thb: "1000"
+    tags: ["moderate", "mortgage"]
+
+  - case_id: "tax_acc_016"
+    query: "รายได้ 1,500,000 บาท ลดหย่อนส่วนตัว 60,000 กองทุนสำรองเลี้ยงชีพ 200,000"
+    description: "High income with provident fund"
+    gross_income: "1500000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      provident_fund: "200000"
+    expected_total_tax: "150000"
+    expected_effective_rate: "0.1000"
+    tolerance_thb: "2000"
+    tags: ["complex", "provident_fund"]
+
+  - case_id: "tax_acc_017"
+    query: "รายได้ 600,000 บาท ลดหย่อนส่วนตัว 60,000 ประกันชีวิต 80,000 ประกันสุขภาพ 20,000"
+    description: "Income with life and health insurance"
+    gross_income: "600000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      life_insurance: "80000"
+      health_insurance: "20000"
+    expected_total_tax: "11500"
+    expected_effective_rate: "0.0192"
+    tolerance_thb: "500"
+    tags: ["moderate", "insurance"]
+
+  - case_id: "tax_acc_018"
+    query: "เงินเดือน 40,000 ลดหย่อนส่วนตัว 60,000 ประกันสังคม 9,000"
+    description: "Monthly 40k salary with social security"
+    gross_income: "480000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      social_security: "9000"
+    expected_total_tax: "8600"
+    expected_effective_rate: "0.0179"
+    tolerance_thb: "500"
+    tags: ["moderate", "social_security"]
+
+  - case_id: "tax_acc_019"
+    query: "รายได้ 3,000,000 บาท ลดหย่อนส่วนตัว 60,000 RMF 500,000 SSF 200,000"
+    description: "Very high income with RMF and SSF"
+    gross_income: "3000000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      rmf: "500000"
+      ssf: "200000"
+    expected_total_tax: "407000"
+    expected_effective_rate: "0.1357"
+    tolerance_thb: "5000"
+    tags: ["complex", "high_income", "rmf", "ssf"]
+
+  - case_id: "tax_acc_020"
+    query: "เงินเดือน 70,000 ลดหย่อนส่วนตัว 60,000 ลูก 2 คน ประกันสังคม 9,000 ประกันชีวิต 50,000"
+    description: "Family with multiple deduction types"
+    gross_income: "840000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      child_allowance: "60000"
+      social_security: "9000"
+      life_insurance: "50000"
+    expected_total_tax: "41150"
+    expected_effective_rate: "0.0490"
+    tolerance_thb: "1000"
+    tags: ["complex", "family", "multiple_deductions"]

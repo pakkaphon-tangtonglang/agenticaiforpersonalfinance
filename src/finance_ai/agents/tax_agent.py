@@ -42,26 +42,56 @@ def should_continue(state: TaxAgentState) -> str:
     return "end"
 
 
-def create_llm_node(
+def _create_first_turn_node(
     chat_model: BaseChatModel,
 ) -> Any:
-    """Create the LLM reasoning node for the tax agent.
+    """Create LLM node that forces tool calling on first turn.
 
-    Binds tax tools to the model and prepends the system prompt on each call.
+    Forces the model to call a tool (e.g., calculate_thai_tax)
+    instead of computing tax by itself, which produces wrong results.
 
     Args:
         chat_model: LangChain ChatModel to use.
 
     Returns:
         A callable node function for the LangGraph graph.
+    """
+    model_force_tool = chat_model.bind_tools([calculate_thai_tax], tool_choice="any")
 
-    Example:
-        >>> node = create_llm_node(chat_model)
+    def first_turn_node(state: TaxAgentState) -> dict[str, Any]:
+        """Invoke LLM with forced tool calling.
+
+        Args:
+            state: Current agent state with messages.
+
+        Returns:
+            Dict with updated messages list.
+        """
+        messages = [SystemMessage(content=TAX_AGENT_SYSTEM_PROMPT)] + state["messages"]
+        response = model_force_tool.invoke(messages)
+        return {"messages": [response]}
+
+    return first_turn_node
+
+
+def _create_respond_node(
+    chat_model: BaseChatModel,
+) -> Any:
+    """Create LLM node for responding after tool results.
+
+    After tools have run, this node formats the results
+    in Thai without being forced to call tools again.
+
+    Args:
+        chat_model: LangChain ChatModel to use.
+
+    Returns:
+        A callable node function for the LangGraph graph.
     """
     model_with_tools = chat_model.bind_tools(TAX_TOOLS)
 
-    def llm_node(state: TaxAgentState) -> dict[str, Any]:
-        """Invoke the LLM with current messages and system prompt.
+    def respond_node(state: TaxAgentState) -> dict[str, Any]:
+        """Invoke LLM to format tool results.
 
         Args:
             state: Current agent state with messages.
@@ -73,7 +103,7 @@ def create_llm_node(
         response = model_with_tools.invoke(messages)
         return {"messages": [response]}
 
-    return llm_node
+    return respond_node
 
 
 def build_tax_agent_graph(
@@ -81,7 +111,9 @@ def build_tax_agent_graph(
 ) -> Any:
     """Build the LangGraph StateGraph for the Tax Agent.
 
-    Creates a ReAct-style graph: agent -> (tool_calls?) -> tools -> agent -> END.
+    Graph flow: first_turn (force tool) -> tools -> respond -> END.
+    The first turn always calls a tool to ensure accurate calculation.
+    After tool results, the respond node formats the answer.
 
     Args:
         chat_model: Optional ChatModel override. Uses factory if None.
@@ -99,13 +131,15 @@ def build_tax_agent_graph(
         chat_model = create_chat_model()
 
     graph = StateGraph(TaxAgentState)
-    graph.add_node("agent", create_llm_node(chat_model))
+    graph.add_node("first_turn", _create_first_turn_node(chat_model))
     graph.add_node("tools", ToolNode(TAX_TOOLS))
-    graph.set_entry_point("agent")
+    graph.add_node("respond", _create_respond_node(chat_model))
+    graph.set_entry_point("first_turn")
+    graph.add_edge("first_turn", "tools")
+    graph.add_edge("tools", "respond")
     graph.add_conditional_edges(
-        "agent",
+        "respond",
         should_continue,
         {"tools": "tools", "end": END},
     )
-    graph.add_edge("tools", "agent")
     return graph.compile()

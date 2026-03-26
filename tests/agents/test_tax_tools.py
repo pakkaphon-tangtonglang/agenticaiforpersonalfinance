@@ -84,6 +84,7 @@ class TestCalculateThaiTax:
         assert "total_tax" in result
         assert "effective_tax_rate" in result
         assert "net_income" in result
+        assert "expense_deduction" in result
 
     def test_with_multiple_deductions(self) -> None:
         """Calculates tax with multiple deduction types."""

@@ -1,0 +1,226 @@
+name: routing_evaluation
+version: "1.0"
+cases:
+  # === Tax (easy) ===
+  - case_id: "route_tax_001"
+    query: "คำนวณภาษีปี 2024 เงินเดือน 50,000 บาทต่อเดือน"
+    expected_intent: "tax"
+    difficulty: "easy"
+    tags: ["tax", "calculation"]
+
+  - case_id: "route_tax_002"
+    query: "ภาษีเงินได้บุคคลธรรมดาคำนวณยังไง"
+    expected_intent: "tax"
+    difficulty: "easy"
+    tags: ["tax", "info"]
+
+  - case_id: "route_tax_003"
+    query: "ค่าลดหย่อนส่วนตัวปีนี้เท่าไหร่"
+    expected_intent: "tax"
+    difficulty: "easy"
+    tags: ["tax", "deduction"]
+
+  - case_id: "route_tax_004"
+    query: "ซื้อ RMF ลดหย่อนภาษีได้เท่าไหร่"
+    expected_intent: "tax"
+    difficulty: "medium"
+    tags: ["tax", "deduction", "rmf"]
+
+  - case_id: "route_tax_005"
+    query: "จ่ายภาษีเท่าไหร่ถ้ารายได้เดือนละ 100,000"
+    expected_intent: "tax"
+    difficulty: "easy"
+    tags: ["tax", "calculation"]
+
+  # === Expense (easy) ===
+  - case_id: "route_expense_001"
+    query: "จ่ายค่ากาแฟ 80 บาท"
+    expected_intent: "expense"
+    difficulty: "easy"
+    tags: ["expense", "record"]
+
+  - case_id: "route_expense_002"
+    query: "สรุปค่าใช้จ่ายเดือนนี้"
+    expected_intent: "expense"
+    difficulty: "easy"
+    tags: ["expense", "summary"]
+
+  - case_id: "route_expense_003"
+    query: "เดือนนี้จ่ายค่าอาหารไปเท่าไหร่"
+    expected_intent: "expense"
+    difficulty: "easy"
+    tags: ["expense", "query"]
+
+  - case_id: "route_expense_004"
+    query: "บันทึกค่าเช่าบ้าน 15,000 บาท"
+    expected_intent: "expense"
+    difficulty: "easy"
+    tags: ["expense", "record"]
+
+  - case_id: "route_expense_005"
+    query: "วิเคราะห์รายจ่ายตามหมวดหมู่"
+    expected_intent: "expense"
+    difficulty: "medium"
+    tags: ["expense", "analysis"]
+
+  # === Investment ===
+  - case_id: "route_invest_001"
+    query: "ดูพอร์ตการลงทุนของฉัน"
+    expected_intent: "investment"
+    difficulty: "easy"
+    tags: ["investment", "portfolio"]
+
+  - case_id: "route_invest_002"
+    query: "ราคาหุ้น PTT วันนี้เท่าไหร่"
+    expected_intent: "investment"
+    difficulty: "easy"
+    tags: ["investment", "price"]
+
+  - case_id: "route_invest_003"
+    query: "ซื้อหุ้น ADVANC 100 หุ้น ราคา 200 บาท"
+    expected_intent: "investment"
+    difficulty: "easy"
+    tags: ["investment", "trade"]
+
+  - case_id: "route_invest_004"
+    query: "กำไรขาดทุนพอร์ตเป็นเท่าไหร่"
+    expected_intent: "investment"
+    difficulty: "medium"
+    tags: ["investment", "pnl"]
+
+  - case_id: "route_invest_005"
+    query: "สัดส่วนพอร์ตเป็นยังไงบ้าง"
+    expected_intent: "investment"
+    difficulty: "medium"
+    tags: ["investment", "allocation"]
+
+  # === Planning ===
+  - case_id: "route_plan_001"
+    query: "อยากออมเงิน 100,000 บาทภายใน 1 ปี"
+    expected_intent: "planning"
+    difficulty: "easy"
+    tags: ["planning", "savings"]
+
+  - case_id: "route_plan_002"
+    query: "วางแผนเกษียณอายุ 60 ปี"
+    expected_intent: "planning"
+    difficulty: "easy"
+    tags: ["planning", "retirement"]
+
+  - case_id: "route_plan_003"
+    query: "ตั้งเป้าหมายซื้อบ้าน 3 ล้านบาท"
+    expected_intent: "planning"
+    difficulty: "easy"
+    tags: ["planning", "goal"]
+
+  - case_id: "route_plan_004"
+    query: "ดูเป้าหมายทางการเงินทั้งหมด"
+    expected_intent: "planning"
+    difficulty: "easy"
+    tags: ["planning", "list"]
+
+  - case_id: "route_plan_005"
+    query: "ต้องออมเดือนละเท่าไหร่ถึงจะได้ 1 ล้าน"
+    expected_intent: "planning"
+    difficulty: "medium"
+    tags: ["planning", "calculation"]
+
+  # === Recommendation ===
+  - case_id: "route_rec_001"
+    query: "วิเคราะห์สุขภาพการเงินของฉัน"
+    expected_intent: "recommendation"
+    difficulty: "easy"
+    tags: ["recommendation", "health"]
+
+  - case_id: "route_rec_002"
+    query: "แนะนำวิธีปรับปรุงการเงิน"
+    expected_intent: "recommendation"
+    difficulty: "easy"
+    tags: ["recommendation", "advice"]
+
+  - case_id: "route_rec_003"
+    query: "มีคำแนะนำอะไรบ้าง"
+    expected_intent: "recommendation"
+    difficulty: "medium"
+    tags: ["recommendation", "general"]
+
+  # === Report ===
+  - case_id: "route_report_001"
+    query: "สร้างรายงานการเงิน"
+    expected_intent: "report"
+    difficulty: "easy"
+    tags: ["report", "generate"]
+
+  - case_id: "route_report_002"
+    query: "สรุปภาพรวมการเงินทั้งหมด"
+    expected_intent: "report"
+    difficulty: "medium"
+    tags: ["report", "summary"]
+
+  # === General ===
+  - case_id: "route_general_001"
+    query: "ดอกเบี้ยเงินฝากออมทรัพย์คืออะไร"
+    expected_intent: "general"
+    difficulty: "easy"
+    tags: ["general", "info"]
+
+  - case_id: "route_general_002"
+    query: "เงินเฟ้อคืออะไร"
+    expected_intent: "general"
+    difficulty: "easy"
+    tags: ["general", "info"]
+
+  # === Unknown ===
+  - case_id: "route_unknown_001"
+    query: "วันนี้อากาศเป็นยังไง"
+    expected_intent: "unknown"
+    difficulty: "easy"
+    tags: ["unknown", "non_finance"]
+
+  - case_id: "route_unknown_002"
+    query: "แนะนำร้านอาหารหน่อย"
+    expected_intent: "unknown"
+    difficulty: "easy"
+    tags: ["unknown", "non_finance"]
+
+  - case_id: "route_unknown_003"
+    query: "เล่าเรื่องตลกให้ฟัง"
+    expected_intent: "unknown"
+    difficulty: "easy"
+    tags: ["unknown", "non_finance"]
+
+  # === Ambiguous (hard) ===
+  - case_id: "route_ambig_001"
+    query: "ลงทุน RMF เพื่อลดหย่อนภาษี"
+    expected_intent: "tax"
+    difficulty: "hard"
+    description: "Could be investment or tax. Tax intent because of ลดหย่อนภาษี"
+    tags: ["ambiguous", "tax", "investment"]
+
+  - case_id: "route_ambig_002"
+    query: "ค่าใช้จ่ายเยอะเกินงบ ต้องวางแผนใหม่"
+    expected_intent: "expense"
+    difficulty: "hard"
+    description: "Could be expense or planning. Expense because ค่าใช้จ่ายเยอะเกินงบ"
+    tags: ["ambiguous", "expense", "planning"]
+
+  - case_id: "route_ambig_003"
+    query: "หุ้นที่ซื้อขาดทุน ควรขายเพื่อลดหย่อนภาษีมั้ย"
+    expected_intent: "investment"
+    difficulty: "hard"
+    description: "Mix of investment and tax. Investment is primary intent."
+    tags: ["ambiguous", "investment", "tax"]
+
+  - case_id: "route_ambig_004"
+    query: "สรุปการเงินเดือนนี้"
+    expected_intent: "report"
+    difficulty: "hard"
+    description: "Could be expense summary or full report"
+    tags: ["ambiguous", "report", "expense"]
+
+  - case_id: "route_ambig_005"
+    query: "ช่วยดูภาพรวมการเงินแล้วแนะนำด้วย"
+    expected_intent: "recommendation"
+    difficulty: "hard"
+    description: "Could be report or recommendation. Recommendation because แนะนำ"
+    tags: ["ambiguous", "recommendation", "report"]

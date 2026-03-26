@@ -1,0 +1,77 @@
+name: quality_evaluation
+version: "1.0"
+cases:
+  - case_id: "qual_001"
+    query: "คำนวณภาษีปี 2024 เงินเดือน 50,000 บาทต่อเดือน"
+    expected_agent: "tax"
+    tags: ["tax", "calculation"]
+
+  - case_id: "qual_002"
+    query: "ค่าลดหย่อนอะไรบ้างที่ใช้ได้"
+    expected_agent: "tax"
+    tags: ["tax", "deduction"]
+
+  - case_id: "qual_003"
+    query: "จ่ายค่ากาแฟ 80 บาท"
+    expected_agent: "expense"
+    tags: ["expense", "record"]
+
+  - case_id: "qual_004"
+    query: "สรุปค่าใช้จ่ายเดือนนี้"
+    expected_agent: "expense"
+    tags: ["expense", "summary"]
+
+  - case_id: "qual_005"
+    query: "ดูพอร์ตการลงทุนของฉัน"
+    expected_agent: "investment"
+    tags: ["investment", "portfolio"]
+
+  - case_id: "qual_006"
+    query: "ราคาหุ้น PTT วันนี้"
+    expected_agent: "investment"
+    tags: ["investment", "price"]
+
+  - case_id: "qual_007"
+    query: "อยากออมเงิน 100,000 บาทภายใน 1 ปี"
+    expected_agent: "planning"
+    tags: ["planning", "savings"]
+
+  - case_id: "qual_008"
+    query: "วางแผนเกษียณอายุ 60 ปี"
+    expected_agent: "planning"
+    tags: ["planning", "retirement"]
+
+  - case_id: "qual_009"
+    query: "วิเคราะห์สุขภาพการเงินของฉัน"
+    expected_agent: "recommendation"
+    tags: ["recommendation", "health"]
+
+  - case_id: "qual_010"
+    query: "แนะนำวิธีปรับปรุงการเงิน"
+    expected_agent: "recommendation"
+    tags: ["recommendation", "advice"]
+
+  - case_id: "qual_011"
+    query: "สร้างรายงานการเงิน"
+    expected_agent: "report"
+    tags: ["report", "generate"]
+
+  - case_id: "qual_012"
+    query: "RMF ลดหย่อนภาษีได้เท่าไหร่"
+    expected_agent: "tax"
+    tags: ["tax", "rmf"]
+
+  - case_id: "qual_013"
+    query: "วิเคราะห์รายจ่ายตามหมวดหมู่"
+    expected_agent: "expense"
+    tags: ["expense", "analysis"]
+
+  - case_id: "qual_014"
+    query: "กำไรขาดทุนพอร์ตเป็นเท่าไหร่"
+    expected_agent: "investment"
+    tags: ["investment", "pnl"]
+
+  - case_id: "qual_015"
+    query: "ต้องออมเดือนละเท่าไหร่ถึงจะได้ 1 ล้าน"
+    expected_agent: "planning"
+    tags: ["planning", "calculation"]

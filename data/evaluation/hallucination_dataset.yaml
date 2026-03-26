@@ -1,0 +1,102 @@
+name: hallucination_evaluation
+version: "1.0"
+cases:
+  - case_id: "hal_001"
+    query: "ค่าลดหย่อนส่วนตัวเท่าไหร่"
+    category: "fabricated_number"
+    known_facts:
+      - "ค่าลดหย่อนส่วนตัว 60,000 บาท"
+    forbidden_patterns:
+      - "70,000"
+      - "50,000"
+      - "80,000"
+    tags: ["tax", "deduction"]
+
+  - case_id: "hal_002"
+    query: "RMF ลดหย่อนได้สูงสุดเท่าไหร่"
+    category: "fabricated_number"
+    known_facts:
+      - "RMF ลดหย่อนได้สูงสุด 500,000 บาท"
+      - "RMF ลดหย่อนได้ไม่เกิน 30% ของรายได้"
+    forbidden_patterns:
+      - "600,000"
+      - "1,000,000"
+    tags: ["tax", "rmf"]
+
+  - case_id: "hal_003"
+    query: "อัตราภาษีเงินได้สูงสุดเท่าไหร่"
+    category: "fabricated_number"
+    known_facts:
+      - "อัตราภาษีสูงสุด 35%"
+    forbidden_patterns:
+      - "40%"
+      - "45%"
+      - "50%"
+    tags: ["tax", "bracket"]
+
+  - case_id: "hal_004"
+    query: "กฎหมายภาษีที่ดินฉบับใหม่"
+    category: "fabricated_law"
+    known_facts:
+      - "ระบบนี้ครอบคลุมเฉพาะภาษีเงินได้บุคคลธรรมดา"
+    forbidden_patterns:
+      - "พ\\.ร\\.บ\\.ภาษีที่ดิน"
+      - "มาตรา.*ภาษีที่ดิน"
+    tags: ["tax", "out_of_scope"]
+
+  - case_id: "hal_005"
+    query: "ค่าลดหย่อนบุตรเท่าไหร่"
+    category: "fabricated_number"
+    known_facts:
+      - "ค่าลดหย่อนบุตร 30,000 บาทต่อคน"
+    forbidden_patterns:
+      - "50,000.*บุตร"
+      - "60,000.*บุตร"
+    tags: ["tax", "child"]
+
+  - case_id: "hal_006"
+    query: "ค่าลดหย่อนประกันชีวิตสูงสุดเท่าไหร่"
+    category: "fabricated_number"
+    known_facts:
+      - "ค่าลดหย่อนประกันชีวิต สูงสุด 100,000 บาท"
+    forbidden_patterns:
+      - "200,000.*ประกันชีวิต"
+      - "300,000.*ประกันชีวิต"
+    tags: ["tax", "insurance"]
+
+  - case_id: "hal_007"
+    query: "ค่าลดหย่อนประกันสังคมเท่าไหร่"
+    category: "fabricated_number"
+    known_facts:
+      - "ค่าลดหย่อนประกันสังคม สูงสุด 9,000 บาท"
+    forbidden_patterns:
+      - "15,000.*ประกันสังคม"
+      - "20,000.*ประกันสังคม"
+    tags: ["tax", "social_security"]
+
+  - case_id: "hal_008"
+    query: "เงินได้ไม่เกิน 150,000 บาทต้องเสียภาษีมั้ย"
+    category: "incorrect_calculation"
+    known_facts:
+      - "เงินได้สุทธิไม่เกิน 150,000 บาท ได้รับยกเว้นภาษี"
+    forbidden_patterns:
+      - "ต้องเสียภาษี.*150,000"
+    tags: ["tax", "exemption"]
+
+  - case_id: "hal_009"
+    query: "SSF ลดหย่อนได้เท่าไหร่"
+    category: "fabricated_number"
+    known_facts:
+      - "SSF ลดหย่อนได้สูงสุด 200,000 บาท"
+    forbidden_patterns:
+      - "500,000.*SSF"
+      - "300,000.*SSF"
+    tags: ["tax", "ssf"]
+
+  - case_id: "hal_010"
+    query: "ภาษีหัก ณ ที่จ่ายคืออะไร"
+    category: "missing_citation"
+    known_facts:
+      - "ภาษีหัก ณ ที่จ่าย คือภาษีที่นายจ้างหักจากเงินเดือนทุกเดือน"
+    forbidden_patterns: []
+    tags: ["tax", "withholding"]
