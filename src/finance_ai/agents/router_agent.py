@@ -13,7 +13,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy.orm import Session
 
-from finance_ai.agents.prompts import ROUTER_SYSTEM_PROMPT
+from finance_ai.agents.prompts import GENERAL_CHAT_SYSTEM_PROMPT, ROUTER_SYSTEM_PROMPT
 from finance_ai.agents.schemas import RouterDecision
 from finance_ai.core.logging import get_logger
 
@@ -335,6 +335,45 @@ def execute_report_agent(
     return {"intent": "report", "response": last_message.content}
 
 
+def execute_general_chat(
+    query: str,
+    chat_model: BaseChatModel | None = None,
+    user_id: str = "",
+    db_session_factory: Callable[[], Session] | None = None,
+    chat_history: list[tuple[str, str]] | None = None,
+) -> dict[str, Any]:
+    """Handle general conversation using LLM directly.
+
+    Args:
+        query: The user's message.
+        chat_model: Optional ChatModel override.
+        user_id: Unused, kept for consistent signature.
+        db_session_factory: Unused, kept for consistent signature.
+        chat_history: Optional previous messages for context.
+
+    Returns:
+        Dict with intent='general_chat' and the LLM's response.
+
+    Example:
+        >>> result = execute_general_chat("สวัสดีครับ")
+    """
+    if chat_model is None:
+        from finance_ai.agents.llm_factory import create_chat_model  # noqa: PLC0415
+
+        chat_model = create_chat_model()
+    messages: list[SystemMessage | HumanMessage] = [
+        SystemMessage(content=GENERAL_CHAT_SYSTEM_PROMPT),
+    ]
+    for role, content in chat_history or []:
+        if role == "user":
+            messages.append(HumanMessage(content=content))
+        else:
+            messages.append(SystemMessage(content=content))
+    messages.append(HumanMessage(content=query))
+    response = chat_model.invoke(messages)
+    return {"intent": "general_chat", "response": response.content}
+
+
 def build_unsupported_response(decision: RouterDecision) -> dict[str, Any]:
     """Build a response for unsupported intents.
 
@@ -393,8 +432,9 @@ def route_query(
         "general": execute_planning_agent,
         "recommendation": execute_recommendation_agent,
         "report": execute_report_agent,
+        "unknown": execute_general_chat,
     }
     agent_fn = agent_map.get(decision.intent)
     if agent_fn is not None:
         return agent_fn(*args)
-    return build_unsupported_response(decision)
+    return execute_general_chat(*args)

@@ -186,16 +186,19 @@ class TestRouteQuery:
         assert result["response"] == "คำแนะนำทั่วไป"
         mock_execute.assert_called_once()
 
+    @patch("finance_ai.agents.router_agent.execute_general_chat")
     @patch("finance_ai.agents.router_agent.classify_query")
-    def test_unknown_intent_returns_unsupported(
+    def test_unknown_intent_routes_to_general_chat(
         self,
         mock_classify: MagicMock,
+        mock_general_chat: MagicMock,
     ) -> None:
-        """Non-finance intents return unsupported message."""
+        """Non-finance intents route to general chat."""
         mock_classify.return_value = RouterDecision(intent="unknown", confidence=Decimal("0.3"))
+        mock_general_chat.return_value = {"intent": "general_chat", "response": "สวัสดีค่ะ"}
         result = route_query("สูตรทำผัดไทย")
-        assert result["intent"] == "unknown"
-        assert "ค่าใช้จ่าย" in result["response"]
+        assert result["intent"] == "general_chat"
+        mock_general_chat.assert_called_once()
 
 
 class TestExecuteInvestmentAgent:
