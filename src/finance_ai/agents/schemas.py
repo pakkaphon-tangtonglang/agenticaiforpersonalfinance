@@ -53,7 +53,7 @@ class ExpenseAgentState(TypedDict):
     db_session_factory: Callable[[], Session] | None
 
 
-class RouterDecision(BaseModel):
+class OrchestratorDecision(BaseModel):
     """Structured output from the Router Agent.
 
     Attributes:
@@ -61,11 +61,18 @@ class RouterDecision(BaseModel):
         confidence: Confidence score (0.0 to 1.0).
 
     Example:
-        >>> decision = RouterDecision(intent="tax", confidence=Decimal("0.95"))
+        >>> decision = OrchestratorDecision(intent="tax", confidence=Decimal("0.95"))
     """
 
     intent: Literal[
-        "tax", "investment", "expense", "planning", "recommendation", "report", "general", "unknown"
+        "tax",
+        "asset_monitoring",
+        "expense",
+        "planning",
+        "recommendation",
+        "report",
+        "general",
+        "unknown",
     ] = Field(description="The classified intent of the user query.")
     confidence: Decimal = Field(
         ge=Decimal("0"),
@@ -74,7 +81,7 @@ class RouterDecision(BaseModel):
     )
 
 
-class InvestmentAgentState(TypedDict):
+class AssetMonitoringAgentState(TypedDict):
     """State for the Investment Agent LangGraph graph.
 
     Attributes:
@@ -84,7 +91,7 @@ class InvestmentAgentState(TypedDict):
         db_session_factory: Optional session factory for DB access (injected into tools).
 
     Example:
-        >>> state: InvestmentAgentState = {
+        >>> state: AssetMonitoringAgentState = {
         ...     "messages": [], "investment_result": None, "user_id": "abc-123",
         ...     "db_session_factory": None,
         ... }

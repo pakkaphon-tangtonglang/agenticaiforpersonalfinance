@@ -1,7 +1,7 @@
 """LangGraph tool wrappers for market data: dashboard, forex, news.
 
 These tools require no database access or InjectedState — they fetch
-external data from yfinance and Yahoo Finance News only.
+external data from Bright Data Web Scraper API only.
 """
 
 from decimal import Decimal, InvalidOperation

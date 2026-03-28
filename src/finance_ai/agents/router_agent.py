@@ -1,7 +1,7 @@
-"""Router Agent that classifies user queries and routes to specialized agents.
+"""Orchestrator Agent that classifies user queries and routes to specialized agents.
 
-Supports routing to Tax, Expense, Investment, Planning, and Recommendation agents.
-Other intents return a polite message indicating the feature is not yet available.
+Supports routing to Tax, Expense, Asset Monitoring, Planning, Recommendation,
+and Report agents. General/unknown intents are handled by general chat.
 """
 
 import json
@@ -13,17 +13,17 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy.orm import Session
 
-from finance_ai.agents.prompts import GENERAL_CHAT_SYSTEM_PROMPT, ROUTER_SYSTEM_PROMPT
-from finance_ai.agents.schemas import RouterDecision
+from finance_ai.agents.prompts import GENERAL_CHAT_SYSTEM_PROMPT, ORCHESTRATOR_SYSTEM_PROMPT
+from finance_ai.agents.schemas import OrchestratorDecision
 from finance_ai.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-DEFAULT_DECISION = RouterDecision(intent="unknown", confidence=Decimal("0"))
+DEFAULT_DECISION = OrchestratorDecision(intent="unknown", confidence=Decimal("0"))
 
 
-def parse_router_response(content: Any) -> RouterDecision:
-    """Parse the LLM's JSON response into a RouterDecision.
+def parse_orchestrator_response(content: Any) -> OrchestratorDecision:
+    """Parse the LLM's JSON response into a OrchestratorDecision.
 
     Handles markdown code fences that LLMs sometimes wrap JSON in.
 
@@ -31,17 +31,17 @@ def parse_router_response(content: Any) -> RouterDecision:
         content: Raw response content from the LLM.
 
     Returns:
-        Parsed RouterDecision, or default 'unknown' on failure.
+        Parsed OrchestratorDecision, or default 'unknown' on failure.
 
     Example:
-        >>> parse_router_response('{"intent": "tax", "confidence": 0.95}')
-        RouterDecision(intent='tax', confidence=Decimal('0.95'))
+        >>> parse_orchestrator_response('{"intent": "tax", "confidence": 0.95}')
+        OrchestratorDecision(intent='tax', confidence=Decimal('0.95'))
     """
     try:
         text = str(content).strip()
         text = _strip_code_fence(text)
         data = json.loads(text)
-        return RouterDecision(**data)
+        return OrchestratorDecision(**data)
     except (json.JSONDecodeError, KeyError, ValueError, TypeError):
         logger.warning("Failed to parse router response: %s", content)
         return DEFAULT_DECISION
@@ -90,7 +90,7 @@ def _build_messages(
 def classify_query(
     query: str,
     chat_model: BaseChatModel | None = None,
-) -> RouterDecision:
+) -> OrchestratorDecision:
     """Classify a user query into an intent category.
 
     Args:
@@ -98,7 +98,7 @@ def classify_query(
         chat_model: Optional ChatModel override for testing.
 
     Returns:
-        RouterDecision with intent and confidence.
+        OrchestratorDecision with intent and confidence.
 
     Example:
         >>> decision = classify_query("คำนวณภาษีปี 2024")
@@ -108,11 +108,11 @@ def classify_query(
 
         chat_model = create_chat_model()
     messages = [
-        SystemMessage(content=ROUTER_SYSTEM_PROMPT),
+        SystemMessage(content=ORCHESTRATOR_SYSTEM_PROMPT),
         HumanMessage(content=query),
     ]
     response = chat_model.invoke(messages)
-    return parse_router_response(response.content)
+    return parse_orchestrator_response(response.content)
 
 
 def execute_tax_agent(
@@ -187,31 +187,33 @@ def execute_expense_agent(
     return {"intent": "expense", "response": last_message.content}
 
 
-def execute_investment_agent(
+def execute_asset_monitoring_agent(
     query: str,
     chat_model: BaseChatModel | None = None,
     user_id: str = "",
     db_session_factory: Callable[[], Session] | None = None,
     chat_history: list[tuple[str, str]] | None = None,
 ) -> dict[str, Any]:
-    """Execute the Investment Agent for an investment-related query.
+    """Execute the Asset Monitoring Agent for an asset-related query.
 
     Args:
-        query: The user's investment-related query.
+        query: The user's asset monitoring query.
         chat_model: Optional ChatModel override.
         user_id: UUID of the user for DB operations.
         db_session_factory: Optional session factory for DB access.
         chat_history: Optional previous messages for context.
 
     Returns:
-        Dict with intent='investment' and the agent's response.
+        Dict with intent='asset_monitoring' and the agent's response.
 
     Example:
-        >>> result = execute_investment_agent("ดูพอร์ตของฉัน")
+        >>> result = execute_asset_monitoring_agent("ดูพอร์ตของฉัน")
     """
-    from finance_ai.agents.investment_agent import build_investment_agent_graph  # noqa: PLC0415
+    from finance_ai.agents.asset_monitoring_agent import (
+        build_asset_monitoring_agent_graph,
+    )  # noqa: PLC0415
 
-    graph = build_investment_agent_graph(chat_model)
+    graph = build_asset_monitoring_agent_graph(chat_model)
     result = graph.invoke(
         {
             "messages": _build_messages(query, chat_history),
@@ -220,7 +222,7 @@ def execute_investment_agent(
         }
     )
     last_message = result["messages"][-1]
-    return {"intent": "investment", "response": last_message.content}
+    return {"intent": "asset_monitoring", "response": last_message.content}
 
 
 def execute_planning_agent(
@@ -374,7 +376,7 @@ def execute_general_chat(
     return {"intent": "general_chat", "response": response.content}
 
 
-def build_unsupported_response(decision: RouterDecision) -> dict[str, Any]:
+def build_unsupported_response(decision: OrchestratorDecision) -> dict[str, Any]:
     """Build a response for unsupported intents.
 
     Args:
@@ -384,7 +386,7 @@ def build_unsupported_response(decision: RouterDecision) -> dict[str, Any]:
         Dict with intent and a Thai message about the limitation.
 
     Example:
-        >>> build_unsupported_response(RouterDecision(intent="unknown", confidence=Decimal("0")))
+        >>> build_unsupported_response(OrchestratorDecision(intent="unknown", confidence=Decimal("0")))
     """
     return {
         "intent": decision.intent,
@@ -396,7 +398,7 @@ def build_unsupported_response(decision: RouterDecision) -> dict[str, Any]:
     }
 
 
-def route_query(
+def orchestrate_query(
     query: str,
     chat_model: BaseChatModel | None = None,
     user_id: str = "",
@@ -419,7 +421,7 @@ def route_query(
         Dict with 'intent' and 'response' from the target agent.
 
     Example:
-        >>> result = route_query("คำนวณภาษี เงินเดือน 1 ล้าน")
+        >>> result = orchestrate_query("คำนวณภาษี เงินเดือน 1 ล้าน")
     """
     decision = classify_query(query, chat_model)
     logger.info("Routed query to: %s (confidence: %s)", decision.intent, decision.confidence)
@@ -427,7 +429,7 @@ def route_query(
     agent_map: dict[str, Callable[..., dict[str, Any]]] = {
         "tax": execute_tax_agent,
         "expense": execute_expense_agent,
-        "investment": execute_investment_agent,
+        "asset_monitoring": execute_asset_monitoring_agent,
         "planning": execute_planning_agent,
         "general": execute_planning_agent,
         "recommendation": execute_recommendation_agent,

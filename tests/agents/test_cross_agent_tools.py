@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from finance_ai.agents.cross_agent_tools import (
     EXPENSE_CROSS_TOOLS,
-    INVESTMENT_CROSS_TOOLS,
+    ASSET_MONITORING_CROSS_TOOLS,
     PLANNING_CROSS_TOOLS,
     TAX_CROSS_TOOLS,
     get_expense_summary_cross,
@@ -45,9 +45,9 @@ class TestToolLists:
         tool_names = [t.name for t in EXPENSE_CROSS_TOOLS]
         assert "get_goals_summary_cross" in tool_names
 
-    def test_investment_cross_tools_has_tax(self) -> None:
-        """Investment agent should have tax cross-tool."""
-        tool_names = [t.name for t in INVESTMENT_CROSS_TOOLS]
+    def test_asset_monitoring_cross_tools_has_tax(self) -> None:
+        """Asset monitoring agent should have tax cross-tool."""
+        tool_names = [t.name for t in ASSET_MONITORING_CROSS_TOOLS]
         assert "get_tax_summary_cross" in tool_names
 
 

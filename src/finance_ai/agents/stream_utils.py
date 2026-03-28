@@ -144,7 +144,7 @@ def _extract_tool_name(chunk: AIMessageChunk) -> str:
     return ""
 
 
-def route_query_stream(
+def orchestrate_query_stream(
     query: str,
     chat_model: BaseChatModel | None = None,
     user_id: str = "",
@@ -215,7 +215,9 @@ def _get_builder_map() -> dict[str, Callable[..., CompiledStateGraph]]:  # type:
         Dict mapping intent strings to builder callables.
     """
     from finance_ai.agents.expense_agent import build_expense_agent_graph  # noqa: PLC0415
-    from finance_ai.agents.investment_agent import build_investment_agent_graph  # noqa: PLC0415
+    from finance_ai.agents.asset_monitoring_agent import (
+        build_asset_monitoring_agent_graph,
+    )  # noqa: PLC0415
     from finance_ai.agents.planning_agent import build_planning_agent_graph  # noqa: PLC0415
     from finance_ai.agents.recommendation_agent import (
         build_recommendation_agent_graph,
@@ -226,7 +228,7 @@ def _get_builder_map() -> dict[str, Callable[..., CompiledStateGraph]]:  # type:
     return {
         "tax": build_tax_agent_graph,
         "expense": build_expense_agent_graph,
-        "investment": build_investment_agent_graph,
+        "asset_monitoring": build_asset_monitoring_agent_graph,
         "planning": build_planning_agent_graph,
         "general": build_planning_agent_graph,
         "recommendation": build_recommendation_agent_graph,

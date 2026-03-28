@@ -1,4 +1,4 @@
-"""Tests for the Router Agent."""
+"""Tests for the Orchestrator Agent."""
 
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
@@ -10,66 +10,66 @@ from finance_ai.agents.router_agent import (
     build_unsupported_response,
     classify_query,
     execute_expense_agent,
-    execute_investment_agent,
+    execute_asset_monitoring_agent,
     execute_planning_agent,
     execute_report_agent,
     execute_tax_agent,
-    parse_router_response,
-    route_query,
+    parse_orchestrator_response,
+    orchestrate_query,
 )
-from finance_ai.agents.schemas import RouterDecision
+from finance_ai.agents.schemas import OrchestratorDecision
 
 
 class TestParseRouterResponse:
-    """Tests for parsing LLM responses into RouterDecision."""
+    """Tests for parsing LLM responses into OrchestratorDecision."""
 
     def test_valid_tax_json(self) -> None:
-        """Parses valid tax JSON into RouterDecision."""
+        """Parses valid tax JSON into OrchestratorDecision."""
         content = '{"intent": "tax", "confidence": 0.95}'
-        result = parse_router_response(content)
+        result = parse_orchestrator_response(content)
         assert result.intent == "tax"
         assert result.confidence == Decimal("0.95")
 
     def test_valid_expense_json(self) -> None:
-        """Parses valid expense JSON into RouterDecision."""
+        """Parses valid expense JSON into OrchestratorDecision."""
         content = '{"intent": "expense", "confidence": 0.9}'
-        result = parse_router_response(content)
+        result = parse_orchestrator_response(content)
         assert result.intent == "expense"
         assert result.confidence == Decimal("0.9")
 
     def test_valid_planning_json(self) -> None:
-        """Parses valid planning JSON into RouterDecision."""
+        """Parses valid planning JSON into OrchestratorDecision."""
         content = '{"intent": "planning", "confidence": 0.9}'
-        result = parse_router_response(content)
+        result = parse_orchestrator_response(content)
         assert result.intent == "planning"
         assert result.confidence == Decimal("0.9")
 
     def test_json_with_code_fence(self) -> None:
         """Handles JSON wrapped in markdown code fences."""
-        content = '```json\n{"intent": "investment", "confidence": 0.8}\n```'
-        result = parse_router_response(content)
-        assert result.intent == "investment"
+        content = '```json\n{"intent": "asset_monitoring", "confidence": 0.8}\n```'
+        result = parse_orchestrator_response(content)
+        assert result.intent == "asset_monitoring"
         assert result.confidence == Decimal("0.8")
 
     def test_invalid_json_returns_default(self) -> None:
         """Returns default unknown decision for invalid JSON."""
-        result = parse_router_response("not valid json at all")
+        result = parse_orchestrator_response("not valid json at all")
         assert result.intent == "unknown"
         assert result.confidence == Decimal("0")
 
     def test_empty_string_returns_default(self) -> None:
         """Returns default unknown decision for empty string."""
-        result = parse_router_response("")
+        result = parse_orchestrator_response("")
         assert result.intent == "unknown"
 
     def test_missing_fields_returns_default(self) -> None:
         """Returns default when JSON is missing required fields."""
-        result = parse_router_response('{"intent": "tax"}')
+        result = parse_orchestrator_response('{"intent": "tax"}')
         assert result.intent == "unknown"
 
     def test_non_string_content(self) -> None:
         """Handles non-string content by converting to string."""
-        result = parse_router_response(12345)
+        result = parse_orchestrator_response(12345)
         assert result.intent == "unknown"
 
 
@@ -107,10 +107,10 @@ class TestRouteQuery:
         mock_execute: MagicMock,
     ) -> None:
         """Routes tax intent to the tax agent."""
-        mock_classify.return_value = RouterDecision(intent="tax", confidence=Decimal("0.95"))
+        mock_classify.return_value = OrchestratorDecision(intent="tax", confidence=Decimal("0.95"))
         mock_execute.return_value = {"intent": "tax", "response": "ผลภาษี"}
 
-        result = route_query("คำนวณภาษี")
+        result = orchestrate_query("คำนวณภาษี")
         assert result["intent"] == "tax"
         mock_execute.assert_called_once()
 
@@ -122,32 +122,32 @@ class TestRouteQuery:
         mock_execute: MagicMock,
     ) -> None:
         """Routes expense intent to the expense agent."""
-        mock_classify.return_value = RouterDecision(
+        mock_classify.return_value = OrchestratorDecision(
             intent="expense",
             confidence=Decimal("0.9"),
         )
         mock_execute.return_value = {"intent": "expense", "response": "บันทึกแล้ว"}
 
-        result = route_query("จ่ายค่ากาแฟ 80 บาท")
+        result = orchestrate_query("จ่ายค่ากาแฟ 80 บาท")
         assert result["intent"] == "expense"
         mock_execute.assert_called_once()
 
-    @patch("finance_ai.agents.router_agent.execute_investment_agent")
+    @patch("finance_ai.agents.router_agent.execute_asset_monitoring_agent")
     @patch("finance_ai.agents.router_agent.classify_query")
-    def test_routes_investment_to_investment_agent(
+    def test_routes_asset_monitoring_to_asset_monitoring_agent(
         self,
         mock_classify: MagicMock,
         mock_execute: MagicMock,
     ) -> None:
-        """Routes investment intent to the investment agent."""
-        mock_classify.return_value = RouterDecision(
-            intent="investment",
+        """Routes asset_monitoring intent to the asset monitoring agent."""
+        mock_classify.return_value = OrchestratorDecision(
+            intent="asset_monitoring",
             confidence=Decimal("0.85"),
         )
-        mock_execute.return_value = {"intent": "investment", "response": "พอร์ตของคุณ"}
+        mock_execute.return_value = {"intent": "asset_monitoring", "response": "พอร์ตของคุณ"}
 
-        result = route_query("ดูพอร์ตหุ้น")
-        assert result["intent"] == "investment"
+        result = orchestrate_query("ดูพอร์ตหุ้น")
+        assert result["intent"] == "asset_monitoring"
         mock_execute.assert_called_once()
 
     @patch("finance_ai.agents.router_agent.execute_planning_agent")
@@ -158,13 +158,13 @@ class TestRouteQuery:
         mock_execute: MagicMock,
     ) -> None:
         """Routes planning intent to the planning agent."""
-        mock_classify.return_value = RouterDecision(
+        mock_classify.return_value = OrchestratorDecision(
             intent="planning",
             confidence=Decimal("0.9"),
         )
         mock_execute.return_value = {"intent": "planning", "response": "สร้างเป้าหมายแล้ว"}
 
-        result = route_query("อยากออมเงิน 100,000 บาท")
+        result = orchestrate_query("อยากออมเงิน 100,000 บาท")
         assert result["intent"] == "planning"
         mock_execute.assert_called_once()
 
@@ -176,13 +176,13 @@ class TestRouteQuery:
         mock_execute: MagicMock,
     ) -> None:
         """Routes general intent to the planning agent."""
-        mock_classify.return_value = RouterDecision(
+        mock_classify.return_value = OrchestratorDecision(
             intent="general",
             confidence=Decimal("0.7"),
         )
         mock_execute.return_value = {"intent": "general", "response": "คำแนะนำทั่วไป"}
 
-        result = route_query("ออมเงินยังไงดี")
+        result = orchestrate_query("ออมเงินยังไงดี")
         assert result["response"] == "คำแนะนำทั่วไป"
         mock_execute.assert_called_once()
 
@@ -194,30 +194,32 @@ class TestRouteQuery:
         mock_general_chat: MagicMock,
     ) -> None:
         """Non-finance intents route to general chat."""
-        mock_classify.return_value = RouterDecision(intent="unknown", confidence=Decimal("0.3"))
+        mock_classify.return_value = OrchestratorDecision(
+            intent="unknown", confidence=Decimal("0.3")
+        )
         mock_general_chat.return_value = {"intent": "general_chat", "response": "สวัสดีค่ะ"}
-        result = route_query("สูตรทำผัดไทย")
+        result = orchestrate_query("สูตรทำผัดไทย")
         assert result["intent"] == "general_chat"
         mock_general_chat.assert_called_once()
 
 
-class TestExecuteInvestmentAgent:
-    """Tests for execute_investment_agent."""
+class TestExecuteAssetMonitoringAgent:
+    """Tests for execute_asset_monitoring_agent."""
 
-    @patch("finance_ai.agents.investment_agent.build_investment_agent_graph")
-    def test_returns_investment_response(self, mock_build: MagicMock) -> None:
-        """Returns dict with intent='investment' and response."""
+    @patch("finance_ai.agents.asset_monitoring_agent.build_asset_monitoring_agent_graph")
+    def test_returns_asset_monitoring_response(self, mock_build: MagicMock) -> None:
+        """Returns dict with intent='asset_monitoring' and response."""
         mock_graph = MagicMock()
         mock_graph.invoke.return_value = {
             "messages": [AIMessage(content="มูลค่าพอร์ต 500,000 บาท")],
         }
         mock_build.return_value = mock_graph
 
-        result = execute_investment_agent("ดูพอร์ตของฉัน", user_id="user-1")
-        assert result["intent"] == "investment"
+        result = execute_asset_monitoring_agent("ดูพอร์ตของฉัน", user_id="user-1")
+        assert result["intent"] == "asset_monitoring"
         assert "500,000" in result["response"]
 
-    @patch("finance_ai.agents.investment_agent.build_investment_agent_graph")
+    @patch("finance_ai.agents.asset_monitoring_agent.build_asset_monitoring_agent_graph")
     def test_passes_user_id_and_session_factory(self, mock_build: MagicMock) -> None:
         """Passes user_id and db_session_factory to the graph invoke."""
         mock_graph = MagicMock()
@@ -226,7 +228,7 @@ class TestExecuteInvestmentAgent:
         }
         mock_build.return_value = mock_graph
 
-        execute_investment_agent("test", user_id="user-123")
+        execute_asset_monitoring_agent("test", user_id="user-123")
         call_args = mock_graph.invoke.call_args[0][0]
         assert call_args["user_id"] == "user-123"
         assert "db_session_factory" in call_args
@@ -334,15 +336,15 @@ class TestChatHistoryPassing:
 
     @patch("finance_ai.agents.router_agent.execute_tax_agent")
     @patch("finance_ai.agents.router_agent.classify_query")
-    def test_route_query_passes_history(
+    def test_orchestrate_query_passes_history(
         self, mock_classify: MagicMock, mock_execute: MagicMock
     ) -> None:
-        """route_query forwards chat_history to agent."""
-        mock_classify.return_value = RouterDecision(intent="tax", confidence=Decimal("0.9"))
+        """orchestrate_query forwards chat_history to agent."""
+        mock_classify.return_value = OrchestratorDecision(intent="tax", confidence=Decimal("0.9"))
         mock_execute.return_value = {"intent": "tax", "response": "ok"}
         history = [("user", "prev")]
 
-        route_query("query", chat_history=history)
+        orchestrate_query("query", chat_history=history)
         mock_execute.assert_called_once()
         call_kwargs = mock_execute.call_args
         assert call_kwargs[0][4] == history  # 5th positional arg is chat_history
@@ -387,10 +389,12 @@ class TestRouteQueryReport:
         self, mock_classify: MagicMock, mock_execute: MagicMock
     ) -> None:
         """Report intent routes to execute_report_agent."""
-        mock_classify.return_value = RouterDecision(intent="report", confidence=Decimal("0.9"))
+        mock_classify.return_value = OrchestratorDecision(
+            intent="report", confidence=Decimal("0.9")
+        )
         mock_execute.return_value = {"intent": "report", "response": "รายงาน"}
 
-        result = route_query("สร้างรายงานการเงิน")
+        result = orchestrate_query("สร้างรายงานการเงิน")
         assert result["intent"] == "report"
         mock_execute.assert_called_once()
 
@@ -400,7 +404,7 @@ class TestBuildUnsupportedResponse:
 
     def test_returns_thai_message(self) -> None:
         """Response is in Thai and mentions supported features."""
-        decision = RouterDecision(intent="general", confidence=Decimal("0.5"))
+        decision = OrchestratorDecision(intent="general", confidence=Decimal("0.5"))
         result = build_unsupported_response(decision)
         assert result["intent"] == "general"
         assert "ภาษี" in result["response"]
@@ -410,12 +414,12 @@ class TestBuildUnsupportedResponse:
 
     def test_mentions_report(self) -> None:
         """Response mentions report feature."""
-        decision = RouterDecision(intent="general", confidence=Decimal("0.5"))
+        decision = OrchestratorDecision(intent="general", confidence=Decimal("0.5"))
         result = build_unsupported_response(decision)
         assert "รายงาน" in result["response"]
 
     def test_unknown_intent(self) -> None:
         """Handles unknown intent gracefully."""
-        decision = RouterDecision(intent="unknown", confidence=Decimal("0"))
+        decision = OrchestratorDecision(intent="unknown", confidence=Decimal("0"))
         result = build_unsupported_response(decision)
         assert result["intent"] == "unknown"

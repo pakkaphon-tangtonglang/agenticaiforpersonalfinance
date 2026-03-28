@@ -9,6 +9,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from finance_ai.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from finance_ai.database.models.asset_notification import AssetNotification
+    from finance_ai.database.models.asset_schedule import AssetSchedule
     from finance_ai.database.models.conversation import Conversation
     from finance_ai.database.models.deduction import Deduction
     from finance_ai.database.models.financial_goal import FinancialGoal
@@ -52,5 +54,11 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     conversations: Mapped[list["Conversation"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    asset_schedules: Mapped[list["AssetSchedule"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    asset_notifications: Mapped[list["AssetNotification"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

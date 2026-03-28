@@ -8,62 +8,62 @@ from pydantic import ValidationError
 from finance_ai.agents.schemas import (
     ExpenseAgentState,
     ExtractedTaxParameters,
-    RouterDecision,
+    OrchestratorDecision,
 )
 
 
-class TestRouterDecision:
-    """Tests for RouterDecision model."""
+class TestOrchestratorDecision:
+    """Tests for OrchestratorDecision model."""
 
     def test_valid_tax_intent(self) -> None:
-        """RouterDecision accepts valid tax intent with confidence."""
-        decision = RouterDecision(intent="tax", confidence=Decimal("0.95"))
+        """OrchestratorDecision accepts valid tax intent with confidence."""
+        decision = OrchestratorDecision(intent="tax", confidence=Decimal("0.95"))
         assert decision.intent == "tax"
         assert decision.confidence == Decimal("0.95")
 
-    def test_valid_investment_intent(self) -> None:
-        """RouterDecision accepts valid investment intent."""
-        decision = RouterDecision(intent="investment", confidence=Decimal("0.8"))
-        assert decision.intent == "investment"
+    def test_valid_asset_monitoring_intent(self) -> None:
+        """OrchestratorDecision accepts valid asset_monitoring intent."""
+        decision = OrchestratorDecision(intent="asset_monitoring", confidence=Decimal("0.8"))
+        assert decision.intent == "asset_monitoring"
 
     def test_valid_general_intent(self) -> None:
-        """RouterDecision accepts valid general intent."""
-        decision = RouterDecision(intent="general", confidence=Decimal("0.5"))
+        """OrchestratorDecision accepts valid general intent."""
+        decision = OrchestratorDecision(intent="general", confidence=Decimal("0.5"))
         assert decision.intent == "general"
 
     def test_valid_unknown_intent(self) -> None:
-        """RouterDecision accepts unknown intent."""
-        decision = RouterDecision(intent="unknown", confidence=Decimal("0.0"))
+        """OrchestratorDecision accepts unknown intent."""
+        decision = OrchestratorDecision(intent="unknown", confidence=Decimal("0.0"))
         assert decision.intent == "unknown"
 
     def test_valid_expense_intent(self) -> None:
-        """RouterDecision accepts expense intent."""
-        decision = RouterDecision(intent="expense", confidence=Decimal("0.9"))
+        """OrchestratorDecision accepts expense intent."""
+        decision = OrchestratorDecision(intent="expense", confidence=Decimal("0.9"))
         assert decision.intent == "expense"
 
     def test_invalid_intent_raises(self) -> None:
-        """RouterDecision rejects invalid intent values."""
+        """OrchestratorDecision rejects invalid intent values."""
         with pytest.raises(ValidationError):
-            RouterDecision(intent="budgeting", confidence=Decimal("0.5"))  # type: ignore[arg-type]
+            OrchestratorDecision(intent="budgeting", confidence=Decimal("0.5"))  # type: ignore[arg-type]
 
     def test_confidence_below_zero_raises(self) -> None:
-        """RouterDecision rejects confidence below 0."""
+        """OrchestratorDecision rejects confidence below 0."""
         with pytest.raises(ValidationError):
-            RouterDecision(intent="tax", confidence=Decimal("-0.1"))
+            OrchestratorDecision(intent="tax", confidence=Decimal("-0.1"))
 
     def test_confidence_above_one_raises(self) -> None:
-        """RouterDecision rejects confidence above 1."""
+        """OrchestratorDecision rejects confidence above 1."""
         with pytest.raises(ValidationError):
-            RouterDecision(intent="tax", confidence=Decimal("1.1"))
+            OrchestratorDecision(intent="tax", confidence=Decimal("1.1"))
 
     def test_confidence_boundary_zero(self) -> None:
-        """RouterDecision accepts confidence of exactly 0."""
-        decision = RouterDecision(intent="tax", confidence=Decimal("0"))
+        """OrchestratorDecision accepts confidence of exactly 0."""
+        decision = OrchestratorDecision(intent="tax", confidence=Decimal("0"))
         assert decision.confidence == Decimal("0")
 
     def test_confidence_boundary_one(self) -> None:
-        """RouterDecision accepts confidence of exactly 1."""
-        decision = RouterDecision(intent="tax", confidence=Decimal("1"))
+        """OrchestratorDecision accepts confidence of exactly 1."""
+        decision = OrchestratorDecision(intent="tax", confidence=Decimal("1"))
         assert decision.confidence == Decimal("1")
 
 

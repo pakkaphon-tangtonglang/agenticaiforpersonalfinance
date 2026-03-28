@@ -1,4 +1,4 @@
-"""Tests for market data service functions."""
+"""Tests for market data service functions (Bright Data SERP API)."""
 
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
@@ -13,12 +13,15 @@ from finance_ai.tools.market_data_models import (
 from finance_ai.tools.market_data_service import (
     _calculate_dividend_yield,
     _extract_price,
+    _format_news_from_organic,
     _to_decimal,
     _validate_currency_code,
     convert_currency,
     fetch_finance_news,
     fetch_stock_dashboard,
 )
+
+SERVICE_PATH = "finance_ai.tools.market_data_service"
 
 # ---------------------------------------------------------------------------
 # Helper: _to_decimal
@@ -53,14 +56,14 @@ class TestToDecimal:
 class TestExtractPrice:
     """Tests for _extract_price helper."""
 
-    def test_uses_current_price(self) -> None:
-        """Should prefer currentPrice field."""
-        info = {"currentPrice": 35.5, "regularMarketPrice": 34.0}
-        assert _extract_price(info) == Decimal("35.5")
+    def test_uses_price_field(self) -> None:
+        """Should extract from 'price' key."""
+        info = {"price": "35.50"}
+        assert _extract_price(info) == Decimal("35.50")
 
-    def test_falls_back_to_regular_market_price(self) -> None:
-        """Should use regularMarketPrice when currentPrice is absent."""
-        info = {"regularMarketPrice": 34.0}
+    def test_uses_value_field(self) -> None:
+        """Should use 'value' key as fallback."""
+        info = {"value": "$34.00"}
         assert _extract_price(info) == Decimal("34")
 
     def test_returns_none_when_no_price(self) -> None:
@@ -76,18 +79,23 @@ class TestExtractPrice:
 class TestCalculateDividendYield:
     """Tests for _calculate_dividend_yield helper."""
 
-    def test_converts_fraction_to_percent(self) -> None:
-        """0.035 should become 3.5%."""
-        info = {"dividendYield": 0.035}
-        assert _calculate_dividend_yield(info) == Decimal("3.5")
+    def test_parses_percentage_string(self) -> None:
+        """'3.50%' should become Decimal('3.50')."""
+        info = {"dividend_yield": "3.50%"}
+        assert _calculate_dividend_yield(info) == Decimal("3.50")
+
+    def test_parses_plain_number(self) -> None:
+        """'2.5' should become Decimal('2.5')."""
+        info = {"dividend_yield": "2.5"}
+        assert _calculate_dividend_yield(info) == Decimal("2.5")
 
     def test_returns_zero_when_missing(self) -> None:
-        """Should return 0 when dividendYield is absent."""
+        """Should return 0 when dividend_yield is absent."""
         assert _calculate_dividend_yield({}) == Decimal("0")
 
     def test_returns_zero_for_none(self) -> None:
-        """Should return 0 when dividendYield is None."""
-        info = {"dividendYield": None}
+        """Should return 0 when dividend_yield is None."""
+        info = {"dividend_yield": None}
         assert _calculate_dividend_yield(info) == Decimal("0")
 
 
@@ -99,39 +107,38 @@ class TestCalculateDividendYield:
 class TestFetchStockDashboard:
     """Tests for fetch_stock_dashboard function."""
 
-    @patch("finance_ai.tools.market_data_service._import_yfinance")
-    def test_returns_full_dashboard(self, mock_yf: MagicMock) -> None:
+    @patch(f"{SERVICE_PATH}._serp_request")
+    def test_returns_full_dashboard(self, mock_serp: MagicMock) -> None:
         """Should return populated StockDashboardResult."""
-        mock_ticker = MagicMock()
-        mock_ticker.info = {
-            "longName": "PTT Public Company Limited",
-            "currentPrice": 35.5,
-            "currency": "THB",
-            "fiftyTwoWeekHigh": 42.0,
-            "fiftyTwoWeekLow": 28.0,
-            "trailingPE": 12.5,
-            "marketCap": 1000000000,
-            "dividendYield": 0.035,
-            "targetMeanPrice": 40.0,
-            "recommendationKey": "buy",
+        mock_serp.return_value = {
+            "knowledge": {
+                "title": "PTT Public Company Limited",
+                "price": "35.50",
+                "currency": "THB",
+                "52_week_high": "42.00",
+                "52_week_low": "28.00",
+                "pe_ratio": "12.5",
+                "market_cap": "1,000,000,000",
+                "dividend_yield": "3.5%",
+                "target_price": "40.00",
+                "recommendation": "buy",
+            },
+            "organic": [],
         }
-        mock_yf.return_value.Ticker.return_value = mock_ticker
 
         result = fetch_stock_dashboard("PTT.BK")
 
         assert isinstance(result, StockDashboardResult)
         assert result.name == "PTT Public Company Limited"
-        assert result.current_price == Decimal("35.5")
+        assert result.current_price == Decimal("35.50")
         assert result.pe_ratio == Decimal("12.5")
         assert result.dividend_yield_percent == Decimal("3.5")
         assert result.recommendation == "buy"
 
-    @patch("finance_ai.tools.market_data_service._import_yfinance")
-    def test_handles_empty_info(self, mock_yf: MagicMock) -> None:
-        """Should return empty model when info is empty."""
-        mock_ticker = MagicMock()
-        mock_ticker.info = {}
-        mock_yf.return_value.Ticker.return_value = mock_ticker
+    @patch(f"{SERVICE_PATH}._serp_request")
+    def test_handles_empty_knowledge(self, mock_serp: MagicMock) -> None:
+        """Should return empty model when knowledge is empty."""
+        mock_serp.return_value = {"knowledge": {}, "organic": []}
 
         result = fetch_stock_dashboard("INVALID")
 
@@ -139,25 +146,13 @@ class TestFetchStockDashboard:
         assert result.current_price is None
         assert result.dividend_yield_percent == Decimal("0")
 
-    @patch("finance_ai.tools.market_data_service._import_yfinance")
-    def test_handles_exception(self, mock_yf: MagicMock) -> None:
-        """Should return empty model when yfinance raises."""
-        mock_yf.return_value.Ticker.side_effect = RuntimeError("Network")
-
+    @patch(f"{SERVICE_PATH}._serp_request", return_value=None)
+    def test_handles_serp_failure(self, mock_serp: MagicMock) -> None:
+        """Should return empty model when SERP returns None."""
         result = fetch_stock_dashboard("FAIL")
 
         assert isinstance(result, StockDashboardResult)
         assert result.name is None
-
-    @patch("finance_ai.tools.market_data_service._import_yfinance")
-    def test_uses_regular_market_price_fallback(self, mock_yf: MagicMock) -> None:
-        """Should fallback to regularMarketPrice."""
-        mock_ticker = MagicMock()
-        mock_ticker.info = {"regularMarketPrice": 34.0}
-        mock_yf.return_value.Ticker.return_value = mock_ticker
-
-        result = fetch_stock_dashboard("PTT.BK")
-        assert result.current_price == Decimal("34")
 
 
 # ---------------------------------------------------------------------------
@@ -195,12 +190,10 @@ class TestValidateCurrencyCode:
 class TestConvertCurrency:
     """Tests for convert_currency function."""
 
-    @patch("finance_ai.tools.market_data_service._import_yfinance")
-    def test_converts_usd_to_thb(self, mock_yf: MagicMock) -> None:
+    @patch(f"{SERVICE_PATH}._fetch_exchange_rate")
+    def test_converts_usd_to_thb(self, mock_rate: MagicMock) -> None:
         """Should return correct conversion result."""
-        mock_ticker = MagicMock()
-        mock_ticker.info = {"regularMarketPrice": 34.5}
-        mock_yf.return_value.Ticker.return_value = mock_ticker
+        mock_rate.return_value = Decimal("34.5")
 
         result = convert_currency("USD", "THB", Decimal("100"))
 
@@ -210,23 +203,20 @@ class TestConvertCurrency:
         assert result.exchange_rate == Decimal("34.5")
         assert result.converted_amount == Decimal("3450.0")
 
-    @patch("finance_ai.tools.market_data_service._import_yfinance")
-    def test_uses_previous_close_fallback(self, mock_yf: MagicMock) -> None:
-        """Should fallback to previousClose when no regularMarketPrice."""
-        mock_ticker = MagicMock()
-        mock_ticker.info = {"previousClose": 34.0}
-        mock_yf.return_value.Ticker.return_value = mock_ticker
+    @patch(f"{SERVICE_PATH}._fetch_exchange_rate")
+    def test_decimal_precision(self, mock_rate: MagicMock) -> None:
+        """Should maintain Decimal precision in calculation."""
+        mock_rate.return_value = Decimal("0.2345")
 
-        result = convert_currency("USD", "THB", Decimal("1"))
-        assert result.exchange_rate == Decimal("34")
+        result = convert_currency("JPY", "THB", Decimal("10000"))
+        assert result.exchange_rate == Decimal("0.2345")
 
-    @patch("finance_ai.tools.market_data_service._import_yfinance")
-    def test_raises_when_no_rate(self, mock_yf: MagicMock) -> None:
+    @patch(
+        f"{SERVICE_PATH}._fetch_exchange_rate",
+        side_effect=ValueError("ไม่พบอัตราแลกเปลี่ยน"),
+    )
+    def test_raises_when_no_rate(self, mock_rate: MagicMock) -> None:
         """Should raise ValueError when rate is unavailable."""
-        mock_ticker = MagicMock()
-        mock_ticker.info = {}
-        mock_yf.return_value.Ticker.return_value = mock_ticker
-
         with pytest.raises(ValueError, match="ไม่พบอัตราแลกเปลี่ยน"):
             convert_currency("USD", "THB", Decimal("100"))
 
@@ -235,15 +225,39 @@ class TestConvertCurrency:
         with pytest.raises(ValueError, match="Invalid from_currency"):
             convert_currency("XX", "THB", Decimal("100"))
 
-    @patch("finance_ai.tools.market_data_service._import_yfinance")
-    def test_decimal_precision(self, mock_yf: MagicMock) -> None:
-        """Should maintain Decimal precision in calculation."""
-        mock_ticker = MagicMock()
-        mock_ticker.info = {"regularMarketPrice": 0.2345}
-        mock_yf.return_value.Ticker.return_value = mock_ticker
 
-        result = convert_currency("JPY", "THB", Decimal("10000"))
-        assert result.exchange_rate == Decimal("0.2345")
+# ---------------------------------------------------------------------------
+# _format_news_from_organic
+# ---------------------------------------------------------------------------
+
+
+class TestFormatNewsFromOrganic:
+    """Tests for _format_news_from_organic helper."""
+
+    def test_formats_articles(self) -> None:
+        """Should format organic results into readable news."""
+        organic = [
+            {
+                "title": "AAPL Reports Record Earnings",
+                "source": "Reuters",
+                "description": "Apple Inc reported...",
+                "link": "https://example.com/article",
+            },
+        ]
+        result = _format_news_from_organic(organic, "AAPL")
+        assert "AAPL Reports Record Earnings" in result
+        assert "Reuters" in result
+        assert "AAPL" in result
+
+    def test_returns_empty_for_no_results(self) -> None:
+        """Should return empty string for empty organic list."""
+        assert _format_news_from_organic([], "AAPL") == ""
+
+    def test_limits_to_five_articles(self) -> None:
+        """Should only include up to 5 articles."""
+        organic = [{"title": f"Article {i}", "description": f"Desc {i}"} for i in range(10)]
+        result = _format_news_from_organic(organic, "TEST")
+        assert result.count("**Article") == 5
 
 
 # ---------------------------------------------------------------------------
@@ -254,12 +268,19 @@ class TestConvertCurrency:
 class TestFetchFinanceNews:
     """Tests for fetch_finance_news function."""
 
-    @patch("finance_ai.tools.market_data_service._import_yahoo_news_tool")
-    def test_returns_news_content(self, mock_import: MagicMock) -> None:
-        """Should return news when available."""
-        mock_tool = MagicMock()
-        mock_tool.return_value.run.return_value = "Apple reports Q4 earnings"
-        mock_import.return_value = mock_tool
+    @patch(f"{SERVICE_PATH}._serp_request")
+    def test_returns_news_content(self, mock_serp: MagicMock) -> None:
+        """Should return news when organic results available."""
+        mock_serp.return_value = {
+            "knowledge": {},
+            "organic": [
+                {
+                    "title": "Apple reports Q4 earnings",
+                    "source": "CNBC",
+                    "description": "Apple Inc reported record...",
+                },
+            ],
+        }
 
         result = fetch_finance_news("AAPL")
 
@@ -267,44 +288,28 @@ class TestFetchFinanceNews:
         assert result.has_news is True
         assert "Apple" in result.news_content
 
-    @patch("finance_ai.tools.market_data_service._import_yahoo_news_tool")
-    def test_handles_no_news(self, mock_import: MagicMock) -> None:
-        """Should set has_news=False when no news found."""
-        mock_tool = MagicMock()
-        mock_tool.return_value.run.return_value = "No news found for XYZ"
-        mock_import.return_value = mock_tool
+    @patch(f"{SERVICE_PATH}._serp_request")
+    def test_handles_no_news(self, mock_serp: MagicMock) -> None:
+        """Should set has_news=False when no organic results."""
+        mock_serp.return_value = {"knowledge": {}, "organic": []}
 
         result = fetch_finance_news("XYZ")
         assert result.has_news is False
 
-    @patch("finance_ai.tools.market_data_service._import_yahoo_news_tool")
-    def test_handles_empty_content(self, mock_import: MagicMock) -> None:
-        """Should set has_news=False for empty content."""
-        mock_tool = MagicMock()
-        mock_tool.return_value.run.return_value = ""
-        mock_import.return_value = mock_tool
-
-        result = fetch_finance_news("EMPTY")
-        assert result.has_news is False
-
-    @patch(
-        "finance_ai.tools.market_data_service._import_yahoo_news_tool",
-        side_effect=ImportError("langchain-community not installed"),
-    )
-    def test_handles_import_error(self, mock_import: MagicMock) -> None:
-        """Should return graceful result if dependency is missing."""
+    @patch(f"{SERVICE_PATH}._serp_request", return_value=None)
+    def test_handles_serp_failure(self, mock_serp: MagicMock) -> None:
+        """Should return graceful result when SERP fails."""
         result = fetch_finance_news("AAPL")
 
         assert result.has_news is False
-        assert "langchain-community" in result.news_content
+        assert "ข้อผิดพลาด" in result.news_content
 
-    @patch("finance_ai.tools.market_data_service._import_yahoo_news_tool")
-    def test_handles_runtime_error(self, mock_import: MagicMock) -> None:
-        """Should catch unexpected exceptions gracefully."""
-        mock_tool = MagicMock()
-        mock_tool.return_value.run.side_effect = RuntimeError("Timeout")
-        mock_import.return_value = mock_tool
-
+    @patch(f"{SERVICE_PATH}._serp_request")
+    def test_handles_empty_articles(self, mock_serp: MagicMock) -> None:
+        """Should handle organic results with empty content."""
+        mock_serp.return_value = {
+            "knowledge": {},
+            "organic": [{}],
+        }
         result = fetch_finance_news("FAIL")
         assert result.has_news is False
-        assert "ข้อผิดพลาด" in result.news_content

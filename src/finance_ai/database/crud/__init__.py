@@ -10,6 +10,7 @@ from finance_ai.database.crud.tax_filing_crud import TaxFilingCRUD
 from finance_ai.database.crud.financial_goal_crud import FinancialGoalCRUD
 from finance_ai.database.crud.conversation_crud import ConversationCRUD
 from finance_ai.database.crud.conversation_message_crud import ConversationMessageCRUD
+from finance_ai.database.crud.schedule_crud import AssetScheduleCRUD, AssetNotificationCRUD
 
 __all__ = [
     "BaseCRUD",
@@ -22,4 +23,6 @@ __all__ = [
     "FinancialGoalCRUD",
     "ConversationCRUD",
     "ConversationMessageCRUD",
+    "AssetScheduleCRUD",
+    "AssetNotificationCRUD",
 ]

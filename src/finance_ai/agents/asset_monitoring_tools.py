@@ -1,4 +1,4 @@
-"""LangGraph tool wrappers for investment portfolio tracking.
+"""LangGraph tool wrappers for asset monitoring and portfolio tracking.
 
 Tools accept string inputs from LLM, parse them to proper types,
 and persist records via the investment service layer. InjectedState
@@ -21,6 +21,180 @@ from finance_ai.tools.investment_calculator import (
     validate_symbol,
 )
 from finance_ai.tools.investment_constants import ASSET_TYPES
+
+# ---------------------------------------------------------------------------
+# Schedule + Notification Tools
+# ---------------------------------------------------------------------------
+
+
+@tool
+def create_asset_schedule(
+    symbol: str,
+    cron_expression: str,
+    description: str = "",
+    user_id: Annotated[str, InjectedState("user_id")] = "",
+    db_session_factory: Annotated[Any, InjectedState("db_session_factory")] = None,
+) -> dict[str, Any]:
+    """Create a recurring schedule to fetch asset data automatically.
+
+    Use this tool when the user wants periodic asset monitoring,
+    e.g. "ดึงราคาทองทุกวัน 21:00".
+
+    Args:
+        symbol: Ticker symbol to monitor (e.g., "GC=F", "PTT.BK").
+        cron_expression: Cron expression (e.g., "0 21 * * *" = daily 21:00).
+        description: Human-readable description (e.g., "ราคาทอง").
+        user_id: UUID of the user (injected from graph state).
+        db_session_factory: Session factory (injected from graph state).
+
+    Returns:
+        Dict with schedule details.
+    """
+    from finance_ai.tools.background_scheduler import (  # noqa: PLC0415
+        register_schedule,
+    )
+    from finance_ai.tools.scheduler_service import (  # noqa: PLC0415
+        create_schedule,
+    )
+
+    with get_tool_session(db_session_factory) as session:
+        schedule = create_schedule(
+            session,
+            user_id,
+            symbol,
+            description or symbol,
+            cron_expression,
+        )
+        result = {
+            "action": "create_asset_schedule",
+            "schedule_id": schedule.id,
+            "symbol": schedule.symbol,
+            "description": schedule.description,
+            "cron_expression": schedule.cron_expression,
+        }
+
+    register_schedule(result["schedule_id"], cron_expression, db_session_factory)
+
+    return result
+
+
+@tool
+def view_asset_schedules(
+    user_id: Annotated[str, InjectedState("user_id")] = "",
+    db_session_factory: Annotated[Any, InjectedState("db_session_factory")] = None,
+) -> dict[str, Any]:
+    """View all active asset monitoring schedules.
+
+    Use this tool when the user wants to see their scheduled data fetches.
+
+    Args:
+        user_id: UUID of the user (injected from graph state).
+        db_session_factory: Session factory (injected from graph state).
+
+    Returns:
+        Dict with list of active schedules.
+    """
+    from finance_ai.tools.scheduler_service import (  # noqa: PLC0415
+        get_user_schedules,
+    )
+
+    with get_tool_session(db_session_factory) as session:
+        schedules = get_user_schedules(session, user_id, active_only=True)
+        items = [
+            {
+                "schedule_id": s.id,
+                "symbol": s.symbol,
+                "description": s.description,
+                "cron_expression": s.cron_expression,
+            }
+            for s in schedules
+        ]
+
+    return {
+        "action": "view_asset_schedules",
+        "count": len(items),
+        "schedules": items,
+    }
+
+
+@tool
+def delete_asset_schedule(
+    schedule_id: str,
+    user_id: Annotated[str, InjectedState("user_id")] = "",
+    db_session_factory: Annotated[Any, InjectedState("db_session_factory")] = None,
+) -> dict[str, Any]:
+    """Delete an asset monitoring schedule.
+
+    Use this tool when the user wants to stop a scheduled data fetch.
+
+    Args:
+        schedule_id: UUID of the schedule to delete.
+        user_id: UUID of the user (injected from graph state).
+        db_session_factory: Session factory (injected from graph state).
+
+    Returns:
+        Dict with deletion status.
+    """
+    from finance_ai.tools.background_scheduler import (  # noqa: PLC0415
+        unregister_schedule,
+    )
+    from finance_ai.tools.scheduler_service import (  # noqa: PLC0415
+        delete_schedule,
+    )
+
+    with get_tool_session(db_session_factory) as session:
+        deleted = delete_schedule(session, schedule_id, user_id)
+
+    if deleted:
+        unregister_schedule(schedule_id)
+
+    return {
+        "action": "delete_asset_schedule",
+        "schedule_id": schedule_id,
+        "deleted": deleted,
+    }
+
+
+@tool
+def get_asset_notifications(
+    user_id: Annotated[str, InjectedState("user_id")] = "",
+    db_session_factory: Annotated[Any, InjectedState("db_session_factory")] = None,
+) -> dict[str, Any]:
+    """Get unread asset monitoring notifications.
+
+    Use this tool when the user wants to see notifications from
+    scheduled data fetches.
+
+    Args:
+        user_id: UUID of the user (injected from graph state).
+        db_session_factory: Session factory (injected from graph state).
+
+    Returns:
+        Dict with list of unread notifications.
+    """
+    from finance_ai.tools.scheduler_service import (  # noqa: PLC0415
+        get_unread_notifications,
+        mark_all_notifications_read,
+    )
+
+    with get_tool_session(db_session_factory) as session:
+        notifications = get_unread_notifications(session, user_id)
+        items = [
+            {
+                "notification_id": n.id,
+                "symbol": n.symbol,
+                "content": n.content,
+                "created_at": str(n.created_at),
+            }
+            for n in notifications
+        ]
+        mark_all_notifications_read(session, user_id)
+
+    return {
+        "action": "get_asset_notifications",
+        "count": len(items),
+        "notifications": items,
+    }
 
 
 @tool

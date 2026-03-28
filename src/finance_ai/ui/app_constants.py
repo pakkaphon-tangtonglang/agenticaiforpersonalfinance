@@ -3,7 +3,7 @@
 INTENT_CONFIG: dict[str, dict[str, str]] = {
     "tax": {"label": "ภาษี", "icon": "🧾", "color": "#FF6B6B"},
     "expense": {"label": "ค่าใช้จ่าย", "icon": "💸", "color": "#FFA94D"},
-    "investment": {"label": "การลงทุน", "icon": "📈", "color": "#51CF66"},
+    "asset_monitoring": {"label": "ติดตามสินทรัพย์", "icon": "📈", "color": "#51CF66"},
     "planning": {"label": "วางแผนการเงิน", "icon": "🗓️", "color": "#339AF0"},
     "recommendation": {"label": "คำแนะนำการเงิน", "icon": "💡", "color": "#CC5DE8"},
     "report": {"label": "รายงานการเงิน", "icon": "📊", "color": "#20C997"},

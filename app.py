@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from finance_ai.agents.llm_factory import create_chat_model  # noqa: E402
-from finance_ai.agents.stream_utils import route_query_stream  # noqa: E402
+from finance_ai.agents.stream_utils import orchestrate_query_stream  # noqa: E402
 from finance_ai.database.crud.user_crud import UserCRUD  # noqa: E402
 from finance_ai.database.session import (  # noqa: E402
     create_database_engine,
@@ -40,6 +40,8 @@ from finance_ai.ui.app_constants import (  # noqa: E402
 )
 from finance_ai.ui.dashboard import render_dashboard  # noqa: E402
 from finance_ai.ui.evaluation_view import render_evaluation_view  # noqa: E402
+from finance_ai.tools.background_scheduler import start_scheduler  # noqa: E402
+from finance_ai.ui.schedule_view import render_schedule_view  # noqa: E402
 from finance_ai.ui.upload import render_upload_view  # noqa: E402
 
 # ──────────────────────── Cached Resources ────────────────────────
@@ -56,6 +58,14 @@ def get_session_factory():  # type: ignore[no-untyped-def]
     """Create and cache the database session factory."""
     engine = create_database_engine()
     return create_session_factory(engine)
+
+
+@st.cache_resource
+def _init_background_scheduler():  # type: ignore[no-untyped-def]
+    """Start the background scheduler once and load active schedules."""
+    factory = get_session_factory()
+    count = start_scheduler(factory)
+    return count
 
 
 # ──────────────────── Session & Conversation ──────────────────────
@@ -202,7 +212,9 @@ def _render_welcome() -> None:
     """Render welcome screen with feature cards."""
     _, center, _ = st.columns([1, 2, 1])
     with center:
-        st.markdown("### 🤖 สวัสดีครับ! ยินดีต้อนรับสู่ Finance AI\n" "พิมพ์คำถาม หรือเลือกตัวอย่างจากเมนูด้านซ้าย")
+        st.markdown(
+            "### 🤖 สวัสดีครับ! ยินดีต้อนรับสู่ Personal Finance AI\n" "พิมพ์คำถาม หรือเลือกตัวอย่างจากเมนูด้านซ้าย"
+        )
     cols = st.columns(3) + st.columns(3)
     for col, card in zip(cols, FEATURE_CARDS):
         with col:
@@ -283,7 +295,7 @@ def _stream_response(
         status_box = st.empty()
         message_box = st.empty()
 
-        for event in route_query_stream(
+        for event in orchestrate_query_stream(
             query,
             chat_model=get_chat_model(),
             user_id=st.session_state.user_id,
@@ -312,14 +324,14 @@ def _stream_response(
 def main() -> None:
     """Main entry point for the Streamlit app."""
     st.set_page_config(
-        page_title="Finance AI",
+        page_title="Personal Finance AI",
         page_icon="💰",
         layout="wide",
     )
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
     st.markdown(
         '<div class="main-header">'
-        "<h1>💰 Finance AI</h1>"
+        "<h1>💰Personal Finance AI</h1>"
         "<p>ผู้ช่วยการเงินส่วนบุคคลอัจฉริยะ"
         " — ภาษี · ค่าใช้จ่าย · การลงทุน · วางแผน</p>"
         "</div>",
@@ -327,12 +339,13 @@ def main() -> None:
     )
 
     init_session_state()
+    _init_background_scheduler()
     render_sidebar()
 
     user_input = st.chat_input("💬 พิมพ์คำถามของคุณที่นี่...")
 
-    tab_chat, tab_dashboard, tab_upload, tab_eval = st.tabs(
-        ["💬 แชท", "📊 แดชบอร์ด", "📂 นำเข้าข้อมูล", "🔬 ประเมินระบบ"]
+    tab_chat, tab_dashboard, tab_schedule, tab_upload, tab_eval = st.tabs(
+        ["💬 แชท", "📊 แดชบอร์ด", "🔔 แจ้งเตือนสินทรัพย์", "📂 นำเข้าข้อมูล", "🔬 ประเมินระบบ"]
     )
 
     with tab_chat:
@@ -345,6 +358,9 @@ def main() -> None:
 
     with tab_dashboard:
         render_dashboard(st.session_state.user_id, get_session_factory())
+
+    with tab_schedule:
+        render_schedule_view(st.session_state.user_id, get_session_factory(), get_chat_model())
 
     with tab_upload:
         render_upload_view(st.session_state.user_id, get_session_factory())

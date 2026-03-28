@@ -1,26 +1,30 @@
 """Pure functions for market data retrieval: dashboard, forex, news.
 
-No database dependency. Uses yfinance for stock/forex data and
-langchain_community for Yahoo Finance news (optional dependency).
+No database dependency. Uses Bright Data SERP API (Google Search) for
+stock data, exchange rates, and financial news.
 """
 
+import json
 from decimal import Decimal, InvalidOperation
 from typing import Any, Optional
 
 from finance_ai.core.logging import get_logger
 from finance_ai.tools.market_data_constants import (
     CURRENCY_CODE_LENGTH,
-    DIVIDEND_YIELD_TO_PERCENT,
-    FOREX_SYMBOL_TEMPLATE,
     NEWS_NOT_FOUND_MESSAGE,
-    NEWS_USER_AGENT,
 )
 from finance_ai.tools.market_data_models import (
     CurrencyConversionResult,
     FinanceNewsResult,
     StockDashboardResult,
 )
-from finance_ai.tools.price_client import _import_yfinance
+from finance_ai.tools.price_client import (
+    _build_headers,
+    _get_api_token,
+    _get_zone,
+    _parse_price_string,
+    _serp_request,
+)
 
 logger = get_logger(__name__)
 
@@ -29,7 +33,7 @@ def _to_decimal(value: Any) -> Optional[Decimal]:
     """Safely convert a value to Decimal, returning None on failure.
 
     Args:
-        value: Any value from yfinance info dict.
+        value: Any value from API response.
 
     Returns:
         Decimal representation, or None if conversion fails.
@@ -49,49 +53,51 @@ def _to_decimal(value: Any) -> Optional[Decimal]:
 
 
 def _extract_price(info: dict[str, Any]) -> Optional[Decimal]:
-    """Extract current price from yfinance info dict with fallback.
+    """Extract current price from knowledge panel data.
 
     Args:
-        info: Ticker info dictionary from yfinance.
+        info: Knowledge graph data from SERP response.
 
     Returns:
         Current price as Decimal, or None if unavailable.
 
     Example:
-        >>> _extract_price({"currentPrice": 35.5})
-        Decimal('35.5')
+        >>> _extract_price({"price": "35.50"})
+        Decimal('35.50')
     """
-    raw = info.get("currentPrice") or info.get("regularMarketPrice")
-    return _to_decimal(raw)
+    for key in ("price", "current_price", "value"):
+        raw = info.get(key)
+        if raw is not None:
+            return _parse_price_string(str(raw))
+    return None
 
 
 def _calculate_dividend_yield(info: dict[str, Any]) -> Decimal:
-    """Calculate dividend yield as a percentage from yfinance data.
+    """Extract dividend yield from knowledge panel as a percentage.
 
     Args:
-        info: Ticker info dictionary from yfinance.
+        info: Knowledge graph data from SERP response.
 
     Returns:
         Dividend yield as percentage (e.g., 3.50 for 3.5%).
 
     Example:
-        >>> _calculate_dividend_yield({"dividendYield": 0.035})
-        Decimal('3.5')
+        >>> _calculate_dividend_yield({"dividend_yield": "3.50%"})
+        Decimal('3.50')
     """
-    raw_yield = info.get("dividendYield")
+    raw_yield = info.get("dividend_yield") or info.get("dividendYield")
     if raw_yield is None:
         return Decimal("0")
-    decimal_value = _to_decimal(raw_yield)
-    if decimal_value is None:
-        return Decimal("0")
-    return decimal_value * DIVIDEND_YIELD_TO_PERCENT
+    cleaned = str(raw_yield).replace("%", "").strip()
+    result = _to_decimal(cleaned)
+    return result if result is not None else Decimal("0")
 
 
 def fetch_stock_dashboard(symbol: str) -> StockDashboardResult:
-    """Fetch comprehensive stock/asset overview from yfinance.
+    """Fetch comprehensive stock/asset overview via SERP API.
 
-    Retrieves name, price, P/E ratio, market cap, 52-week range,
-    dividend yield, analyst target, and recommendation for a given symbol.
+    Searches Google for stock information and extracts data from
+    the knowledge panel (name, price, P/E, market cap, etc.).
 
     Args:
         symbol: Ticker symbol (e.g., "PTT.BK", "AAPL", "BTC-USD").
@@ -99,47 +105,53 @@ def fetch_stock_dashboard(symbol: str) -> StockDashboardResult:
     Returns:
         StockDashboardResult with all available fields populated.
 
-    Raises:
-        No exceptions raised; returns empty model on failure.
-
     Example:
         >>> result = fetch_stock_dashboard("PTT.BK")
         >>> result.name
         'PTT Public Company Limited'
     """
-    yf = _import_yfinance()
-    try:
-        ticker = yf.Ticker(symbol)  # type: ignore[attr-defined]
-        info: dict[str, Any] = ticker.info or {}
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Failed to fetch dashboard for %s: %s", symbol, exc)
+    query = f"{symbol} stock"
+    data = _serp_request(query)
+    if data is None:
         return StockDashboardResult()
 
-    return _build_dashboard_from_info(info)
+    knowledge = data.get("knowledge", {})
+    if not knowledge:
+        return StockDashboardResult()
+
+    return _build_dashboard_from_knowledge(knowledge)
 
 
-def _build_dashboard_from_info(
+def _build_dashboard_from_knowledge(
     info: dict[str, Any],
 ) -> StockDashboardResult:
-    """Build StockDashboardResult from yfinance info dictionary.
+    """Build StockDashboardResult from SERP knowledge panel.
 
     Args:
-        info: Raw info dict from yfinance Ticker.
+        info: Knowledge graph data from Google SERP response.
 
     Returns:
         Populated StockDashboardResult.
     """
     return StockDashboardResult(
-        name=info.get("longName"),
+        name=info.get("title") or info.get("name"),
         current_price=_extract_price(info),
         currency=info.get("currency"),
-        fifty_two_week_high=_to_decimal(info.get("fiftyTwoWeekHigh")),
-        fifty_two_week_low=_to_decimal(info.get("fiftyTwoWeekLow")),
-        pe_ratio=_to_decimal(info.get("trailingPE")),
-        market_cap=_to_decimal(info.get("marketCap")),
+        fifty_two_week_high=_parse_price_string(
+            str(info.get("52_week_high", "")),
+        ),
+        fifty_two_week_low=_parse_price_string(
+            str(info.get("52_week_low", "")),
+        ),
+        pe_ratio=_to_decimal(info.get("pe_ratio") or info.get("trailingPE")),
+        market_cap=_parse_price_string(
+            str(info.get("market_cap", "")),
+        ),
         dividend_yield_percent=_calculate_dividend_yield(info),
-        analyst_target_price=_to_decimal(info.get("targetMeanPrice")),
-        recommendation=info.get("recommendationKey"),
+        analyst_target_price=_parse_price_string(
+            str(info.get("target_price", "")),
+        ),
+        recommendation=info.get("recommendation"),
     )
 
 
@@ -171,7 +183,7 @@ def convert_currency(
     to_currency: str,
     amount: Decimal,
 ) -> CurrencyConversionResult:
-    """Convert currency using real-time exchange rates from yfinance.
+    """Convert currency using exchange rates from SERP API.
 
     Args:
         from_currency: Source currency code (e.g., "USD").
@@ -204,7 +216,7 @@ def convert_currency(
 
 
 def _fetch_exchange_rate(from_currency: str, to_currency: str) -> Decimal:
-    """Fetch exchange rate from yfinance.
+    """Fetch exchange rate via SERP API (Google Search).
 
     Args:
         from_currency: Normalized source currency code.
@@ -216,48 +228,72 @@ def _fetch_exchange_rate(from_currency: str, to_currency: str) -> Decimal:
     Raises:
         ValueError: If exchange rate is unavailable.
     """
-    yf = _import_yfinance()
-    symbol = FOREX_SYMBOL_TEMPLATE.format(from_currency=from_currency, to_currency=to_currency)
-    try:
-        ticker = yf.Ticker(symbol)  # type: ignore[attr-defined]
-        info: dict[str, Any] = ticker.info or {}
-    except Exception as exc:  # noqa: BLE001
-        raise ValueError(f"ไม่สามารถดึงอัตราแลกเปลี่ยน {symbol}: {exc}") from exc
+    query = f"1 {from_currency} to {to_currency}"
+    data = _serp_request(query)
+    if data is None:
+        raise ValueError(f"ไม่สามารถดึงอัตราแลกเปลี่ยน {from_currency}/{to_currency}")
 
-    raw_rate = info.get("regularMarketPrice") or info.get("previousClose")
-    rate = _to_decimal(raw_rate)
-    if rate is None:
-        raise ValueError(f"ไม่พบอัตราแลกเปลี่ยนสำหรับ {from_currency} → {to_currency}")
-    return rate
+    knowledge = data.get("knowledge", {})
+    # Google typically shows "1 USD = 34.50 THB" in knowledge panel
+    for key in ("price", "value", "result", "conversion"):
+        raw = knowledge.get(key)
+        if raw is not None:
+            rate = _parse_price_string(str(raw))
+            if rate is not None:
+                return rate
+
+    # Try parsing from title (e.g., "34.50 Thai Baht")
+    title = knowledge.get("title", "")
+    if title:
+        rate = _parse_price_string(title)
+        if rate is not None:
+            return rate
+
+    raise ValueError(f"ไม่พบอัตราแลกเปลี่ยนสำหรับ {from_currency} → {to_currency}")
 
 
-def _import_yahoo_news_tool() -> Any:
-    """Lazy-import YahooFinanceNewsTool from langchain_community.
+def _format_news_from_organic(
+    organic: list[dict[str, Any]],
+    symbol: str,
+) -> str:
+    """Format news content from organic search results.
+
+    Args:
+        organic: List of organic search results from SERP.
+        symbol: The ticker symbol queried.
 
     Returns:
-        The YahooFinanceNewsTool class.
-
-    Raises:
-        ImportError: If langchain_community is not installed.
+        Formatted news string with titles, sources, and snippets.
     """
-    try:
-        from langchain_community.tools.yahoo_finance_news import (  # noqa: PLC0415
-            YahooFinanceNewsTool,
-        )
+    articles = []
+    for item in organic[:5]:
+        title = item.get("title", "")
+        source = item.get("source", "") or item.get("displayed_link", "")
+        snippet = item.get("description", "") or item.get("snippet", "")
+        link = item.get("link", "")
 
-        return YahooFinanceNewsTool
-    except ImportError as exc:
-        raise ImportError(
-            "langchain-community is required for finance news. "
-            "Install it with: pip install langchain-community"
-        ) from exc
+        parts = []
+        if title:
+            parts.append(f"**{title}**")
+        if source:
+            parts.append(f"แหล่งที่มา: {source}")
+        if snippet:
+            parts.append(snippet)
+        if link:
+            parts.append(f"ลิงก์: {link}")
+
+        if parts:
+            articles.append("\n".join(parts))
+
+    if not articles:
+        return ""
+    return f"ข่าวล่าสุดสำหรับ {symbol}:\n\n" + "\n\n---\n\n".join(articles)
 
 
 def fetch_finance_news(symbol: str) -> FinanceNewsResult:
-    """Fetch latest finance news for a given asset symbol.
+    """Fetch latest finance news for a given asset symbol via SERP API.
 
-    Uses Yahoo Finance via langchain_community. Returns a graceful
-    result if the dependency is missing or no news is found.
+    Searches Google News for the symbol and formats results.
 
     Args:
         symbol: Ticker symbol (e.g., "AAPL", "PTT.BK", "BTC-USD").
@@ -270,40 +306,40 @@ def fetch_finance_news(symbol: str) -> FinanceNewsResult:
         >>> result.has_news
         True
     """
-    import os  # noqa: PLC0415
-
-    os.environ["USER_AGENT"] = NEWS_USER_AGENT
-
+    query = f"{symbol} stock news"
     try:
-        news_tool_class = _import_yahoo_news_tool()
-        return _run_news_tool(news_tool_class, symbol)
-    except ImportError as exc:
-        logger.warning("News tool unavailable: %s", exc)
-        return FinanceNewsResult(symbol=symbol, news_content=str(exc), has_news=False)
-    except Exception as exc:  # noqa: BLE001
-        logger.error("Failed to fetch news for %s: %s", symbol, exc)
+        data = _serp_request(query)
+    except ValueError as exc:
+        logger.warning("Bright Data config error for news: %s", exc)
         return FinanceNewsResult(
             symbol=symbol,
-            news_content=f"เกิดข้อผิดพลาดในการดึงข่าว: {exc}",
+            news_content=str(exc),
             has_news=False,
         )
 
+    if data is None:
+        return FinanceNewsResult(
+            symbol=symbol,
+            news_content=f"เกิดข้อผิดพลาดในการดึงข่าว {symbol}",
+            has_news=False,
+        )
 
-def _run_news_tool(news_tool_class: type, symbol: str) -> FinanceNewsResult:
-    """Execute the Yahoo Finance news tool and parse results.
-
-    Args:
-        news_tool_class: The YahooFinanceNewsTool class.
-        symbol: Ticker symbol to look up.
-
-    Returns:
-        FinanceNewsResult with parsed content.
-    """
-    tool_instance = news_tool_class()
-    content = tool_instance.run(symbol)
-
-    if not content or "No news found" in content:
+    organic = data.get("organic", [])
+    if not organic:
         message = NEWS_NOT_FOUND_MESSAGE.format(symbol=symbol)
-        return FinanceNewsResult(symbol=symbol, news_content=message, has_news=False)
+        return FinanceNewsResult(
+            symbol=symbol,
+            news_content=message,
+            has_news=False,
+        )
+
+    content = _format_news_from_organic(organic, symbol)
+    if not content:
+        message = NEWS_NOT_FOUND_MESSAGE.format(symbol=symbol)
+        return FinanceNewsResult(
+            symbol=symbol,
+            news_content=message,
+            has_news=False,
+        )
 
     return FinanceNewsResult(symbol=symbol, news_content=content, has_news=True)

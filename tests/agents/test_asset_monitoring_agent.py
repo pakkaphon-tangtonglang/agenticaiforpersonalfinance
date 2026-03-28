@@ -1,4 +1,4 @@
-"""Tests for the LangGraph Investment Agent."""
+"""Tests for the LangGraph Asset Monitoring Agent."""
 
 from collections.abc import Callable
 from unittest.mock import MagicMock
@@ -6,13 +6,13 @@ from unittest.mock import MagicMock
 from langchain_core.messages import AIMessage, HumanMessage
 from sqlalchemy.orm import Session
 
-from finance_ai.agents.investment_agent import (
-    INVESTMENT_TOOLS,
-    build_investment_agent_graph,
+from finance_ai.agents.asset_monitoring_agent import (
+    ASSET_MONITORING_TOOLS,
+    build_asset_monitoring_agent_graph,
     create_llm_node,
     should_continue,
 )
-from finance_ai.agents.prompts import INVESTMENT_AGENT_SYSTEM_PROMPT
+from finance_ai.agents.prompts import ASSET_MONITORING_AGENT_SYSTEM_PROMPT
 from finance_ai.database.models.user import User
 
 
@@ -74,7 +74,7 @@ class TestCreateLlmNode:
         node(state)
 
         call_args = mock_chat_model.invoke.call_args[0][0]
-        assert call_args[0].content == INVESTMENT_AGENT_SYSTEM_PROMPT
+        assert call_args[0].content == ASSET_MONITORING_AGENT_SYSTEM_PROMPT
         assert call_args[1].content == "ดูพอร์ตของฉัน"
 
     def test_returns_message_list(self, mock_chat_model: MagicMock) -> None:
@@ -96,21 +96,21 @@ class TestCreateLlmNode:
     def test_binds_tools_to_model(self, mock_chat_model: MagicMock) -> None:
         """LLM node binds investment tools to the model."""
         create_llm_node(mock_chat_model)
-        mock_chat_model.bind_tools.assert_called_once_with(INVESTMENT_TOOLS)
+        mock_chat_model.bind_tools.assert_called_once_with(ASSET_MONITORING_TOOLS)
 
 
-class TestBuildInvestmentAgentGraph:
-    """Tests for building the Investment Agent LangGraph."""
+class TestBuildAssetMonitoringAgentGraph:
+    """Tests for building the Asset Monitoring Agent LangGraph."""
 
     def test_returns_compiled_graph(self, mock_chat_model: MagicMock) -> None:
-        """build_investment_agent_graph returns a compiled graph."""
-        graph = build_investment_agent_graph(chat_model=mock_chat_model)
+        """build_asset_monitoring_agent_graph returns a compiled graph."""
+        graph = build_asset_monitoring_agent_graph(chat_model=mock_chat_model)
         assert graph is not None
         assert hasattr(graph, "invoke")
 
     def test_accepts_custom_model(self, mock_chat_model: MagicMock) -> None:
         """Custom chat model is used instead of factory."""
-        graph = build_investment_agent_graph(chat_model=mock_chat_model)
+        graph = build_asset_monitoring_agent_graph(chat_model=mock_chat_model)
         assert graph is not None
         mock_chat_model.bind_tools.assert_called_once()
 
@@ -128,7 +128,7 @@ class TestBuildInvestmentAgentGraph:
             investment_formatted_response,
         ]
 
-        graph = build_investment_agent_graph(chat_model=mock_chat_model)
+        graph = build_asset_monitoring_agent_graph(chat_model=mock_chat_model)
         result = graph.invoke(
             {
                 "messages": [("user", "ดูพอร์ตของฉัน")],
