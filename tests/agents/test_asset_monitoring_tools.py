@@ -1,4 +1,4 @@
-"""Tests for investment agent tool wrappers."""
+"""Tests for asset monitoring agent tool wrappers."""
 
 from collections.abc import Callable
 from datetime import date
@@ -9,12 +9,16 @@ from unittest.mock import patch
 import pytest
 from sqlalchemy.orm import Session
 
-from finance_ai.agents.investment_tools import (
+from finance_ai.agents.asset_monitoring_tools import (
     add_holding,
+    create_asset_schedule,
+    delete_asset_schedule,
+    get_asset_notifications,
     get_investment_advice,
     import_csv,
     lookup_holding,
     refresh_prices,
+    view_asset_schedules,
     view_portfolio,
 )
 from finance_ai.database.models.user import User
@@ -355,3 +359,156 @@ class TestGetInvestmentAdvice:
         assert result["action"] == "get_investment_advice"
         assert "total_value" in result
         assert "holdings" in result
+
+
+# ---------------------------------------------------------------------------
+# Schedule + Notification Tool Tests
+# ---------------------------------------------------------------------------
+
+
+class TestCreateAssetSchedule:
+    """Tests for create_asset_schedule tool."""
+
+    def test_creates_schedule(
+        self,
+        sample_user: User,
+        db_session_factory: Callable[[], Session],
+    ) -> None:
+        """Create a schedule and verify returned data."""
+        result = create_asset_schedule.invoke(
+            {
+                "symbol": "GC=F",
+                "cron_expression": "0 21 * * *",
+                "description": "ราคาทอง",
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
+            }
+        )
+        assert result["action"] == "create_asset_schedule"
+        assert result["symbol"] == "GC=F"
+        assert result["cron_expression"] == "0 21 * * *"
+        assert result["description"] == "ราคาทอง"
+        assert result["schedule_id"] is not None
+
+    def test_defaults_description_to_symbol(
+        self,
+        sample_user: User,
+        db_session_factory: Callable[[], Session],
+    ) -> None:
+        """Uses symbol as description when none provided."""
+        result = create_asset_schedule.invoke(
+            {
+                "symbol": "PTT.BK",
+                "cron_expression": "0 9 * * 1-5",
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
+            }
+        )
+        assert result["description"] == "PTT.BK"
+
+
+class TestViewAssetSchedules:
+    """Tests for view_asset_schedules tool."""
+
+    def test_returns_empty(
+        self,
+        sample_user: User,
+        db_session_factory: Callable[[], Session],
+    ) -> None:
+        """Returns empty list when no schedules exist."""
+        result = view_asset_schedules.invoke(
+            {
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
+            }
+        )
+        assert result["action"] == "view_asset_schedules"
+        assert result["count"] == 0
+        assert result["schedules"] == []
+
+    def test_returns_active_schedules(
+        self,
+        sample_user: User,
+        db_session_factory: Callable[[], Session],
+    ) -> None:
+        """Returns only active schedules."""
+        create_asset_schedule.invoke(
+            {
+                "symbol": "GC=F",
+                "cron_expression": "0 21 * * *",
+                "description": "ทอง",
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
+            }
+        )
+        result = view_asset_schedules.invoke(
+            {
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
+            }
+        )
+        assert result["count"] == 1
+
+
+class TestDeleteAssetSchedule:
+    """Tests for delete_asset_schedule tool."""
+
+    def test_delete_existing(
+        self,
+        sample_user: User,
+        db_session_factory: Callable[[], Session],
+    ) -> None:
+        """Delete an existing schedule."""
+        created = create_asset_schedule.invoke(
+            {
+                "symbol": "GC=F",
+                "cron_expression": "0 21 * * *",
+                "description": "ทอง",
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
+            }
+        )
+        result = delete_asset_schedule.invoke(
+            {
+                "schedule_id": created["schedule_id"],
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
+            }
+        )
+        assert result["action"] == "delete_asset_schedule"
+        assert result["deleted"] is True
+
+    def test_delete_nonexistent(
+        self,
+        sample_user: User,
+        db_session_factory: Callable[[], Session],
+    ) -> None:
+        """Returns deleted=False for non-existent schedule."""
+        result = delete_asset_schedule.invoke(
+            {
+                "schedule_id": "fake-id",
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
+            }
+        )
+        assert result["deleted"] is False
+
+
+class TestGetAssetNotifications:
+    """Tests for get_asset_notifications tool."""
+
+    def test_returns_empty(
+        self,
+        sample_user: User,
+        db_session_factory: Callable[[], Session],
+    ) -> None:
+        """Returns empty list when no notifications exist."""
+        result = get_asset_notifications.invoke(
+            {
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
+            }
+        )
+        assert result["action"] == "get_asset_notifications"
+        assert result["count"] == 0
+        assert result["notifications"] == []

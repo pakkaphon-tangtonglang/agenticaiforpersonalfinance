@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 
 class StockDashboardResult(BaseModel):
-    """Comprehensive stock/asset overview from yfinance.
+    """Comprehensive stock/asset overview from Bright Data API.
 
     Attributes:
         name: Full name of the asset (e.g., "PTT Public Company Limited").
@@ -45,7 +45,7 @@ class StockDashboardResult(BaseModel):
 
 
 class CurrencyConversionResult(BaseModel):
-    """Result of a real-time currency conversion via yfinance.
+    """Result of a real-time currency conversion via Bright Data API.
 
     Attributes:
         from_currency: Source currency code (e.g., "USD").
@@ -74,7 +74,7 @@ class FinanceNewsResult(BaseModel):
 
     Attributes:
         symbol: The ticker symbol queried.
-        news_content: Raw news text from Yahoo Finance.
+        news_content: Raw news text from Bright Data API.
         has_news: Whether any news articles were found.
 
     Example:

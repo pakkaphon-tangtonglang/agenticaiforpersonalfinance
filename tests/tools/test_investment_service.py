@@ -305,7 +305,7 @@ class TestRefreshPortfolioPrices:
         sample_user: User,
         sample_holding: InvestmentHolding,
     ) -> None:
-        """Updates holding prices from yfinance."""
+        """Updates holding prices from Bright Data API."""
         mock_fetch.return_value = {"PTT.BK": Decimal("42.50")}
         count = refresh_portfolio_prices(test_session, sample_user.id)
         assert count == 1

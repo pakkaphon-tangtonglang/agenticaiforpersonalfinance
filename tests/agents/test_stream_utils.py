@@ -9,7 +9,7 @@ from finance_ai.agents.stream_utils import (
     _extract_tool_name,
     _handle_ai_chunk,
     _process_chunk,
-    route_query_stream,
+    orchestrate_query_stream,
     stream_agent_response,
 )
 
@@ -143,7 +143,7 @@ class TestStreamAgentResponse:
 
 
 class TestRouteQueryStream:
-    """Tests for route_query_stream."""
+    """Tests for orchestrate_query_stream."""
 
     @patch("finance_ai.agents.stream_utils.classify_query")
     @patch("finance_ai.agents.stream_utils._get_agent_graph")
@@ -155,12 +155,14 @@ class TestRouteQueryStream:
         """Unsupported intent yields response then complete."""
         from decimal import Decimal
 
-        from finance_ai.agents.schemas import RouterDecision
+        from finance_ai.agents.schemas import OrchestratorDecision
 
-        mock_classify.return_value = RouterDecision(intent="unknown", confidence=Decimal("0.5"))
+        mock_classify.return_value = OrchestratorDecision(
+            intent="unknown", confidence=Decimal("0.5")
+        )
         mock_get_graph.return_value = None
 
-        events = list(route_query_stream("random question"))
+        events = list(orchestrate_query_stream("random question"))
         assert any(e.event_type == "token" for e in events)
         assert events[-1].event_type == "complete"
         assert events[-1].intent == "unknown"
@@ -175,14 +177,14 @@ class TestRouteQueryStream:
         """Supported intent delegates to stream_agent_response."""
         from decimal import Decimal
 
-        from finance_ai.agents.schemas import RouterDecision
+        from finance_ai.agents.schemas import OrchestratorDecision
 
-        mock_classify.return_value = RouterDecision(intent="tax", confidence=Decimal("0.95"))
+        mock_classify.return_value = OrchestratorDecision(intent="tax", confidence=Decimal("0.95"))
         mock_graph = MagicMock()
         mock_graph.stream.return_value = iter([])
         mock_get_graph.return_value = mock_graph
 
-        events = list(route_query_stream("คำนวณภาษี"))
+        events = list(orchestrate_query_stream("คำนวณภาษี"))
         assert events[0].event_type == "status"
         assert events[-1].event_type == "complete"
         assert events[-1].intent == "tax"
@@ -197,9 +199,9 @@ class TestRouteQueryStream:
         """General intent streams through planning agent graph."""
         from decimal import Decimal
 
-        from finance_ai.agents.schemas import RouterDecision
+        from finance_ai.agents.schemas import OrchestratorDecision
 
-        mock_classify.return_value = RouterDecision(
+        mock_classify.return_value = OrchestratorDecision(
             intent="general",
             confidence=Decimal("0.8"),
         )
@@ -207,7 +209,7 @@ class TestRouteQueryStream:
         mock_graph.stream.return_value = iter([])
         mock_get_graph.return_value = mock_graph
 
-        events = list(route_query_stream("ออมเงินยังไงดี"))
+        events = list(orchestrate_query_stream("ออมเงินยังไงดี"))
         assert events[0].event_type == "status"
         assert events[-1].event_type == "complete"
         assert events[-1].intent == "general"

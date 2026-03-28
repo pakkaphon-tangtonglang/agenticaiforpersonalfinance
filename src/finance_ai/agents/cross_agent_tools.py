@@ -184,4 +184,4 @@ PLANNING_CROSS_TOOLS = [
 
 EXPENSE_CROSS_TOOLS = [get_goals_summary_cross]
 
-INVESTMENT_CROSS_TOOLS = [get_tax_summary_cross]
+ASSET_MONITORING_CROSS_TOOLS = [get_tax_summary_cross]

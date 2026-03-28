@@ -1,6 +1,6 @@
-"""LangGraph Investment Agent for portfolio tracking and recommendations.
+"""LangGraph Asset Monitoring Agent for portfolio tracking and asset news.
 
-Uses a ReAct-style graph: LLM reasons about the query, calls investment tools
+Uses a ReAct-style graph: LLM reasons about the query, calls asset monitoring tools
 when needed, then formats the result in Thai for the user.
 """
 
@@ -11,25 +11,29 @@ from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from finance_ai.agents.cross_agent_tools import INVESTMENT_CROSS_TOOLS
-from finance_ai.agents.investment_tools import (
+from finance_ai.agents.cross_agent_tools import ASSET_MONITORING_CROSS_TOOLS
+from finance_ai.agents.asset_monitoring_tools import (
     add_holding,
+    create_asset_schedule,
+    delete_asset_schedule,
+    get_asset_notifications,
     get_investment_advice,
     import_csv,
     lookup_holding,
     refresh_prices,
+    view_asset_schedules,
     view_portfolio,
 )
 from finance_ai.agents.market_data_tools import MARKET_DATA_TOOLS
-from finance_ai.agents.prompts import INVESTMENT_AGENT_SYSTEM_PROMPT
+from finance_ai.agents.prompts import ASSET_MONITORING_AGENT_SYSTEM_PROMPT
 from finance_ai.agents.psychology_tools import detect_psychological_cues
 from finance_ai.agents.rag_tool import search_finance_knowledge
-from finance_ai.agents.schemas import InvestmentAgentState
+from finance_ai.agents.schemas import AssetMonitoringAgentState
 from finance_ai.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-INVESTMENT_TOOLS = (
+ASSET_MONITORING_TOOLS = (
     [
         view_portfolio,
         add_holding,
@@ -37,15 +41,19 @@ INVESTMENT_TOOLS = (
         refresh_prices,
         lookup_holding,
         get_investment_advice,
+        create_asset_schedule,
+        view_asset_schedules,
+        delete_asset_schedule,
+        get_asset_notifications,
         search_finance_knowledge,
         detect_psychological_cues,
     ]
-    + INVESTMENT_CROSS_TOOLS
+    + ASSET_MONITORING_CROSS_TOOLS
     + MARKET_DATA_TOOLS
 )
 
 
-def should_continue(state: InvestmentAgentState) -> str:
+def should_continue(state: AssetMonitoringAgentState) -> str:
     """Determine next node: continue to tools or end.
 
     Args:
@@ -67,7 +75,7 @@ def should_continue(state: InvestmentAgentState) -> str:
 def create_llm_node(
     chat_model: BaseChatModel,
 ) -> Any:
-    """Create the LLM reasoning node for the investment agent.
+    """Create the LLM reasoning node for the asset monitoring agent.
 
     Binds investment tools to the model and prepends the system prompt on each call.
 
@@ -80,9 +88,9 @@ def create_llm_node(
     Example:
         >>> node = create_llm_node(chat_model)
     """
-    model_with_tools = chat_model.bind_tools(INVESTMENT_TOOLS)
+    model_with_tools = chat_model.bind_tools(ASSET_MONITORING_TOOLS)
 
-    def llm_node(state: InvestmentAgentState) -> dict[str, Any]:
+    def llm_node(state: AssetMonitoringAgentState) -> dict[str, Any]:
         """Invoke the LLM with current messages and system prompt.
 
         Args:
@@ -91,17 +99,17 @@ def create_llm_node(
         Returns:
             Dict with updated messages list.
         """
-        messages = [SystemMessage(content=INVESTMENT_AGENT_SYSTEM_PROMPT)] + state["messages"]
+        messages = [SystemMessage(content=ASSET_MONITORING_AGENT_SYSTEM_PROMPT)] + state["messages"]
         response = model_with_tools.invoke(messages)
         return {"messages": [response]}
 
     return llm_node
 
 
-def build_investment_agent_graph(
+def build_asset_monitoring_agent_graph(
     chat_model: BaseChatModel | None = None,
 ) -> Any:
-    """Build the LangGraph StateGraph for the Investment Agent.
+    """Build the LangGraph StateGraph for the Asset Monitoring Agent.
 
     Creates a ReAct-style graph: agent -> (tool_calls?) -> tools -> agent -> END.
 
@@ -112,7 +120,7 @@ def build_investment_agent_graph(
         Compiled LangGraph StateGraph.
 
     Example:
-        >>> graph = build_investment_agent_graph()
+        >>> graph = build_asset_monitoring_agent_graph()
         >>> result = graph.invoke({
         ...     "messages": [("user", "ดูพอร์ตของฉัน")],
         ...     "user_id": "abc-123",
@@ -123,9 +131,9 @@ def build_investment_agent_graph(
 
         chat_model = create_chat_model()
 
-    graph = StateGraph(InvestmentAgentState)
+    graph = StateGraph(AssetMonitoringAgentState)
     graph.add_node("agent", create_llm_node(chat_model))
-    graph.add_node("tools", ToolNode(INVESTMENT_TOOLS))
+    graph.add_node("tools", ToolNode(ASSET_MONITORING_TOOLS))
     graph.set_entry_point("agent")
     graph.add_conditional_edges(
         "agent",
