@@ -12,7 +12,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from finance_ai.agents.cross_agent_tools import TAX_CROSS_TOOLS
-from finance_ai.agents.prompts import TAX_AGENT_SYSTEM_PROMPT
+from finance_ai.agents.prompts import TAX_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.schemas import TaxAgentState
 from finance_ai.agents.tax_tools import calculate_thai_tax
@@ -67,7 +67,9 @@ def _create_first_turn_node(
         Returns:
             Dict with updated messages list.
         """
-        messages = [SystemMessage(content=TAX_AGENT_SYSTEM_PROMPT)] + state["messages"]
+        messages = [SystemMessage(content=get_date_context() + TAX_AGENT_SYSTEM_PROMPT)] + state[
+            "messages"
+        ]
         response = model_force_tool.invoke(messages)
         return {"messages": [response]}
 
@@ -99,7 +101,9 @@ def _create_respond_node(
         Returns:
             Dict with updated messages list.
         """
-        messages = [SystemMessage(content=TAX_AGENT_SYSTEM_PROMPT)] + state["messages"]
+        messages = [SystemMessage(content=get_date_context() + TAX_AGENT_SYSTEM_PROMPT)] + state[
+            "messages"
+        ]
         response = model_with_tools.invoke(messages)
         return {"messages": [response]}
 

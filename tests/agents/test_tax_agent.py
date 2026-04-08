@@ -56,7 +56,7 @@ class TestCreateFirstTurnNode:
         node(state)
 
         call_args = mock_chat_model.invoke.call_args[0][0]
-        assert call_args[0].content == TAX_AGENT_SYSTEM_PROMPT
+        assert TAX_AGENT_SYSTEM_PROMPT in call_args[0].content
         assert call_args[1].content == "คำนวณภาษี"
 
     def test_forces_tool_choice(self, mock_chat_model: MagicMock) -> None:

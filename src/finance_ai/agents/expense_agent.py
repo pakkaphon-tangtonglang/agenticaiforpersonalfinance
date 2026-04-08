@@ -14,10 +14,11 @@ from langgraph.prebuilt import ToolNode
 from finance_ai.agents.cross_agent_tools import EXPENSE_CROSS_TOOLS
 from finance_ai.agents.expense_tools import (
     add_expense,
+    add_income,
     query_expenses_by_category,
     summarize_monthly_expenses,
 )
-from finance_ai.agents.prompts import EXPENSE_AGENT_SYSTEM_PROMPT
+from finance_ai.agents.prompts import EXPENSE_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.schemas import ExpenseAgentState
 from finance_ai.core.logging import get_logger
@@ -26,6 +27,7 @@ logger = get_logger(__name__)
 
 EXPENSE_TOOLS = [
     add_expense,
+    add_income,
     summarize_monthly_expenses,
     query_expenses_by_category,
     search_finance_knowledge,
@@ -78,7 +80,9 @@ def create_llm_node(
         Returns:
             Dict with updated messages list.
         """
-        messages = [SystemMessage(content=EXPENSE_AGENT_SYSTEM_PROMPT)] + state["messages"]
+        messages = [
+            SystemMessage(content=get_date_context() + EXPENSE_AGENT_SYSTEM_PROMPT)
+        ] + state["messages"]
         response = model_with_tools.invoke(messages)
         return {"messages": [response]}
 

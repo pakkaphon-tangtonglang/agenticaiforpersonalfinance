@@ -1,11 +1,13 @@
 """Parser for bank statement CSV/Excel files.
 
 Supports generic CSV and Excel formats. Handles Thai Buddhist Era
-dates (year > 2400 → subtract 543 for CE).
+dates (year > 2400 → subtract 543 for CE). Falls back to LLM-based
+parsing when rule-based detection fails.
 """
 
 import csv
 import io
+import json
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from typing import Any
@@ -16,14 +18,148 @@ BUDDHIST_ERA_OFFSET = 543
 BUDDHIST_ERA_THRESHOLD = 2400
 
 CATEGORY_KEYWORDS: dict[str, list[str]] = {
-    "food": ["อาหาร", "ข้าว", "กาแฟ", "ร้านอาหาร", "food", "restaurant", "cafe"],
-    "transport": ["แท็กซี่", "bts", "mrt", "grab", "bolt", "น้ำมัน", "ทางด่วน"],
-    "health": ["โรงพยาบาล", "ยา", "คลินิก", "หมอ", "pharmacy"],
-    "utilities": ["ไฟฟ้า", "น้ำประปา", "โทรศัพท์", "อินเทอร์เน็ต", "true", "ais", "dtac"],
-    "shopping": ["shopee", "lazada", "central", "ห้าง", "เสื้อผ้า"],
-    "entertainment": ["netflix", "youtube", "spotify", "หนัง", "เกม"],
-    "education": ["เรียน", "หนังสือ", "คอร์ส", "course", "udemy"],
+    "food": [
+        "อาหาร",
+        "ข้าว",
+        "กาแฟ",
+        "ร้านอาหาร",
+        "food",
+        "restaurant",
+        "cafe",
+        "dine",
+        "sushi",
+        "shabu",
+        "grocery",
+        "supermarket",
+        "starbucks",
+        "mcdonald",
+        "kfc",
+        "pizza",
+        "7-eleven",
+        "lunch",
+        "dinner",
+        "breakfast",
+    ],
+    "transport": [
+        "แท็กซี่",
+        "bts",
+        "mrt",
+        "grab",
+        "bolt",
+        "น้ำมัน",
+        "ทางด่วน",
+        "gasoline",
+        "gas station",
+        "fuel",
+        "taxi",
+        "uber",
+        "parking",
+        "toll",
+        "transport",
+        "commute",
+    ],
+    "housing": [
+        "ค่าเช่า",
+        "บ้าน",
+        "คอนโด",
+        "หอพัก",
+        "rent",
+        "mortgage",
+        "condo",
+        "apartment",
+        "housing",
+    ],
+    "health": [
+        "โรงพยาบาล",
+        "ยา",
+        "คลินิก",
+        "หมอ",
+        "pharmacy",
+        "hospital",
+        "doctor",
+        "gym",
+        "fitness",
+        "health",
+        "medical",
+        "dental",
+    ],
+    "utilities": [
+        "ไฟฟ้า",
+        "น้ำประปา",
+        "โทรศัพท์",
+        "อินเทอร์เน็ต",
+        "true",
+        "ais",
+        "dtac",
+        "internet",
+        "phone bill",
+        "electric",
+        "water bill",
+        "utility",
+    ],
+    "shopping": [
+        "shopee",
+        "lazada",
+        "central",
+        "ห้าง",
+        "เสื้อผ้า",
+        "gadget",
+        "headphone",
+        "amazon",
+        "electronics",
+        "clothes",
+    ],
+    "entertainment": [
+        "netflix",
+        "youtube",
+        "spotify",
+        "หนัง",
+        "เกม",
+        "movie",
+        "game",
+        "subscription",
+        "disney",
+    ],
+    "education": [
+        "เรียน",
+        "หนังสือ",
+        "คอร์ส",
+        "course",
+        "udemy",
+        "school",
+        "tuition",
+        "book",
+        "training",
+    ],
+    "investment": [
+        "ลงทุน",
+        "หุ้น",
+        "กองทุน",
+        "dca",
+        "stock",
+        "investment",
+        "mutual fund",
+        "ssf",
+        "rmf",
+    ],
 }
+
+INCOME_KEYWORDS: list[str] = [
+    "เงินเดือน",
+    "salary",
+    "wage",
+    "bonus",
+    "freelance",
+    "รายได้",
+    "income",
+    "เงินโอนเข้า",
+    "deposit",
+    "refund",
+    "dividend",
+    "ปันผล",
+    "ดอกเบี้ย",
+    "interest",
+]
 
 
 class ParsedTransaction(BaseModel):
@@ -111,18 +247,23 @@ def _detect_csv_columns(
         headers: List of header strings.
 
     Returns:
-        Dict mapping 'date', 'description', 'amount' to header names.
+        Dict mapping 'date', 'description', 'amount', 'type',
+        'category' to matched header names (empty string if not found).
     """
     mapping: dict[str, str] = {}
     lower_headers = {h.lower().strip(): h for h in headers}
 
     date_keys = ["date", "วันที่", "transaction_date", "txn_date"]
     desc_keys = ["description", "รายละเอียด", "desc", "memo", "หมายเหตุ"]
-    amount_keys = ["amount", "จำนวนเงิน", "debit", "withdrawal", "ยอดเงิน"]
+    amount_keys = ["amount", "จำนวนเงิน", "ยอดเงิน", "debit", "withdrawal"]
+    type_keys = ["type", "transaction type", "txn type", "ประเภท"]
+    category_keys = ["category", "หมวดหมู่", "หมวด"]
 
     mapping["date"] = _find_header(lower_headers, date_keys, headers)
     mapping["description"] = _find_header(lower_headers, desc_keys, headers)
     mapping["amount"] = _find_header(lower_headers, amount_keys, headers)
+    mapping["type"] = _find_header(lower_headers, type_keys, [])
+    mapping["category"] = _find_header(lower_headers, category_keys, [])
     return mapping
 
 
@@ -165,10 +306,13 @@ def _parse_csv_row(
         description = str(row.get(field_map.get("description", ""), "")).strip()
         raw_amount = str(row.get(field_map.get("amount", ""), "0")).strip()
 
+        raw_type = str(row.get(field_map.get("type", ""), "")).strip().lower()
+        raw_category = str(row.get(field_map.get("category", ""), "")).strip()
+
         txn_date = normalize_thai_date(raw_date)
         amount = _parse_amount(raw_amount)
-        txn_type = "income" if amount < 0 else "expense"
-        category = classify_expense_category(description)
+        txn_type = _resolve_transaction_type(raw_type, description, amount)
+        category = _resolve_category(raw_category, description)
 
         return ParsedTransaction(
             transaction_date=txn_date,
@@ -179,6 +323,72 @@ def _parse_csv_row(
         )
     except (ValueError, InvalidOperation):
         return None
+
+
+CSV_CATEGORY_MAP: dict[str, str] = {
+    "income": "other",
+    "housing": "housing",
+    "groceries": "food",
+    "grocery": "food",
+    "dining": "food",
+    "food": "food",
+    "utilities": "utilities",
+    "utility": "utilities",
+    "investment": "investment",
+    "health": "health",
+    "fitness": "health",
+    "transport": "transport",
+    "transportation": "transport",
+    "shopping": "shopping",
+    "entertainment": "entertainment",
+    "education": "education",
+}
+
+
+def _resolve_transaction_type(
+    raw_type: str,
+    description: str,
+    amount: Decimal,
+) -> str:
+    """Determine transaction type from explicit type column, then description.
+
+    Priority:
+    1. Explicit type column: 'credit' → income, 'debit' → expense
+    2. Description keyword match via detect_income()
+    3. Default to 'expense'
+
+    Args:
+        raw_type: Lowercased value from type column (empty if not present).
+        description: Transaction description.
+        amount: Parsed amount (sign ignored; use raw_type/description).
+
+    Returns:
+        'income' or 'expense'.
+    """
+    if raw_type in ("credit", "income", "รายรับ", "เครดิต"):
+        return "income"
+    if raw_type in ("debit", "expense", "รายจ่าย", "เดบิต"):
+        return "expense"
+    if detect_income(description):
+        return "income"
+    return "expense"
+
+
+def _resolve_category(raw_category: str, description: str) -> str:
+    """Resolve category from explicit CSV column, then description keywords.
+
+    Args:
+        raw_category: Category value from CSV column (empty if not present).
+        description: Transaction description for keyword fallback.
+
+    Returns:
+        Internal category key (e.g. 'food', 'transport', 'other').
+    """
+    if raw_category:
+        mapped = CSV_CATEGORY_MAP.get(raw_category.lower())
+        if mapped:
+            return mapped
+    return classify_expense_category(description)
 
 
 def _parse_amount(raw: str) -> Decimal:
@@ -272,6 +482,23 @@ def classify_expense_category(description: str) -> str:
     return "other"
 
 
+def detect_income(description: str) -> bool:
+    """Check if a description indicates income.
+
+    Args:
+        description: Transaction description text.
+
+    Returns:
+        True if description matches income keywords.
+
+    Example:
+        >>> detect_income("Salary March 2026")
+        True
+    """
+    lower = description.lower()
+    return any(kw in lower for kw in INCOME_KEYWORDS)
+
+
 def parse_excel_statement(content: bytes) -> list[ParsedTransaction]:
     """Parse an Excel bank statement.
 
@@ -304,3 +531,114 @@ def parse_excel_statement(content: bytes) -> list[ParsedTransaction]:
 
     wb.close()
     return transactions
+
+
+# ─────────────────── LLM Fallback Parser ───────────────────────
+
+_MAX_PREVIEW_CHARS = 3000
+
+_LLM_PARSE_PROMPT: str = (
+    "คุณเป็นผู้เชี่ยวชาญแปลงข้อมูลทางการเงินเป็น JSON\n\n"
+    "จากข้อมูลด้านล่าง ให้สกัดรายการธุรกรรมทางการเงินออกมาให้ครบทุกรายการ\n"
+    "ตอบเป็น JSON array เท่านั้น ห้ามมีข้อความอื่น\n\n"
+    "แต่ละรายการต้องมี:\n"
+    '- "date": วันที่ในรูปแบบ YYYY-MM-DD\n'
+    '- "description": คำอธิบายรายการ\n'
+    '- "amount": จำนวนเงิน (ตัวเลข, บวก=รายจ่าย, ลบ=รายรับ)\n'
+    '- "category": หมวดหมู่ (food/transport/health/utilities/'
+    "shopping/entertainment/education/other)\n"
+    '- "type": "expense" หรือ "income"\n\n'
+    "กฎ:\n"
+    "- ถ้าเป็นรายรับ/เงินเดือน/โอนเข้า → type=income, amount เป็นค่าบวก\n"
+    "- ถ้าเป็นรายจ่าย/จ่าย/ซื้อ/โอนออก → type=expense, amount เป็นค่าบวก\n"
+    "- เดาหมวดหมู่จากคำอธิบาย\n"
+    "- ถ้าวันที่เป็น พ.ศ. ให้แปลงเป็น ค.ศ. (ลบ 543)\n\n"
+    "ข้อมูล:\n{content}"
+)
+
+
+def parse_with_llm(
+    raw_content: str,
+    chat_model: Any,
+) -> list[ParsedTransaction]:
+    """Parse financial data using LLM when rule-based parsing fails.
+
+    Args:
+        raw_content: Raw text content from the uploaded file.
+        chat_model: LangChain BaseChatModel instance.
+
+    Returns:
+        List of parsed transactions extracted by the LLM.
+    """
+    from langchain_core.messages import HumanMessage  # noqa: PLC0415
+
+    preview = raw_content[:_MAX_PREVIEW_CHARS]
+    prompt = _LLM_PARSE_PROMPT.format(content=preview)
+    response = chat_model.invoke([HumanMessage(content=prompt)])
+    return _parse_llm_response(str(response.content))
+
+
+def _parse_llm_response(
+    response_text: str,
+) -> list[ParsedTransaction]:
+    """Parse LLM JSON response into ParsedTransaction list.
+
+    Args:
+        response_text: Raw LLM response (should be JSON array).
+
+    Returns:
+        List of parsed transactions.
+    """
+    text = response_text.strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+
+    try:
+        items = json.loads(text)
+    except json.JSONDecodeError:
+        return []
+
+    if not isinstance(items, list):
+        return []
+
+    transactions: list[ParsedTransaction] = []
+    for item in items:
+        txn = _convert_llm_item(item)
+        if txn is not None:
+            transactions.append(txn)
+    return transactions
+
+
+def _convert_llm_item(
+    item: dict[str, Any],
+) -> ParsedTransaction | None:
+    """Convert a single LLM-extracted item to ParsedTransaction.
+
+    Args:
+        item: Dict with date, description, amount, category, type.
+
+    Returns:
+        ParsedTransaction or None if conversion fails.
+    """
+    try:
+        raw_date = str(item.get("date", ""))
+        txn_date = normalize_thai_date(raw_date)
+        description = str(item.get("description", ""))
+        amount = Decimal(str(item.get("amount", "0")).replace(",", ""))
+        category = str(item.get("category", "other"))
+        txn_type = str(item.get("type", "expense"))
+
+        if category not in CATEGORY_KEYWORDS and category != "other":
+            category = classify_expense_category(description)
+        if txn_type not in ("income", "expense"):
+            txn_type = "income" if amount < 0 else "expense"
+
+        return ParsedTransaction(
+            transaction_date=txn_date,
+            description=description,
+            amount=abs(amount),
+            category=category,
+            transaction_type=txn_type,
+        )
+    except (ValueError, InvalidOperation, KeyError):
+        return None

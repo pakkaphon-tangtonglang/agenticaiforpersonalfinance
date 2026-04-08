@@ -13,7 +13,11 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy.orm import Session
 
-from finance_ai.agents.prompts import GENERAL_CHAT_SYSTEM_PROMPT, ORCHESTRATOR_SYSTEM_PROMPT
+from finance_ai.agents.prompts import (
+    GENERAL_CHAT_SYSTEM_PROMPT,
+    ORCHESTRATOR_SYSTEM_PROMPT,
+    get_date_context,
+)
 from finance_ai.agents.schemas import OrchestratorDecision
 from finance_ai.core.logging import get_logger
 
@@ -108,7 +112,7 @@ def classify_query(
 
         chat_model = create_chat_model()
     messages = [
-        SystemMessage(content=ORCHESTRATOR_SYSTEM_PROMPT),
+        SystemMessage(content=get_date_context() + ORCHESTRATOR_SYSTEM_PROMPT),
         HumanMessage(content=query),
     ]
     response = chat_model.invoke(messages)
@@ -364,7 +368,7 @@ def execute_general_chat(
 
         chat_model = create_chat_model()
     messages: list[SystemMessage | HumanMessage] = [
-        SystemMessage(content=GENERAL_CHAT_SYSTEM_PROMPT),
+        SystemMessage(content=get_date_context() + GENERAL_CHAT_SYSTEM_PROMPT),
     ]
     for role, content in chat_history or []:
         if role == "user":

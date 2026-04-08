@@ -8,6 +8,7 @@ INTENT_CONFIG: dict[str, dict[str, str]] = {
     "recommendation": {"label": "คำแนะนำการเงิน", "icon": "💡", "color": "#CC5DE8"},
     "report": {"label": "รายงานการเงิน", "icon": "📊", "color": "#20C997"},
     "general": {"label": "ทั่วไป", "icon": "💬", "color": "#868E96"},
+    "general_chat": {"label": "แชททั่วไป", "icon": "💬", "color": "#868E96"},
     "unknown": {"label": "ไม่ทราบ", "icon": "❓", "color": "#868E96"},
     "error": {"label": "ข้อผิดพลาด", "icon": "⚠️", "color": "#FA5252"},
 }

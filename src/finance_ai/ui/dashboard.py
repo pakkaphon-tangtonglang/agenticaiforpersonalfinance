@@ -36,9 +36,33 @@ def render_dashboard(
         user_id: UUID of the current user.
         db_session_factory: Callable that creates DB sessions.
     """
-    report = _load_report(user_id, db_session_factory)
+    year, month = _render_period_selector()
+    report = _load_report(user_id, db_session_factory, year, month)
     if report is None:
         st.info("ยังไม่มีข้อมูลเพียงพอสำหรับแสดง Dashboard")
+        return
+
+    if _is_empty_report(report):
+        thai_months = [
+            "",
+            "ม.ค.",
+            "ก.พ.",
+            "มี.ค.",
+            "เม.ย.",
+            "พ.ค.",
+            "มิ.ย.",
+            "ก.ค.",
+            "ส.ค.",
+            "ก.ย.",
+            "ต.ค.",
+            "พ.ย.",
+            "ธ.ค.",
+        ]
+        month_name = thai_months[month]
+        st.info(
+            f"ไม่พบข้อมูลสำหรับ {month_name} {year}  \n"
+            "ลองเลือกเดือนอื่น หรือนำเข้า Bank Statement ที่แท็บ **📂 นำเข้าข้อมูล**"
+        )
         return
 
     _render_header(report)
@@ -47,15 +71,76 @@ def render_dashboard(
     _render_highlights(report)
 
 
+def _render_period_selector() -> tuple[int, int]:
+    """Render year/month selector for the dashboard.
+
+    Returns:
+        Tuple of (year, month).
+    """
+    now = datetime.now()
+    col_year, col_month = st.columns(2)
+    with col_year:
+        year = st.selectbox(
+            "ปี",
+            options=list(range(now.year, now.year - 3, -1)),
+            index=0,
+            key="dashboard_year",
+        )
+    with col_month:
+        thai_months = [
+            "ม.ค.",
+            "ก.พ.",
+            "มี.ค.",
+            "เม.ย.",
+            "พ.ค.",
+            "มิ.ย.",
+            "ก.ค.",
+            "ส.ค.",
+            "ก.ย.",
+            "ต.ค.",
+            "พ.ย.",
+            "ธ.ค.",
+        ]
+        month = st.selectbox(
+            "เดือน",
+            options=list(range(1, 13)),
+            format_func=lambda m: thai_months[m - 1],
+            index=now.month - 1,
+            key="dashboard_month",
+        )
+    return year, month
+
+
+def _is_empty_report(report: FinancialReport) -> bool:
+    """Return True when the report has no meaningful financial data.
+
+    Args:
+        report: The generated financial report.
+
+    Returns:
+        True if expenses, income, investments, and goals are all absent.
+    """
+    return (
+        report.monthly_overview.total_expenses == 0
+        and report.monthly_overview.total_income == 0
+        and report.investment_portfolio.holding_count == 0
+        and report.goal_progress.total_goals == 0
+    )
+
+
 def _load_report(
     user_id: str,
     db_session_factory: Callable[[], Session],
+    year: int,
+    month: int,
 ) -> FinancialReport | None:
     """Load financial report data from the DB.
 
     Args:
         user_id: UUID of the user.
         db_session_factory: Session factory callable.
+        year: Year to report on.
+        month: Month to report on.
 
     Returns:
         FinancialReport or None if loading fails.
@@ -66,9 +151,9 @@ def _load_report(
 
     session = db_session_factory()
     try:
-        now = datetime.now()
-        return generate_financial_report(session, user_id, now.year, now.month)
-    except Exception:  # noqa: BLE001
+        return generate_financial_report(session, user_id, year, month)
+    except Exception as exc:  # noqa: BLE001
+        st.error(f"โหลดข้อมูล Dashboard ไม่สำเร็จ: {exc}")
         return None
     finally:
         session.close()
@@ -138,6 +223,8 @@ def _render_charts(report: FinancialReport) -> None:
         report: The financial report.
     """
     _render_income_expense_chart(report.monthly_overview)
+
+    st.divider()
     col_left, col_right = st.columns(2)
 
     with col_left:
@@ -145,7 +232,10 @@ def _render_charts(report: FinancialReport) -> None:
     with col_right:
         _render_portfolio_chart(report.investment_portfolio)
 
+    st.divider()
     _render_goals_chart(report.goal_progress)
+
+    st.divider()
     _render_health_chart(report.health_score)
 
 

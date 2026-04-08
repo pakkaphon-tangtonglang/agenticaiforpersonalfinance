@@ -11,6 +11,7 @@ from finance_ai.database.models.conversation import Conversation
 from finance_ai.database.models.conversation_message import ConversationMessage
 from finance_ai.database.models.asset_schedule import AssetSchedule
 from finance_ai.database.models.asset_notification import AssetNotification
+from finance_ai.database.models.watched_asset import WatchedAsset
 
 __all__ = [
     "User",
@@ -24,4 +25,5 @@ __all__ = [
     "ConversationMessage",
     "AssetSchedule",
     "AssetNotification",
+    "WatchedAsset",
 ]

@@ -10,11 +10,13 @@ from decimal import Decimal
 EXPENSE_CATEGORIES: dict[str, str] = {
     "food": "อาหาร",
     "transport": "การเดินทาง",
+    "housing": "ที่พักอาศัย",
     "entertainment": "บันเทิง",
     "utilities": "สาธารณูปโภค",
     "health": "สุขภาพ",
     "education": "การศึกษา",
     "shopping": "ช้อปปิ้ง",
+    "investment": "ลงทุน",
     "other": "อื่นๆ",
 }
 

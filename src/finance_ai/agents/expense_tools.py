@@ -324,3 +324,130 @@ def _fetch_category_expenses(
         "total_amount": str(total),
         "transaction_count": len(records),
     }
+
+
+INCOME_TYPE_LABELS: dict[str, str] = {
+    "salary": "เงินเดือน",
+    "freelance": "ฟรีแลนซ์",
+    "bonus": "โบนัส",
+    "investment": "รายได้จากการลงทุน",
+    "rental": "ค่าเช่า",
+    "savings": "เงินออม/เงินสะสม",
+    "other": "อื่นๆ",
+}
+
+
+@tool
+def add_income(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    amount: str,
+    income_type: str = "salary",
+    description: str = "",
+    tax_year: str = "",
+    pay_period: str = "monthly",
+    employer_name: str = "",
+    withholding_tax: str = "0",
+    user_id: Annotated[str, InjectedState("user_id")] = "",
+    db_session_factory: Annotated[Any, InjectedState("db_session_factory")] = None,
+) -> dict[str, Any]:
+    """บันทึกรายรับ/รายได้ของผู้ใช้.
+
+    ใช้เมื่อผู้ใช้ต้องการบันทึกรายได้ เงินเดือน โบนัส หรือรายรับอื่นๆ
+
+    Args:
+        amount: จำนวนเงินรายได้ (บาท) เช่น "25000".
+        income_type: ประเภทรายได้ (salary, freelance, bonus,
+            investment, rental, other). ค่าเริ่มต้น: salary.
+        description: คำอธิบายเพิ่มเติม เช่น "เงินเดือนมีนาคม".
+        tax_year: ปีภาษี เช่น "2026". ค่าเริ่มต้น: ปีปัจจุบัน.
+        pay_period: งวดการจ่าย (monthly, weekly, yearly, one_time).
+        employer_name: ชื่อนายจ้าง/แหล่งรายได้ (ถ้ามี).
+        withholding_tax: ภาษีหัก ณ ที่จ่าย (บาท). ค่าเริ่มต้น: 0.
+        user_id: UUID ของผู้ใช้ (injected from graph state).
+        db_session_factory: Session factory (injected from graph state).
+
+    Returns:
+        Dict ยืนยันการบันทึกรายได้.
+    """
+    parsed_amount = parse_decimal_value(amount, "amount")
+    if parsed_amount <= 0:
+        raise ValueError(f"จำนวนเงินรายได้ต้องมากกว่า 0 ได้รับ: {amount}")
+    parsed_year = int(tax_year) if tax_year else date.today().year
+    parsed_wht = parse_decimal_value(withholding_tax, "withholding_tax")
+    normalized_type = income_type.strip().lower()
+    if normalized_type not in INCOME_TYPE_LABELS:
+        normalized_type = "other"
+    type_label = INCOME_TYPE_LABELS[normalized_type]
+
+    _persist_income(
+        db_session_factory,
+        user_id,
+        parsed_amount,
+        normalized_type,
+        description,
+        parsed_year,
+        pay_period,
+        employer_name,
+        parsed_wht,
+    )
+
+    return {
+        "status": "recorded",
+        "amount": str(parsed_amount),
+        "income_type": normalized_type,
+        "income_type_label": type_label,
+        "description": description,
+        "tax_year": parsed_year,
+        "pay_period": pay_period,
+        "withholding_tax": str(parsed_wht),
+    }
+
+
+def _persist_income(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    db_session_factory: Any,
+    user_id: str,
+    amount: Any,
+    income_type: str,
+    description: str,
+    tax_year: int,
+    pay_period: str,
+    employer_name: str,
+    withholding_tax: Any,
+) -> None:
+    """Save income to database (Income table for tax + Transaction table for dashboard).
+
+    Args:
+        db_session_factory: Session factory or None.
+        user_id: UUID of the user.
+        amount: Income amount (Decimal).
+        income_type: Type key (salary, freelance, etc.).
+        description: Income description.
+        tax_year: Tax year.
+        pay_period: Payment period.
+        employer_name: Employer name.
+        withholding_tax: Withholding tax amount.
+    """
+    from finance_ai.database.crud.income_crud import IncomeCRUD  # noqa: PLC0415
+    from finance_ai.database.crud.transaction_crud import TransactionCRUD  # noqa: PLC0415
+
+    with get_tool_session(db_session_factory) as session:
+        IncomeCRUD().create(
+            session,
+            user_id=user_id,
+            income_type=income_type,
+            description=description,
+            amount=amount,
+            tax_year=tax_year,
+            pay_period=pay_period,
+            employer_name=employer_name,
+            withholding_tax=withholding_tax,
+        )
+        TransactionCRUD().create(
+            session,
+            user_id=user_id,
+            transaction_type="income",
+            category=income_type,
+            description=description or income_type,
+            amount=amount,
+            transaction_date=date.today(),
+        )
+        session.commit()

@@ -12,14 +12,13 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from finance_ai.agents.cross_agent_tools import PLANNING_CROSS_TOOLS
-from finance_ai.agents.market_data_tools import convert_currency_tool
 from finance_ai.agents.planning_tools import (
     calculate_saving_plan,
     create_financial_goal,
     update_goal_progress,
     view_financial_goals,
 )
-from finance_ai.agents.prompts import PLANNING_AGENT_SYSTEM_PROMPT
+from finance_ai.agents.prompts import PLANNING_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.psychology_tools import detect_psychological_cues
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.schemas import PlanningAgentState
@@ -33,7 +32,6 @@ PLANNING_TOOLS = [
     update_goal_progress,
     calculate_saving_plan,
     search_finance_knowledge,
-    convert_currency_tool,
     detect_psychological_cues,
 ] + PLANNING_CROSS_TOOLS
 
@@ -84,7 +82,9 @@ def create_llm_node(
         Returns:
             Dict with updated messages list.
         """
-        messages = [SystemMessage(content=PLANNING_AGENT_SYSTEM_PROMPT)] + state["messages"]
+        messages = [
+            SystemMessage(content=get_date_context() + PLANNING_AGENT_SYSTEM_PROMPT)
+        ] + state["messages"]
         response = model_with_tools.invoke(messages)
         return {"messages": [response]}
 

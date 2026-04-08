@@ -9,15 +9,15 @@ from collections.abc import Callable, Generator
 from typing import Any, Literal
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessageChunk
+from langchain_core.messages import AIMessage, AIMessageChunk
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from finance_ai.agents.router_agent import (
     _build_messages,
-    build_unsupported_response,
     classify_query,
+    execute_general_chat,
 )
 from finance_ai.core.logging import get_logger
 
@@ -48,8 +48,9 @@ def stream_agent_response(
 ) -> Generator[StreamEvent, None, None]:
     """Stream responses from a LangGraph agent.
 
-    Uses stream_mode='messages' to get token-level LLM output.
-    Tool calls emit status events; final LLM output emits tokens.
+    Streams with stream_mode='messages' for token-level output.
+    If streaming produces no content (Gemini intermittent empty
+    response), falls back to graph.invoke() with fresh state.
 
     Args:
         graph: Compiled LangGraph state graph.
@@ -62,8 +63,12 @@ def stream_agent_response(
     yield StreamEvent(event_type="status", content="กำลังประมวลผล...")
 
     full_response = ""
+    original_messages = list(input_state.get("messages", []))
     try:
-        for chunk, _metadata in graph.stream(input_state, stream_mode="messages"):
+        for chunk, _metadata in graph.stream(
+            input_state,
+            stream_mode="messages",
+        ):
             event = _process_chunk(chunk)
             if event is not None:
                 if event.event_type == "token":
@@ -81,6 +86,18 @@ def stream_agent_response(
         )
         yield StreamEvent(event_type="token", content=full_response)
 
+    # FALLBACK: streaming produced no content → invoke graph with fresh state
+    if not full_response.strip():
+        fallback_state = {
+            "messages": original_messages,
+            "user_id": input_state.get("user_id", ""),
+            "db_session_factory": input_state.get("db_session_factory"),
+        }
+        fallback = _invoke_and_extract(graph, fallback_state)
+        if fallback:
+            full_response = fallback
+            yield StreamEvent(event_type="token", content=full_response)
+
     yield StreamEvent(
         event_type="complete",
         content=full_response,
@@ -88,8 +105,38 @@ def stream_agent_response(
     )
 
 
+def _invoke_and_extract(
+    graph: CompiledStateGraph,  # type: ignore[type-arg]
+    input_state: dict[str, Any],
+) -> str:
+    """Invoke graph and extract the response content.
+
+    Used as fallback when streaming produces no content.
+    Extracts from the last AIMessage, or falls back to
+    ToolMessage content if the AI response is empty.
+
+    Args:
+        graph: Compiled LangGraph state graph.
+        input_state: Fresh input state (not mutated by prior stream).
+
+    Returns:
+        Response content string, or empty string if none found.
+    """
+    try:
+        final_state = graph.invoke(input_state)
+        messages = final_state.get("messages", [])
+        return _extract_last_ai_from_messages(messages)
+    except Exception:  # noqa: BLE001
+        logger.warning("Fallback invoke failed", exc_info=True)
+    return ""
+
+
 def _process_chunk(chunk: Any) -> StreamEvent | None:
     """Process a single stream chunk into a StreamEvent.
+
+    Handles both AIMessageChunk (token-level streaming) and
+    complete AIMessage (emitted by on_chain_end when the LLM
+    uses invoke() internally instead of streaming).
 
     Args:
         chunk: A message chunk from LangGraph stream.
@@ -97,8 +144,12 @@ def _process_chunk(chunk: Any) -> StreamEvent | None:
     Returns:
         StreamEvent or None if chunk should be skipped.
     """
+    # Check AIMessageChunk first (it inherits from AIMessage)
     if isinstance(chunk, AIMessageChunk):
         return _handle_ai_chunk(chunk)
+    # Handle complete AIMessage from node output (non-streaming LLM)
+    if isinstance(chunk, AIMessage):
+        return _handle_complete_ai_message(chunk)
     return None
 
 
@@ -128,6 +179,36 @@ def _handle_ai_chunk(chunk: AIMessageChunk) -> StreamEvent | None:
     return None
 
 
+def _handle_complete_ai_message(message: AIMessage) -> StreamEvent | None:
+    """Handle a complete AIMessage from node output.
+
+    When the LLM uses invoke() internally (not streaming),
+    LangGraph emits the complete AIMessage via on_chain_end.
+
+    Args:
+        message: Complete AI message from node output.
+
+    Returns:
+        Token event for content, status for tool calls, None otherwise.
+    """
+    if message.tool_calls:
+        names = [tc.get("name", "") for tc in message.tool_calls]
+        name = next((n for n in names if n), "")
+        if name:
+            return StreamEvent(
+                event_type="status",
+                content=f"กำลังใช้เครื่องมือ: {name}",
+            )
+        return None
+
+    if message.content:
+        return StreamEvent(
+            event_type="token",
+            content=str(message.content),
+        )
+    return None
+
+
 def _extract_tool_name(chunk: AIMessageChunk) -> str:
     """Extract tool name from a tool call chunk.
 
@@ -141,6 +222,39 @@ def _extract_tool_name(chunk: AIMessageChunk) -> str:
         name = tool_call.get("name", "")
         if name:
             return str(name)
+    return ""
+
+
+def _extract_last_ai_from_messages(messages: list[Any]) -> str:
+    """Extract the last AI response content from graph messages.
+
+    Walks backwards through messages, skipping ToolMessages,
+    looking for the final AIMessage with text content. If the
+    final AIMessage has empty content (common Gemini bug after
+    tool calls), falls back to the last ToolMessage content.
+
+    Args:
+        messages: List of LangChain message objects.
+
+    Returns:
+        Content string, or empty string if none found.
+    """
+    from langchain_core.messages import AIMessage, ToolMessage  # noqa: PLC0415
+
+    for msg in reversed(messages):
+        if isinstance(msg, ToolMessage):
+            continue
+        if isinstance(msg, AIMessage) and msg.content:
+            if not msg.tool_calls:
+                return str(msg.content)
+        break
+
+    # Fallback: use last ToolMessage content when AI returned empty
+    for msg in reversed(messages):
+        if isinstance(msg, ToolMessage) and msg.content:
+            return str(msg.content)
+        if isinstance(msg, AIMessage) and msg.tool_calls:
+            break
     return ""
 
 
@@ -171,12 +285,19 @@ def orchestrate_query_stream(
 
     graph = _get_agent_graph(intent, chat_model)
     if graph is None:
-        result = build_unsupported_response(decision)
-        yield StreamEvent(event_type="token", content=result["response"])
+        result = execute_general_chat(
+            query,
+            chat_model,
+            user_id,
+            db_session_factory,
+            chat_history,
+        )
+        response_text = str(result["response"])
+        yield StreamEvent(event_type="token", content=response_text)
         yield StreamEvent(
             event_type="complete",
-            content=result["response"],
-            intent=intent,
+            content=response_text,
+            intent="general_chat",
         )
         return
 

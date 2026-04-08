@@ -59,6 +59,7 @@ def create_goal(  # pylint: disable=too-many-arguments,too-many-positional-argum
     target_amount: Decimal,
     target_date: Optional[date] = None,
     priority: int = DEFAULT_PRIORITY,
+    current_amount: Decimal = Decimal("0"),
 ) -> FinancialGoal:
     """Validate inputs and create a new financial goal.
 
@@ -70,6 +71,7 @@ def create_goal(  # pylint: disable=too-many-arguments,too-many-positional-argum
         target_amount: Target amount in THB.
         target_date: Optional target completion date.
         priority: Priority level (1-5).
+        current_amount: Amount already saved (default 0).
 
     Returns:
         Created FinancialGoal instance.
@@ -80,12 +82,14 @@ def create_goal(  # pylint: disable=too-many-arguments,too-many-positional-argum
     Example:
         >>> goal = create_goal(
         ...     session, "user-1", "savings", "เงินฉุกเฉิน",
-        ...     Decimal("100000"), date(2027, 12, 31), 4,
+        ...     Decimal("100000"), date(2027, 12, 31), 4, Decimal("50000"),
         ... )
     """
     normalized_type = validate_goal_type(goal_type)
     validate_goal_amount(target_amount)
     validate_priority(priority)
+    safe_current = max(current_amount, Decimal("0"))
+    is_completed = safe_current >= target_amount
 
     crud = FinancialGoalCRUD()
     return crud.create(
@@ -94,10 +98,10 @@ def create_goal(  # pylint: disable=too-many-arguments,too-many-positional-argum
         goal_type=normalized_type,
         name=name,
         target_amount=target_amount,
-        current_amount=Decimal("0"),
+        current_amount=safe_current,
         target_date=target_date,
         priority=priority,
-        is_completed=False,
+        is_completed=is_completed,
     )
 
 

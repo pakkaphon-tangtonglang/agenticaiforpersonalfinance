@@ -14,20 +14,22 @@ from finance_ai.tools.expense_constants import (
 class TestExpenseCategories:
     """Tests for expense category constants."""
 
-    def test_has_eight_categories(self) -> None:
-        """Test that there are exactly 8 expense categories."""
-        assert len(EXPENSE_CATEGORIES) == 8
+    def test_has_ten_categories(self) -> None:
+        """Test that there are exactly 10 expense categories."""
+        assert len(EXPENSE_CATEGORIES) == 10
 
     def test_all_expected_categories_present(self) -> None:
         """Test that all expected category keys are defined."""
         expected = {
             "food",
             "transport",
+            "housing",
             "entertainment",
             "utilities",
             "health",
             "education",
             "shopping",
+            "investment",
             "other",
         }
         assert set(EXPENSE_CATEGORIES.keys()) == expected

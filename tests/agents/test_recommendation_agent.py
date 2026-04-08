@@ -121,5 +121,5 @@ class TestRecommendationAgentTools:
         assert "generate_financial_recommendations" in names
         assert "get_financial_health_score" in names
         assert "search_finance_knowledge" in names
-        assert "get_finance_news" in names
+        assert "search_finance_news" in names
         assert "detect_psychological_cues" in names

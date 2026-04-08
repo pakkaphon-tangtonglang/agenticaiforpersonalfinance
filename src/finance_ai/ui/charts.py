@@ -13,11 +13,13 @@ import plotly.graph_objects as go
 THAI_CATEGORY_LABELS: dict[str, str] = {
     "food": "อาหาร",
     "transport": "เดินทาง",
+    "housing": "ที่พักอาศัย",
     "health": "สุขภาพ",
     "education": "การศึกษา",
     "shopping": "ช้อปปิ้ง",
     "utilities": "สาธารณูปโภค",
     "entertainment": "บันเทิง",
+    "investment": "ลงทุน",
     "other": "อื่นๆ",
 }
 
@@ -84,6 +86,17 @@ def create_expense_pie_chart(
     labels = [_thai_label(c.get("category", "other")) for c in categories]
     values = [_to_float(c.get("amount", 0)) for c in categories]
 
+    pie_colors = [
+        "#3498DB",
+        "#E67E22",
+        "#2ECC71",
+        "#E74C3C",
+        "#9B59B6",
+        "#1ABC9C",
+        "#F1C40F",
+        "#95A5A6",
+    ]
+
     fig = go.Figure(
         data=[
             go.Pie(
@@ -92,11 +105,12 @@ def create_expense_pie_chart(
                 hole=0.4,
                 textinfo="label+percent",
                 textposition="outside",
+                marker={"colors": pie_colors[: len(labels)]},
             )
         ]
     )
     fig.update_layout(
-        title="ค่าใช้จ่ายแยกตามหมวดหมู่",
+        title={"text": "ค่าใช้จ่ายแยกตามหมวดหมู่", "font": {"size": 16}},
         template=_detect_template(),
         showlegend=True,
         margin={"t": 60, "b": 20, "l": 20, "r": 20},
@@ -124,6 +138,17 @@ def create_portfolio_pie_chart(
     labels = [h.get("symbol", "N/A") for h in holdings]
     values = [_to_float(h.get("current_value", 0)) for h in holdings]
 
+    portfolio_colors = [
+        "#2980B9",
+        "#27AE60",
+        "#8E44AD",
+        "#D35400",
+        "#16A085",
+        "#C0392B",
+        "#2C3E50",
+        "#F39C12",
+    ]
+
     fig = go.Figure(
         data=[
             go.Pie(
@@ -132,11 +157,12 @@ def create_portfolio_pie_chart(
                 hole=0.4,
                 textinfo="label+percent",
                 textposition="outside",
+                marker={"colors": portfolio_colors[: len(labels)]},
             )
         ]
     )
     fig.update_layout(
-        title="สัดส่วนพอร์ตการลงทุน",
+        title={"text": "สัดส่วนพอร์ตการลงทุน", "font": {"size": 16}},
         template=_detect_template(),
         showlegend=True,
         margin={"t": 60, "b": 20, "l": 20, "r": 20},
@@ -164,7 +190,7 @@ def create_goal_progress_bar(
     names = [g.get("name", "เป้าหมาย") for g in goals]
     percentages = [min(_to_float(g.get("percentage", 0)), 100) for g in goals]
 
-    colors = ["#51CF66" if p >= 80 else "#FFA94D" if p >= 50 else "#FF6B6B" for p in percentages]
+    colors = ["#27AE60" if p >= 80 else "#E67E22" if p >= 50 else "#E74C3C" for p in percentages]
 
     fig = go.Figure(
         data=[
@@ -175,15 +201,17 @@ def create_goal_progress_bar(
                 marker_color=colors,
                 text=[f"{p:.0f}%" for p in percentages],
                 textposition="auto",
+                textfont={"size": 13},
             )
         ]
     )
     fig.update_layout(
-        title="ความคืบหน้าเป้าหมายการเงิน",
-        xaxis={"range": [0, 100], "title": "เปอร์เซ็นต์"},
+        title={"text": "ความคืบหน้าเป้าหมายการเงิน", "font": {"size": 16}},
+        xaxis={"range": [0, 100], "title": "เปอร์เซ็นต์", "gridcolor": "rgba(0,0,0,0.1)"},
         template=_detect_template(),
         margin={"t": 60, "b": 40, "l": 120, "r": 20},
         height=max(200, len(goals) * 60 + 100),
+        plot_bgcolor="rgba(0,0,0,0)",
     )
     return fig
 
@@ -239,10 +267,10 @@ def _score_color(score: int) -> str:
         Hex color string.
     """
     if score >= 70:
-        return "#51CF66"
+        return "#27AE60"
     if score >= 40:
-        return "#FFA94D"
-    return "#FF6B6B"
+        return "#E67E22"
+    return "#E74C3C"
 
 
 def create_income_vs_expense_bar(
@@ -263,6 +291,9 @@ def create_income_vs_expense_bar(
         ...     Decimal("50000"), Decimal("35000")
         ... )
     """
+    savings = _to_float(income - expenses)
+    savings_color = "#2ECC71" if savings >= 0 else "#E74C3C"
+
     fig = go.Figure(
         data=[
             go.Bar(
@@ -270,23 +301,25 @@ def create_income_vs_expense_bar(
                 y=[
                     _to_float(income),
                     _to_float(expenses),
-                    _to_float(income - expenses),
+                    savings,
                 ],
-                marker_color=["#339AF0", "#FF6B6B", "#51CF66"],
+                marker_color=["#2980B9", "#E67E22", savings_color],
                 text=[
                     f"฿{_to_float(income):,.0f}",
                     f"฿{_to_float(expenses):,.0f}",
-                    f"฿{_to_float(income - expenses):,.0f}",
+                    f"฿{savings:,.0f}",
                 ],
                 textposition="outside",
+                textfont={"size": 14, "color": "#333333"},
             )
         ]
     )
     fig.update_layout(
-        title="รายได้ vs รายจ่าย (รายเดือน)",
-        yaxis={"title": "บาท"},
+        title={"text": "รายได้ vs รายจ่าย (รายเดือน)", "font": {"size": 18}},
+        yaxis={"title": "บาท", "gridcolor": "rgba(0,0,0,0.1)"},
         template=_detect_template(),
         margin={"t": 60, "b": 40, "l": 60, "r": 20},
         height=400,
+        plot_bgcolor="rgba(0,0,0,0)",
     )
     return fig

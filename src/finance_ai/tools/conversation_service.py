@@ -122,7 +122,7 @@ def get_recent_history_as_tuples(
         >>> # [("user", "คำนวณภาษี"), ("assistant", "ผล...")]
     """
     messages = _message_crud.get_recent_by_conversation(session, conversation_id, limit=limit)
-    return [(msg.role, msg.content) for msg in messages]
+    return [(msg.role, msg.content) for msg in messages if msg.content.strip()]
 
 
 def load_conversation_messages(
