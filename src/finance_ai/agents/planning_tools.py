@@ -24,6 +24,7 @@ def create_financial_goal(  # pylint: disable=too-many-arguments,too-many-positi
     goal_type: str,
     name: str,
     target_amount: str,
+    current_amount: str = "0",
     target_date: str = "",
     priority: str = "",
     user_id: Annotated[str, InjectedState("user_id")] = "",
@@ -32,12 +33,15 @@ def create_financial_goal(  # pylint: disable=too-many-arguments,too-many-positi
     """Create a new financial goal for the user.
 
     Use this tool when the user wants to set a savings or financial goal.
+    If the user already has some money saved toward this goal, set current_amount.
 
     Args:
         goal_type: Goal type key (savings, emergency_fund, retirement,
             home_purchase, education, investment, debt_payoff, travel).
         name: Goal name/description (e.g., "ออมเงินฉุกเฉิน").
         target_amount: Target amount in THB (e.g., "100000").
+        current_amount: Amount already saved toward this goal (default "0").
+            Set this when user says "มีเงินอยู่แล้ว X บาท".
         target_date: Optional target date in YYYY-MM-DD format.
         priority: Priority level 1-5 (default 3). 1=lowest, 5=highest.
         user_id: UUID of the user (injected from graph state).
@@ -47,6 +51,9 @@ def create_financial_goal(  # pylint: disable=too-many-arguments,too-many-positi
         Dict confirming the created goal with parsed values.
     """
     parsed_amount = parse_decimal_value(target_amount, "target_amount")
+    parsed_current = (
+        parse_decimal_value(current_amount, "current_amount") if current_amount else None
+    )
     parsed_date = parse_date_value(target_date, "target_date") if target_date else None
     parsed_priority = int(priority) if priority else DEFAULT_PRIORITY
     goal_type_label = GOAL_TYPES.get(goal_type.strip().lower(), goal_type)
@@ -59,6 +66,7 @@ def create_financial_goal(  # pylint: disable=too-many-arguments,too-many-positi
         parsed_amount,
         parsed_date,
         parsed_priority,
+        parsed_current,
     )
 
     return {
@@ -68,6 +76,7 @@ def create_financial_goal(  # pylint: disable=too-many-arguments,too-many-positi
         "goal_type_label": goal_type_label,
         "name": name,
         "target_amount": str(parsed_amount),
+        "current_amount": str(parsed_current) if parsed_current is not None else "0",
         "target_date": parsed_date.isoformat() if parsed_date else None,
         "priority": parsed_priority,
     }
@@ -81,6 +90,7 @@ def _persist_goal(  # pylint: disable=too-many-arguments,too-many-positional-arg
     target_amount: Any,
     target_date: Any,
     priority: int,
+    current_amount: Any = None,
 ) -> Any:
     """Save goal to database via the service layer.
 
@@ -92,12 +102,16 @@ def _persist_goal(  # pylint: disable=too-many-arguments,too-many-positional-arg
         target_amount: Target amount (Decimal).
         target_date: Target date or None.
         priority: Priority level.
+        current_amount: Amount already saved (Decimal), or None for 0.
 
     Returns:
         Created FinancialGoal instance.
     """
+    from decimal import Decimal  # noqa: PLC0415
+
     from finance_ai.tools.planning_service import create_goal  # noqa: PLC0415
 
+    initial = current_amount if current_amount is not None else Decimal("0")
     with get_tool_session(db_session_factory) as session:
         return create_goal(
             session,
@@ -107,6 +121,7 @@ def _persist_goal(  # pylint: disable=too-many-arguments,too-many-positional-arg
             target_amount,
             target_date,
             priority,
+            initial,
         )
 
 

@@ -122,7 +122,7 @@ def _assemble_report(
     Returns:
         Complete FinancialReport.
     """
-    overview = build_monthly_overview(data["income"], data["expense"])
+    overview = build_monthly_overview(data["income_monthly"], data["expense"])
     highlights = _generate_highlights(data, overview, recommendations)
 
     return FinancialReport(
@@ -157,8 +157,7 @@ def build_monthly_overview(
     Example:
         >>> overview = build_monthly_overview(income, expense)
     """
-    annual_income = Decimal(str(income_data.get("total_income", "0")))
-    monthly_income = _safe_divide(annual_income, MONTHS_PER_YEAR)
+    monthly_income = Decimal(str(income_data.get("total_income", "0")))
     total_expenses = Decimal(str(expense_data.get("total_amount", "0")))
     net_savings = monthly_income - total_expenses
     savings_rate = _safe_divide(net_savings, monthly_income)
@@ -309,9 +308,9 @@ def build_tax_status(
     return TaxStatusSection(
         status=str(tax_data.get("status", "not_filed")),
         gross_income=Decimal(str(tax_data.get("gross_income", "0"))),
-        total_deductions=Decimal(str(tax_data.get("deductions", "0"))),
-        total_tax=Decimal(str(tax_data.get("tax_due", "0"))),
-        effective_rate=Decimal(str(tax_data.get("effective_rate", "0"))),
+        total_deductions=Decimal(str(tax_data.get("total_deductions", "0"))),
+        total_tax=Decimal(str(tax_data.get("total_tax", "0"))),
+        effective_rate=Decimal(str(tax_data.get("effective_tax_rate", "0"))),
         tax_year=year,
     )
 

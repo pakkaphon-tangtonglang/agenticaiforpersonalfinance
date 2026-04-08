@@ -11,7 +11,7 @@ from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from finance_ai.agents.prompts import REPORT_AGENT_SYSTEM_PROMPT
+from finance_ai.agents.prompts import REPORT_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.report_tools import (
     generate_financial_report_tool,
@@ -75,7 +75,9 @@ def create_llm_node(
         Returns:
             Dict with updated messages list.
         """
-        messages = [SystemMessage(content=REPORT_AGENT_SYSTEM_PROMPT)] + state["messages"]
+        messages = [SystemMessage(content=get_date_context() + REPORT_AGENT_SYSTEM_PROMPT)] + state[
+            "messages"
+        ]
         response = model_with_tools.invoke(messages)
         return {"messages": [response]}
 

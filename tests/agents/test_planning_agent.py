@@ -71,7 +71,7 @@ class TestCreateLlmNode:
         node(state)
 
         call_args = mock_chat_model.invoke.call_args[0][0]
-        assert call_args[0].content == PLANNING_AGENT_SYSTEM_PROMPT
+        assert PLANNING_AGENT_SYSTEM_PROMPT in call_args[0].content
         assert call_args[1].content == "อยากออมเงิน 100,000 บาท"
 
     def test_returns_message_list(self, mock_chat_model: MagicMock) -> None:

@@ -54,15 +54,15 @@ class TestScoreColor:
 
     def test_high_score_green(self) -> None:
         """Score >= 70 returns green."""
-        assert _score_color(85) == "#51CF66"
+        assert _score_color(85) == "#27AE60"
 
     def test_medium_score_orange(self) -> None:
         """Score 40-69 returns orange."""
-        assert _score_color(55) == "#FFA94D"
+        assert _score_color(55) == "#E67E22"
 
     def test_low_score_red(self) -> None:
         """Score < 40 returns red."""
-        assert _score_color(20) == "#FF6B6B"
+        assert _score_color(20) == "#E74C3C"
 
 
 class TestCreateExpensePieChart:

@@ -94,10 +94,9 @@ def _calculate_dividend_yield(info: dict[str, Any]) -> Decimal:
 
 
 def fetch_stock_dashboard(symbol: str) -> StockDashboardResult:
-    """Fetch comprehensive stock/asset overview via SERP API.
+    """Fetch comprehensive stock/asset overview via yfinance (with SERP fallback).
 
-    Searches Google for stock information and extracts data from
-    the knowledge panel (name, price, P/E, market cap, etc.).
+    Tries yfinance first for real-time data, falls back to SERP API.
 
     Args:
         symbol: Ticker symbol (e.g., "PTT.BK", "AAPL", "BTC-USD").
@@ -109,6 +108,78 @@ def fetch_stock_dashboard(symbol: str) -> StockDashboardResult:
         >>> result = fetch_stock_dashboard("PTT.BK")
         >>> result.name
         'PTT Public Company Limited'
+    """
+    result = _fetch_dashboard_from_yfinance(symbol)
+    if result.current_price is not None:
+        return result
+    return _fetch_dashboard_from_serp(symbol)
+
+
+def _yfinance_dividend_yield(info: dict[str, Any]) -> Decimal:
+    """Convert yfinance dividendYield (fraction) to percentage Decimal.
+
+    yfinance returns 0.035 for 3.5% yield; we store as 3.50.
+
+    Args:
+        info: yfinance ticker info dict.
+
+    Returns:
+        Dividend yield as percentage (e.g., Decimal('3.50')), or Decimal('0').
+    """
+    raw = info.get("dividendYield")
+    if raw is None:
+        return Decimal("0")
+    converted = _to_decimal(raw)
+    if converted is None:
+        return Decimal("0")
+    return (converted * 100).quantize(Decimal("0.01"))
+
+
+def _fetch_dashboard_from_yfinance(symbol: str) -> StockDashboardResult:
+    """Fetch stock dashboard from yfinance.
+
+    Args:
+        symbol: Ticker symbol (e.g., "PTT.BK", "AAPL").
+
+    Returns:
+        StockDashboardResult populated from yfinance, or empty on failure.
+    """
+    try:
+        import yfinance as yf  # noqa: PLC0415
+
+        ticker = yf.Ticker(symbol)
+        info = ticker.info
+        if not info:
+            return StockDashboardResult()
+
+        price = _to_decimal(
+            info.get("currentPrice") or info.get("regularMarketPrice") or info.get("price")
+        )
+        return StockDashboardResult(
+            name=info.get("longName") or info.get("shortName"),
+            current_price=price,
+            currency=info.get("currency"),
+            fifty_two_week_high=_to_decimal(info.get("fiftyTwoWeekHigh")),
+            fifty_two_week_low=_to_decimal(info.get("fiftyTwoWeekLow")),
+            pe_ratio=_to_decimal(info.get("trailingPE")),
+            market_cap=_to_decimal(info.get("marketCap")),
+            dividend_yield_percent=_yfinance_dividend_yield(info),
+            analyst_target_price=_to_decimal(info.get("targetMeanPrice")),
+            recommendation=info.get("recommendationKey"),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("yfinance fetch failed for %s: %s", symbol, exc)
+        return StockDashboardResult()
+
+
+def _fetch_dashboard_from_serp(symbol: str) -> StockDashboardResult:
+    """Fetch stock dashboard from SERP API (Google knowledge panel).
+
+    Args:
+        symbol: Ticker symbol.
+
+    Returns:
+        StockDashboardResult populated from SERP, or empty on failure.
     """
     query = f"{symbol} stock"
     data = _serp_request(query)

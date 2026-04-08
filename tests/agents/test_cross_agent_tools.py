@@ -16,7 +16,6 @@ from finance_ai.agents.cross_agent_tools import (
     get_expense_summary_cross,
     get_goals_summary_cross,
     get_income_summary_cross,
-    get_portfolio_summary_cross,
     get_tax_summary_cross,
 )
 from finance_ai.database.crud.income_crud import IncomeCRUD
@@ -27,18 +26,18 @@ from finance_ai.database.models.user import User
 class TestToolLists:
     """Tests for pre-grouped tool lists."""
 
-    def test_tax_cross_tools_has_portfolio_and_expense(self) -> None:
-        """Tax agent should have portfolio and expense cross-tools."""
+    def test_tax_cross_tools_has_expense(self) -> None:
+        """Tax agent should have expense cross-tool."""
         tool_names = [t.name for t in TAX_CROSS_TOOLS]
-        assert "get_portfolio_summary_cross" in tool_names
         assert "get_expense_summary_cross" in tool_names
+        assert "get_portfolio_summary_cross" not in tool_names
 
-    def test_planning_cross_tools_has_three_tools(self) -> None:
-        """Planning agent should have expense, income, portfolio tools."""
+    def test_planning_cross_tools_has_expense_and_income(self) -> None:
+        """Planning agent should have expense and income tools."""
         tool_names = [t.name for t in PLANNING_CROSS_TOOLS]
         assert "get_expense_summary_cross" in tool_names
         assert "get_income_summary_cross" in tool_names
-        assert "get_portfolio_summary_cross" in tool_names
+        assert "get_portfolio_summary_cross" not in tool_names
 
     def test_expense_cross_tools_has_goals(self) -> None:
         """Expense agent should have goals cross-tool."""
@@ -114,25 +113,6 @@ class TestGetExpenseSummaryCross:
         )
         assert result["total_amount"] == "200.00"
         assert result["transaction_count"] == 1
-
-
-class TestGetPortfolioSummaryCross:
-    """Tests for get_portfolio_summary_cross tool."""
-
-    def test_returns_empty_portfolio(
-        self,
-        sample_user: User,
-        db_session_factory: Callable[[], Session],
-    ) -> None:
-        """No holdings returns zero values."""
-        result = get_portfolio_summary_cross.invoke(
-            {
-                "user_id": sample_user.id,
-                "db_session_factory": db_session_factory,
-            },
-        )
-        assert result["domain"] == "investment"
-        assert result["holding_count"] == 0
 
 
 class TestGetGoalsSummaryCross:

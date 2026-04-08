@@ -12,8 +12,8 @@ from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from finance_ai.agents.market_data_tools import get_finance_news
-from finance_ai.agents.prompts import RECOMMENDATION_AGENT_SYSTEM_PROMPT
+from finance_ai.agents.market_data_tools import search_finance_news
+from finance_ai.agents.prompts import RECOMMENDATION_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.psychology_tools import detect_psychological_cues
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.recommendation_tools import (
@@ -29,7 +29,7 @@ RECOMMENDATION_AGENT_TOOLS = [
     generate_financial_recommendations,
     get_financial_health_score,
     search_finance_knowledge,
-    get_finance_news,
+    search_finance_news,
     detect_psychological_cues,
 ]
 
@@ -80,7 +80,9 @@ def create_llm_node(
         Returns:
             Dict with updated messages list.
         """
-        messages = [SystemMessage(content=RECOMMENDATION_AGENT_SYSTEM_PROMPT)] + state["messages"]
+        messages = [
+            SystemMessage(content=get_date_context() + RECOMMENDATION_AGENT_SYSTEM_PROMPT)
+        ] + state["messages"]
         response = model_with_tools.invoke(messages)
         return {"messages": [response]}
 

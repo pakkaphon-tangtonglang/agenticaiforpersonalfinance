@@ -40,7 +40,6 @@ from finance_ai.ui.app_constants import (  # noqa: E402
 )
 from finance_ai.ui.dashboard import render_dashboard  # noqa: E402
 from finance_ai.ui.evaluation_view import render_evaluation_view  # noqa: E402
-from finance_ai.tools.background_scheduler import start_scheduler  # noqa: E402
 from finance_ai.ui.schedule_view import render_schedule_view  # noqa: E402
 from finance_ai.ui.upload import render_upload_view  # noqa: E402
 
@@ -58,14 +57,6 @@ def get_session_factory():  # type: ignore[no-untyped-def]
     """Create and cache the database session factory."""
     engine = create_database_engine()
     return create_session_factory(engine)
-
-
-@st.cache_resource
-def _init_background_scheduler():  # type: ignore[no-untyped-def]
-    """Start the background scheduler once and load active schedules."""
-    factory = get_session_factory()
-    count = start_scheduler(factory)
-    return count
 
 
 # ──────────────────── Session & Conversation ──────────────────────
@@ -117,7 +108,9 @@ def init_session_state() -> None:
     if "messages" not in st.session_state:
         st.session_state.messages = []
     if "user_id" not in st.session_state:
-        st.session_state.user_id = uuid.uuid4().hex
+        stored_id = st.query_params.get("uid")
+        st.session_state.user_id = stored_id if stored_id else uuid.uuid4().hex
+        st.query_params["uid"] = st.session_state.user_id
         _ensure_user(st.session_state.user_id)
     if "conversation_id" not in st.session_state:
         _load_or_create_conv()
@@ -213,7 +206,7 @@ def _render_welcome() -> None:
     _, center, _ = st.columns([1, 2, 1])
     with center:
         st.markdown(
-            "### 🤖 สวัสดีครับ! ยินดีต้อนรับสู่ Personal Finance AI\n" "พิมพ์คำถาม หรือเลือกตัวอย่างจากเมนูด้านซ้าย"
+            "### ยินดีต้อนรับสู่ AGENTIC AI FOR PERSONAL FINANCE.\n" "พิมพ์คำถาม หรือเลือกตัวอย่างจากเมนูด้านซ้าย"
         )
     cols = st.columns(3) + st.columns(3)
     for col, card in zip(cols, FEATURE_CARDS):
@@ -279,8 +272,11 @@ def process_query(query: str) -> None:
 
     intent, response = _stream_response(query, chat_history)
 
-    _save_assistant_msg(response, intent)
-    st.session_state.messages.append({"role": "assistant", "content": response, "intent": intent})
+    if response.strip():
+        _save_assistant_msg(response, intent)
+        st.session_state.messages.append(
+            {"role": "assistant", "content": response, "intent": intent}
+        )
 
 
 def _stream_response(
@@ -324,14 +320,14 @@ def _stream_response(
 def main() -> None:
     """Main entry point for the Streamlit app."""
     st.set_page_config(
-        page_title="Personal Finance AI",
+        page_title="AGENTIC AI FOR PERSONAL FINANCE.",
         page_icon="💰",
         layout="wide",
     )
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
     st.markdown(
         '<div class="main-header">'
-        "<h1>💰Personal Finance AI</h1>"
+        "<h1>💰AGENTIC AI FOR PERSONAL FINANCE.</h1>"
         "<p>ผู้ช่วยการเงินส่วนบุคคลอัจฉริยะ"
         " — ภาษี · ค่าใช้จ่าย · การลงทุน · วางแผน</p>"
         "</div>",
@@ -339,13 +335,12 @@ def main() -> None:
     )
 
     init_session_state()
-    _init_background_scheduler()
     render_sidebar()
 
     user_input = st.chat_input("💬 พิมพ์คำถามของคุณที่นี่...")
 
-    tab_chat, tab_dashboard, tab_schedule, tab_upload, tab_eval = st.tabs(
-        ["💬 แชท", "📊 แดชบอร์ด", "🔔 แจ้งเตือนสินทรัพย์", "📂 นำเข้าข้อมูล", "🔬 ประเมินระบบ"]
+    tab_chat, tab_schedule, tab_dashboard, tab_upload, tab_eval = st.tabs(
+        ["💬 แชท", "🔔 ค้นหาข่าวสาร และราคาสินทรัพย์", "📊 แดชบอร์ด", "📂 นำเข้าข้อมูล", "🔬 ประเมินระบบ"]
     )
 
     with tab_chat:
@@ -363,7 +358,7 @@ def main() -> None:
         render_schedule_view(st.session_state.user_id, get_session_factory(), get_chat_model())
 
     with tab_upload:
-        render_upload_view(st.session_state.user_id, get_session_factory())
+        render_upload_view(st.session_state.user_id, get_session_factory(), get_chat_model())
 
     with tab_eval:
         render_evaluation_view(get_chat_model(), get_session_factory())

@@ -55,8 +55,8 @@ class TestBuildMonthlyOverview:
     """Tests for build_monthly_overview function."""
 
     def test_normal_case(self) -> None:
-        """Should calculate monthly income, savings, and rate."""
-        income = {"total_income": "600000"}
+        """Should use monthly income directly without dividing by 12."""
+        income = {"total_income": "50000"}
         expense = {"total_amount": "35000"}
         result = build_monthly_overview(income, expense)
 
@@ -188,9 +188,9 @@ class TestBuildTaxStatus:
         data = {
             "status": "filed",
             "gross_income": "600000",
-            "deductions": "160000",
-            "tax_due": "29000",
-            "effective_rate": "4.83",
+            "total_deductions": "160000",
+            "total_tax": "29000",
+            "effective_tax_rate": "4.83",
         }
         result = build_tax_status(data, 2026)
 
@@ -299,6 +299,7 @@ class TestGenerateFinancialReport:
         """Should assemble a complete FinancialReport."""
         mock_gather.return_value = {
             "income": {"total_income": "600000"},
+            "income_monthly": {"total_income": "50000"},
             "expense": {
                 "total_amount": "35000",
                 "transaction_count": 10,
@@ -320,9 +321,9 @@ class TestGenerateFinancialReport:
             "tax": {
                 "status": "filed",
                 "gross_income": "600000",
-                "deductions": "160000",
-                "tax_due": "29000",
-                "effective_rate": "4.83",
+                "total_deductions": "160000",
+                "total_tax": "29000",
+                "effective_tax_rate": "4.83",
             },
         }
         mock_rec_report = MagicMock()
@@ -347,6 +348,7 @@ class TestGenerateFinancialReport:
         """Should handle all-empty data gracefully."""
         mock_gather.return_value = {
             "income": {},
+            "income_monthly": {},
             "expense": {},
             "portfolio": {},
             "goals": {},

@@ -99,6 +99,7 @@ def gather_all_financial_data(
         get_expense_summary,
         get_goals_summary,
         get_income_summary,
+        get_monthly_income_summary,
         get_portfolio_summary,
         get_tax_filing_summary,
     )
@@ -108,6 +109,7 @@ def gather_all_financial_data(
         "portfolio": get_portfolio_summary(session, user_id),
         "goals": get_goals_summary(session, user_id),
         "income": get_income_summary(session, user_id, year),
+        "income_monthly": get_monthly_income_summary(session, user_id, year, month),
         "tax": get_tax_filing_summary(session, user_id, year),
     }
 
@@ -152,10 +154,9 @@ def _check_overspending(
     Returns:
         List with overspending recommendation if triggered.
     """
-    monthly_income = total_income / 12
-    if monthly_income <= 0:
+    if total_income <= 0:
         return []
-    ratio = total_expense / monthly_income
+    ratio = total_expense / total_income
     if ratio > OVERSPENDING_THRESHOLD:
         pct = int(ratio * 100)
         return [
@@ -168,7 +169,7 @@ def _check_overspending(
                     "ทบทวนรายจ่ายที่ไม่จำเป็น",
                     "ตั้งงบประมาณรายเดือน",
                 ],
-                estimated_impact=f"ลดรายจ่ายเพื่อเพิ่มเงินออม ~{total_expense - monthly_income * OVERSPENDING_THRESHOLD:.0f} บาท/เดือน",
+                estimated_impact=f"ลดรายจ่ายเพื่อเพิ่มเงินออม ~{total_expense - total_income * OVERSPENDING_THRESHOLD:.0f} บาท/เดือน",
             )
         ]
     return []
@@ -462,11 +463,8 @@ def _check_savings_rate(
     """
     if total_income <= 0:
         return []
-    monthly_income = total_income / 12
-    savings = monthly_income - total_expense
-    if monthly_income <= 0:
-        return []
-    savings_rate = savings / monthly_income
+    savings = total_income - total_expense
+    savings_rate = savings / total_income
     if savings_rate < SAVINGS_RATE_WARNING_THRESHOLD:
         pct = int(savings_rate * 100)
         return [
@@ -476,7 +474,7 @@ def _check_savings_rate(
                 title="อัตราการออมต่ำ",
                 description=f"อัตราการออม {pct}% ของรายได้" f" (แนะนำอย่างน้อย 20%)",
                 action_items=["ตั้งเป้าออมอย่างน้อย 20% ของรายได้"],
-                estimated_impact=f"เพิ่มเงินออม ~{monthly_income * SAVINGS_RATE_WARNING_THRESHOLD - savings:.0f} บาท/เดือน",
+                estimated_impact=f"เพิ่มเงินออม ~{total_income * SAVINGS_RATE_WARNING_THRESHOLD - savings:.0f} บาท/เดือน",
             )
         ]
     return []
@@ -577,11 +575,13 @@ def _run_all_analyses(
         Combined list of all recommendations.
     """
     recommendations: list[Recommendation] = []
-    recommendations.extend(analyze_expense_patterns(data["expense"], data["income"]))
+    recommendations.extend(analyze_expense_patterns(data["expense"], data["income_monthly"]))
     recommendations.extend(analyze_tax_optimization(data["tax"], data["income"]))
     recommendations.extend(analyze_investment_risk(data["portfolio"]))
     recommendations.extend(analyze_goal_progress(data["goals"]))
-    recommendations.extend(analyze_savings_rate(data["income"], data["expense"], data["goals"]))
+    recommendations.extend(
+        analyze_savings_rate(data["income_monthly"], data["expense"], data["goals"])
+    )
     return recommendations
 
 

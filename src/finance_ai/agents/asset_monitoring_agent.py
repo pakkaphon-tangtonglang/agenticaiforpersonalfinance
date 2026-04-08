@@ -1,7 +1,13 @@
-"""LangGraph Asset Monitoring Agent for portfolio tracking and asset news.
+"""LangGraph Asset Monitoring Agent for news tracking and asset price lookup.
 
-Uses a ReAct-style graph: LLM reasons about the query, calls asset monitoring tools
+Uses a ReAct-style graph: LLM reasons about the query, calls tools
 when needed, then formats the result in Thai for the user.
+
+Tools (4):
+  - search_finance_news   : News Search Tool
+  - get_stock_price       : Stock Price Tool
+  - search_finance_knowledge : RAG News Summarization Tool
+  - manage_watchlist      : Asset Tracking Database Tool
 """
 
 from typing import Any
@@ -11,46 +17,19 @@ from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
-from finance_ai.agents.cross_agent_tools import ASSET_MONITORING_CROSS_TOOLS
-from finance_ai.agents.asset_monitoring_tools import (
-    add_holding,
-    create_asset_schedule,
-    delete_asset_schedule,
-    get_asset_notifications,
-    get_investment_advice,
-    import_csv,
-    lookup_holding,
-    refresh_prices,
-    view_asset_schedules,
-    view_portfolio,
-)
+from finance_ai.agents.asset_monitoring_tools import manage_watchlist
 from finance_ai.agents.market_data_tools import MARKET_DATA_TOOLS
-from finance_ai.agents.prompts import ASSET_MONITORING_AGENT_SYSTEM_PROMPT
-from finance_ai.agents.psychology_tools import detect_psychological_cues
+from finance_ai.agents.prompts import ASSET_MONITORING_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.schemas import AssetMonitoringAgentState
 from finance_ai.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-ASSET_MONITORING_TOOLS = (
-    [
-        view_portfolio,
-        add_holding,
-        import_csv,
-        refresh_prices,
-        lookup_holding,
-        get_investment_advice,
-        create_asset_schedule,
-        view_asset_schedules,
-        delete_asset_schedule,
-        get_asset_notifications,
-        search_finance_knowledge,
-        detect_psychological_cues,
-    ]
-    + ASSET_MONITORING_CROSS_TOOLS
-    + MARKET_DATA_TOOLS
-)
+ASSET_MONITORING_TOOLS = [
+    manage_watchlist,
+    search_finance_knowledge,
+] + MARKET_DATA_TOOLS  # [get_stock_price, search_finance_news]
 
 
 def should_continue(state: AssetMonitoringAgentState) -> str:
@@ -63,7 +42,7 @@ def should_continue(state: AssetMonitoringAgentState) -> str:
         "tools" if the last message has tool_calls, "end" otherwise.
 
     Example:
-        >>> should_continue({"messages": [msg], "investment_result": None, "user_id": ""})
+        >>> should_continue({"messages": [msg], "user_id": ""})
         'end'
     """
     last_message = state["messages"][-1]
@@ -76,8 +55,6 @@ def create_llm_node(
     chat_model: BaseChatModel,
 ) -> Any:
     """Create the LLM reasoning node for the asset monitoring agent.
-
-    Binds investment tools to the model and prepends the system prompt on each call.
 
     Args:
         chat_model: LangChain ChatModel to use.
@@ -99,7 +76,9 @@ def create_llm_node(
         Returns:
             Dict with updated messages list.
         """
-        messages = [SystemMessage(content=ASSET_MONITORING_AGENT_SYSTEM_PROMPT)] + state["messages"]
+        messages = [
+            SystemMessage(content=get_date_context() + ASSET_MONITORING_AGENT_SYSTEM_PROMPT)
+        ] + state["messages"]
         response = model_with_tools.invoke(messages)
         return {"messages": [response]}
 
@@ -122,7 +101,7 @@ def build_asset_monitoring_agent_graph(
     Example:
         >>> graph = build_asset_monitoring_agent_graph()
         >>> result = graph.invoke({
-        ...     "messages": [("user", "ดูพอร์ตของฉัน")],
+        ...     "messages": [("user", "ข่าว PTT.BK ล่าสุด")],
         ...     "user_id": "abc-123",
         ... })
     """
