@@ -1,14 +1,14 @@
 # Pre-commit hooks configuration
-# Install: pre-commit install
-# Run manually: pre-commit run --all-files
+# Install: uv run pre-commit install
+# Run manually: uv run pre-commit run --all-files
 
 default_language_version:
-  python: python3.13
+  python: python3.12
 
 repos:
   # Code formatting
   - repo: https://github.com/psf/black
-    rev: 24.10.0
+    rev: 25.1.0
     hooks:
       - id: black
         name: Format code with black
@@ -29,10 +29,15 @@ repos:
           - httpx
           - pytest
           - google-genai
+          - langchain
           - langchain-core
           - langchain-google-genai
           - langgraph
           - yfinance
+          - chromadb
+          - apscheduler
+          - plotly
+          - pythainlp
 
   # Type checking
   - repo: https://github.com/pre-commit/mirrors-mypy
@@ -44,10 +49,12 @@ repos:
           - pydantic
           - pydantic-settings
           - types-requests
+          - types-pyyaml
           - httpx
           - pytest
           - google-genai
           - sqlalchemy
+          - langchain
           - langchain-core
           - langgraph
           - alembic
@@ -92,5 +99,5 @@ ci:
   autofix_prs: true
   autoupdate_commit_msg: "[pre-commit.ci] pre-commit autoupdate"
   autoupdate_schedule: weekly
-  skip: [pylint]  # Skip pylint in CI (too slow)
+  skip: [pylint]
   submodules: false

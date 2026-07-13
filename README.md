@@ -3,7 +3,7 @@
 > Multi-Agent AI system for personal finance management designed for Thai users
 
 [![CI](https://img.shields.io/github/actions/workflow/status/yourusername/personal-finance-ai/ci.yml?branch=main)](./.github/workflows/ci.yml)
-[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
 ## What is This?
@@ -30,14 +30,6 @@ Powered by LangGraph with a Router + 6 specialized agents:
 - **Recommendation Agent** - Proactive financial recommendations and health scoring
 - **Report Agent** - Comprehensive financial reports with PDF/CSV export
 
-### MCP Tool Layer
-Agent tools are exposed as MCP (Model Context Protocol) servers:
-
-- **knowledge** - RAG search over Thai finance knowledge base (ChromaDB)
-- **market_data** - Stock prices and finance news (Bright Data / yfinance)
-- **tax_calc** - Stateless tax and saving plan calculators
-- **finance_db** - User-scoped database operations (expenses, goals, reports)
-
 ### RAG Knowledge Base
 ChromaDB vector store with 16+ Thai finance documents covering:
 - Personal income tax, deductions, filing guides, VAT/withholding
@@ -49,8 +41,8 @@ ChromaDB vector store with 16+ Thai finance documents covering:
 ## Quick Start
 
 ### Prerequisites
-- Python 3.11 or higher
-- Poetry (for dependency management)
+- Python 3.12 or higher
+- [uv](https://docs.astral.sh/uv/) (for dependency management)
 - Google Gemini API key ([Get one here](https://aistudio.google.com/apikey))
   - Or use Ollama / OpenRouter as alternative LLM providers
 
@@ -86,8 +78,6 @@ make run
 
 The API will be available at `http://localhost:8000`
 Interactive API docs at `http://localhost:8000/docs`
-
-MCP servers are mounted at `/mcp/*` endpoints for external MCP clients.
 
 ## Usage Examples
 
@@ -137,12 +127,7 @@ personal-finance-ai/
 │   │   ├── llm_factory.py        # LLM provider factory
 │   │   ├── stream_utils.py       # Streaming agent responses
 │   │   └── prompts.py            # System prompts
-│   ├── mcp/                # MCP server implementations
-│   │   ├── knowledge_server.py   # RAG search server
-│   │   ├── market_data_server.py # Stock price + news server
-│   │   ├── tax_calc_server.py    # Stateless calculators
-│   │   └── finance_db_server.py  # User-scoped DB operations
-│   ├── tools/              # Service layer (business logic)
+│   ├── tools/              # Service layer (business logic + tools)
 │   ├── rag/                # ChromaDB vector store + embeddings
 │   ├── database/           # SQLAlchemy models + CRUD + Alembic
 │   ├── evaluation/         # Evaluation framework (6 dimensions)
@@ -232,7 +217,6 @@ The system supports multiple LLM providers (configured in `.env`):
 - [x] Proactive recommendations + financial health scoring
 
 ### In Progress
-- [ ] MCP tool layer (agents consume tools via MCP servers)
 - [ ] FastAPI backend (replacing Streamlit)
 - [ ] Dependency upgrades (LangGraph 1.x, LangChain 1.x, google-genai 2.x)
 
@@ -265,7 +249,6 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 
 - Built with [LangGraph](https://github.com/langchain-ai/langgraph) for agent orchestration
 - Powered by [Google Gemini](https://ai.google.dev/) for LLM capabilities
-- Tools exposed via [MCP](https://modelcontextprotocol.io/) (Model Context Protocol)
 - RAG with [ChromaDB](https://www.trychroma.com/)
 - Market data from [Bright Data](https://brightdata.com/) and yfinance
 - Tax data from [Thai Revenue Department](https://www.rd.go.th/)

@@ -1,85 +1,88 @@
-[tool.poetry]
+[project]
 name = "finance-ai"
 version = "0.1.0"
 description = "Multi-Agent Personal Finance AI System for Thai users"
-authors = ["Your Name <your.email@example.com>"]
-license = "MIT"
 readme = "README.md"
-homepage = "https://github.com/yourusername/personal-finance-ai"
-repository = "https://github.com/yourusername/personal-finance-ai"
+license = "MIT"
+requires-python = ">=3.12"
 keywords = ["finance", "ai", "tax", "investment", "thailand"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
-    "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
-packages = [{include = "finance_ai", from = "src"}]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-# LLM Support (Google Gemini + OLLAMA/THALLE + OpenRouter)
-google-genai = "^2.0.0"
-# Agent Framework
-langchain = "^1.0.0"
-langchain-google-genai = "^4.0.0"
-langgraph = "^1.0.0"
-# MCP (Model Context Protocol)
-mcp = "^1.0.0"
-langchain-mcp-adapters = "^0.1.0"
-# API Framework
-fastapi = "^0.139.0"
-uvicorn = {extras = ["standard"], version = "^0.34.0"}
-# Database
-sqlalchemy = "^2.0.36"
-alembic = "^1.14.2"
-# Data Validation
-pydantic = "^2.10.5"
-pydantic-settings = "^2.7.1"
-# RAG & Embeddings
-chromadb = "^1.5.0"
-langchain-text-splitters = "^1.0.0"
-langchain-chroma = "^1.0.0"
-# sentence-transformers = "^3.4.1"  # Optional: install for local embeddings
-# Scheduling
-apscheduler = "^3.10.0"
-# Visualization / Export (non-Streamlit)
-plotly = ">=6.0"
-fpdf2 = ">=2.8"
-openpyxl = ">=3.1"
-# Utilities
-python-dotenv = "^1.0.1"
-python-multipart = "^0.0.20"
-httpx = "^0.28.1"
-# Thai language support
-pythainlp = "^5.0.6"
-pyyaml = "^6.0.3"
+dependencies = [
+    # LLM Support (Google Gemini + Ollama + OpenRouter)
+    "google-genai>=2.0.0",
+    # Agent Framework
+    "langchain>=1.0.0",
+    "langchain-google-genai>=4.0.0",
+    "langgraph>=1.0.0",
+    # API Framework
+    "fastapi>=0.139.0",
+    "uvicorn[standard]>=0.34.0",
+    # Database
+    "sqlalchemy>=2.0.36",
+    "alembic>=1.14.2",
+    # Data Validation
+    "pydantic>=2.10.5",
+    "pydantic-settings>=2.7.1",
+    # RAG & Embeddings
+    "chromadb>=1.5.0",
+    "langchain-text-splitters>=1.0.0",
+    "langchain-chroma>=1.0.0",
+    # Scheduling
+    "apscheduler>=3.10.0",
+    # Market Data
+    "yfinance>=0.2.40",
+    # Visualization / Export
+    "plotly>=6.0",
+    "fpdf2>=2.8",
+    "openpyxl>=3.1",
+    # Utilities
+    "python-dotenv>=1.0.1",
+    "python-multipart>=0.0.20",
+    "httpx>=0.28.1",
+    # Thai language support
+    "pythainlp>=5.0.6",
+    "pyyaml>=6.0.3",
+]
 
-[tool.poetry.group.dev.dependencies]
-# Testing
-pytest = "^8.3.5"
-pytest-cov = "^6.0.0"
-pytest-asyncio = "^0.25.2"
-pytest-mock = "^3.14.0"
-responses = "^0.25.4"
-# Code Quality
-black = "^24.10.0"
-pylint = "^3.3.4"
-mypy = "^1.15.0"
-# Pre-commit
-pre-commit = "^4.0.1"
-# Type stubs
-types-requests = "^2.32.0.20241229"
-# Development utilities
-ipython = "^8.31.0"
-rich = "^13.9.4"
-types-pyyaml = "^6.0.12.20250915"
+[project.optional-dependencies]
+ollama = ["langchain-ollama>=0.3.0"]
+openrouter = ["langchain-openai>=0.3.0"]
+
+[dependency-groups]
+dev = [
+    # Testing
+    "pytest>=8.3.5",
+    "pytest-cov>=6.0.0",
+    "pytest-asyncio>=0.25.2",
+    "pytest-mock>=3.14.0",
+    "responses>=0.25.4",
+    # Code Quality
+    "black>=25.0.0",
+    "pylint>=3.3.4",
+    "mypy>=1.15.0",
+    # Pre-commit
+    "pre-commit>=4.0.1",
+    # Type stubs
+    "types-requests>=2.32.0",
+    "types-pyyaml>=6.0.12",
+    # Development utilities
+    "ipython>=8.31.0",
+    "rich>=13.9.4",
+]
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/finance_ai"]
 
 # =============================================================================
 # Tool Configurations
@@ -87,11 +90,10 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 100
-target-version = ['py311', 'py312', 'py313']
+target-version = ['py312', 'py313']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
-  # directories
   \.eggs
   | \.git
   | \.hg
@@ -104,7 +106,7 @@ extend-exclude = '''
 '''
 
 [tool.pylint.main]
-jobs = 0  # Use all CPU cores
+jobs = 0
 fail-under = 9.0
 ignore = ["CVS", ".git", "__pycache__", ".mypy_cache", ".pytest_cache"]
 persistent = true
@@ -113,8 +115,8 @@ suggestion-mode = true
 [tool.pylint.messages_control]
 max-line-length = 100
 disable = [
-    "C0114",  # missing-module-docstring (we use package-level docs)
-    "R0903",  # too-few-public-methods (common for Pydantic models)
+    "C0114",
+    "R0903",
 ]
 
 [tool.pylint.format]
@@ -127,10 +129,10 @@ max-attributes = 10
 max-branches = 12
 max-locals = 15
 max-returns = 6
-max-statements = 20  # Enforces 20-line function limit
+max-statements = 20
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -156,12 +158,11 @@ module = [
     "langchain_google_genai.*",
     "langchain_ollama.*",
     "langchain_openai.*",
-    "langchain_mcp_adapters.*",
     "langgraph.*",
-    "mcp.*",
     "pythainlp.*",
     "google.genai.*",
     "google.generativeai.*",
+    "yfinance.*",
 ]
 ignore_missing_imports = true
 

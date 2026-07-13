@@ -1,11 +1,11 @@
 .PHONY: install dev run test coverage lint typecheck format check clean help
 
 # Variables
-PYTHON := poetry run python
-PYTEST := poetry run pytest
-BLACK := poetry run black
-PYLINT := poetry run pylint
-MYPY := poetry run mypy
+PYTHON := uv run python
+PYTEST := uv run pytest
+BLACK := uv run black
+PYLINT := uv run pylint
+MYPY := uv run mypy
 SRC_DIR := src/finance_ai
 TEST_DIR := tests
 
@@ -20,18 +20,18 @@ help:  ## Show this help message
 
 install:  ## Install dependencies
 	@echo "Installing dependencies..."
-	poetry install --with dev
+	uv sync --group dev
 	@echo "Setting up pre-commit hooks..."
-	poetry run pre-commit install
+	uv run pre-commit install
 	@echo "Done! Run 'make test' to verify setup."
 
 dev:  ## Run development server with auto-reload
 	@echo "Starting development server..."
-	poetry run uvicorn finance_ai.main:app --reload --host 0.0.0.0 --port 8000
+	uv run uvicorn finance_ai.main:app --reload --host 0.0.0.0 --port 8000
 
 run:  ## Run production server
 	@echo "Starting production server..."
-	poetry run uvicorn finance_ai.main:app --host 0.0.0.0 --port 8000 --workers 4
+	uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port 8000 --workers 4
 
 test:  ## Run tests with coverage
 	@echo "Running tests..."
