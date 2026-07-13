@@ -163,3 +163,31 @@ docs/internal/
 
 # Merge staging area
 need to merge/
+
+# Archive (local-only thesis/presentation artifacts)
+archive/
+
+# Thesis / presentation artifacts (local-only)
+*.docx
+presentation*.html
+3.xx.md
+presentation_script_*.md
+
+# Agent skills (local development tooling)
+.agents/
+
+# OS thumbnails
+Thumbs.db
+
+# Generated evaluation artifacts (datasets tracked, results are generated)
+data/evaluation/results/
+
+# Generated test data
+data/evaluation/*.csv
+data/evaluation/test_dataset.pdf
+
+# Windows copy duplicates
+* - Copy*
+
+# Agent skills lockfile (local dev tooling)
+skills-lock.json
