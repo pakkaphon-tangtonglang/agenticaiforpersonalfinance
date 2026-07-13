@@ -21,13 +21,13 @@ class TestCreateGoogleChatModel:
         """Creates ChatGoogleGenerativeAI with settings values."""
         settings = Settings(
             google_api_key="test-key",
-            google_model="gemini-pro",
+            google_model="gemini-2.5-flash",
             llm_temperature=0.5,
             llm_max_tokens=2000,
         )
         create_google_chat_model(settings)
         mock_cls.assert_called_once_with(
-            model="gemini-pro",
+            model="gemini-2.5-flash",
             google_api_key="test-key",
             temperature=0.5,
             max_output_tokens=2000,

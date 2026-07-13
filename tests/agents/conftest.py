@@ -76,7 +76,7 @@ def mock_google_settings() -> dict[str, Any]:
     return {
         "llm_provider": "google",
         "google_api_key": "test-api-key",
-        "google_model": "gemini-pro",
+        "google_model": "gemini-2.5-flash",
         "llm_temperature": 0.7,
         "llm_max_tokens": 4000,
     }

@@ -17,7 +17,7 @@ def test_get_llm_client_google() -> None:
     client = get_llm_client(settings)
 
     assert isinstance(client, GoogleClient)
-    assert client.model_name == "gemini-pro"
+    assert client.model_name == "gemini-2.5-flash"
 
 
 def test_get_llm_client_ollama() -> None:
