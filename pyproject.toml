@@ -20,15 +20,18 @@ packages = [{include = "finance_ai", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.11"
-# LLM Support (Google Gemini + OLLAMA/THALLE only)
-google-genai = "^0.2.0"
+# LLM Support (Google Gemini + OLLAMA/THALLE + OpenRouter)
+google-genai = "^2.0.0"
 # Agent Framework
-langchain = "^0.3.0"
-langchain-google-genai = "^2.0.0"
-langgraph = "^0.2.0"
+langchain = "^1.0.0"
+langchain-google-genai = "^4.0.0"
+langgraph = "^1.0.0"
+# MCP (Model Context Protocol)
+mcp = "^1.0.0"
+langchain-mcp-adapters = "^0.1.0"
 # API Framework
-fastapi = "^0.115.0"
-uvicorn = {extras = ["standard"], version = "^0.30.0"}
+fastapi = "^0.139.0"
+uvicorn = {extras = ["standard"], version = "^0.34.0"}
 # Database
 sqlalchemy = "^2.0.36"
 alembic = "^1.14.2"
@@ -37,14 +40,12 @@ pydantic = "^2.10.5"
 pydantic-settings = "^2.7.1"
 # RAG & Embeddings
 chromadb = "^1.5.0"
-langchain-text-splitters = "^0.3.0"
-langchain-chroma = "^0.2.0"
+langchain-text-splitters = "^1.0.0"
+langchain-chroma = "^1.0.0"
 # sentence-transformers = "^3.4.1"  # Optional: install for local embeddings
-# Market Data (Bright Data Web Scraper API via httpx — already listed below)
 # Scheduling
 apscheduler = "^3.10.0"
-# Demo UI
-streamlit = "^1.40.0"
+# Visualization / Export (non-Streamlit)
 plotly = ">=6.0"
 fpdf2 = ">=2.8"
 openpyxl = ">=3.1"
@@ -154,8 +155,12 @@ module = [
     "langchain_core.*",
     "langchain_google_genai.*",
     "langchain_ollama.*",
+    "langchain_openai.*",
+    "langchain_mcp_adapters.*",
     "langgraph.*",
+    "mcp.*",
     "pythainlp.*",
+    "google.genai.*",
     "google.generativeai.*",
 ]
 ignore_missing_imports = true

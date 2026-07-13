@@ -39,7 +39,7 @@ class Settings(BaseSettings):
 
     # Google Gemini Configuration
     google_api_key: Optional[str] = Field(default=None, description="Google API key")
-    google_model: str = Field(default="gemini-pro", description="Google model name")
+    google_model: str = Field(default="gemini-2.5-flash", description="Google model name")
 
     # OLLAMA Configuration (for THALLE and other local models)
     ollama_base_url: str = Field(default="http://localhost:11434", description="OLLAMA base URL")
@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     # OpenRouter Configuration (OpenAI-compatible API)
     openrouter_api_key: Optional[str] = Field(default=None, description="OpenRouter API key")
     openrouter_model: str = Field(
-        default="deepseek/deepseek-chat-v3-0324", description="OpenRouter model name"
+        default="deepseek/deepseek-chat-v3.1", description="OpenRouter model name"
     )
 
     # General LLM Settings
