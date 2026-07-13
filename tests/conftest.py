@@ -23,7 +23,7 @@ def mock_settings() -> Settings:
         log_level="DEBUG",
         llm_provider="google",
         google_api_key="test-key",
-        google_model="gemini-pro",
+        google_model="gemini-2.5-flash",
         ollama_base_url="http://localhost:11434",
         ollama_model="THALLE",
     )

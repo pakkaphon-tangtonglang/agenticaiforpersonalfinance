@@ -11,9 +11,9 @@ def test_google_client_initialization(mock_client_class: Mock) -> None:
     mock_client = Mock()
     mock_client_class.return_value = mock_client
 
-    client = GoogleClient(api_key="test-key", model="gemini-pro")
+    client = GoogleClient(api_key="test-key", model="gemini-2.5-flash")
 
-    assert client.model_name == "gemini-pro"
+    assert client.model_name == "gemini-2.5-flash"
     mock_client_class.assert_called_once_with(api_key="test-key")
 
 
@@ -44,7 +44,7 @@ def test_create_message_success(mock_client_class: Mock) -> None:
     response = client.create_message(messages)
 
     assert response["content"] == "Test response"
-    assert response["model"] == "gemini-pro"
+    assert response["model"] == "gemini-2.5-flash"
     assert response["usage"]["input_tokens"] == 10
     assert response["usage"]["output_tokens"] == 20
     assert response["usage"]["total_tokens"] == 30

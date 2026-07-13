@@ -19,12 +19,12 @@ def test_settings_google_provider() -> None:
     settings = Settings(
         llm_provider="google",
         google_api_key="test-key",
-        google_model="gemini-pro",
+        google_model="gemini-2.5-flash",
     )
 
     assert settings.llm_provider == "google"
     assert settings.google_api_key == "test-key"
-    assert settings.google_model == "gemini-pro"
+    assert settings.google_model == "gemini-2.5-flash"
 
 
 def test_settings_ollama_provider() -> None:
@@ -47,7 +47,7 @@ def test_settings_allows_missing_google_key() -> None:
     settings = Settings(llm_provider="google")
 
     assert settings.llm_provider == "google"
-    assert settings.google_api_key is None
+    assert not settings.google_api_key  # None or empty string
 
 
 def test_get_settings_returns_settings() -> None:

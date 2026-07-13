@@ -165,7 +165,7 @@ class TestClearCollection:
         """Test that clear_collection delegates to the underlying store."""
         store = FinanceVectorStore(embeddings=mock_embeddings)
         store.clear_collection()
-        mock_chroma.return_value.delete_collection.assert_called_once()
+        mock_chroma.return_value.reset_collection.assert_called_once()
 
 
 class TestGetDocumentCount:
