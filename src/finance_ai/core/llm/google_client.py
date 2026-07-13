@@ -21,13 +21,13 @@ logger = logging.getLogger(__name__)
 class GoogleClient(BaseLLMClient):
     """Google Gemini API client with retry and logging."""
 
-    def __init__(self, api_key: str, model: str = "gemini-pro") -> None:
+    def __init__(self, api_key: str, model: str = "gemini-2.5-flash") -> None:
         """
         Initialize Google Gemini client.
 
         Args:
             api_key: Google API key
-            model: Model name to use (default: gemini-pro)
+            model: Model name to use (default: gemini-2.5-flash)
 
         Raises:
             ValueError: If api_key is empty
