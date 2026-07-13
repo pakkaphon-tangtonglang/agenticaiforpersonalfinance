@@ -112,8 +112,8 @@ class TestGetRecentHistoryAsTuples:
 class TestLoadConversationMessages:
     """Tests for load_conversation_messages function."""
 
-    def test_returns_streamlit_format(self, test_session: Session, sample_user: User) -> None:
-        """Test that messages are in Streamlit-compatible format."""
+    def test_returns_message_dict_format(self, test_session: Session, sample_user: User) -> None:
+        """Test that messages are in dict format with role/content/intent."""
         conv_id = create_conversation(test_session, sample_user.id).id
         save_user_message(test_session, conv_id, "ถาม")
         save_assistant_message(test_session, conv_id, "ตอบ", "tax")

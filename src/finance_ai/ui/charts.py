@@ -39,19 +39,11 @@ def _to_float(value: Any) -> float:
 
 
 def _detect_template() -> str:
-    """Return Plotly template name matching Streamlit theme.
+    """Return Plotly template for charts.
 
     Returns:
-        'plotly_dark' or 'plotly_white'.
+        'plotly_white' (default light template).
     """
-    try:
-        import streamlit as st  # noqa: PLC0415
-
-        base = st.get_option("theme.base")
-        if base == "dark":
-            return "plotly_dark"
-    except Exception:  # noqa: BLE001
-        pass
     return "plotly_white"
 
 

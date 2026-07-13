@@ -1,7 +1,7 @@
 """Conversation history persistence service.
 
 Provides functions for saving, loading, and managing conversations.
-Service layer sits between the Streamlit UI and the CRUD layer.
+Service layer sits between the API layer and the CRUD layer.
 """
 
 from typing import Any, Optional
@@ -129,9 +129,9 @@ def load_conversation_messages(
     session: Session,
     conversation_id: str,
 ) -> list[dict[str, Any]]:
-    """Load all messages for Streamlit display.
+    """Load all messages for a conversation.
 
-    Returns format matching st.session_state.messages structure.
+    Returns format matching the API message dict structure.
 
     Args:
         session: Database session.
