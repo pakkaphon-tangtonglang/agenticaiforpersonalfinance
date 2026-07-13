@@ -1,49 +1,58 @@
-# 🤖 Personal Finance AI
+# Personal Finance AI
 
 > Multi-Agent AI system for personal finance management designed for Thai users
 
-[![Tests](https://img.shields.io/badge/tests-passing-brightgreen.svg)](./tests)
-[![Coverage](https://img.shields.io/badge/coverage-90%25-brightgreen.svg)](./htmlcov)
-[![Code Quality](https://img.shields.io/badge/code%20quality-9.5%2F10-brightgreen.svg)](./pyproject.toml)
+[![CI](https://img.shields.io/github/actions/workflow/status/yourusername/personal-finance-ai/ci.yml?branch=main)](./.github/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-## 🎯 What is This?
+## What is This?
 
 An intelligent personal finance assistant that helps you:
 
-- 💰 **Optimize Taxes** - Calculate Thai personal income tax with all deductions
-- 📊 **Track Investments** - Monitor stocks, mutual funds, and portfolio performance
-- 💡 **Get AI Recommendations** - Receive personalized financial advice
-- 📈 **Plan Ahead** - Set goals and track progress
+- **Optimize Taxes** - Calculate Thai personal income tax with all deductions
+- **Track Expenses** - Record and categorize spending, get monthly summaries
+- **Monitor Assets** - Watch stock prices, search finance news, manage watchlists
+- **Plan Ahead** - Set financial goals, calculate saving plans, track progress
+- **Get Recommendations** - Receive proactive, personalized financial advice
+- **Generate Reports** - Full financial reports with health scores and visualizations
 
-## ✨ Key Features
+## Key Features
 
-### 🧮 Tax Agent
-- Accurate Thai tax calculations (2024 tax year)
-- All standard deductions supported (RMF, SSF, insurance, etc.)
-- Tax optimization suggestions
-- Multi-year comparisons
+### Multi-Agent System (LangGraph)
+Powered by LangGraph with a Router + 6 specialized agents:
 
-### 📈 Investment Agent
-- Stock portfolio tracking (SET/MAI)
-- Mutual fund monitoring
-- Real-time gain/loss calculations
-- Portfolio allocation analysis
+- **Router Agent** - Classifies user query and routes to the right specialist
+- **Tax Agent** - Thai personal income tax calculations with all deductions
+- **Expense Agent** - Income/expense tracking, monthly summaries, category queries
+- **Asset Monitoring Agent** - Stock prices, finance news, watchlist management
+- **Planning Agent** - Financial goals, saving plans, psychological cue detection
+- **Recommendation Agent** - Proactive financial recommendations and health scoring
+- **Report Agent** - Comprehensive financial reports with PDF/CSV export
 
-### 🤖 Multi-Agent System
-Powered by LangGraph with specialized agents:
-- **Router Agent** - Understands your query and routes to the right specialist
-- **Tax Agent** - Expert in Thai tax laws and calculations
-- **Investment Agent** - Tracks and analyzes your portfolio
-- **Planning Agent** - Long-term financial planning
+### MCP Tool Layer
+Agent tools are exposed as MCP (Model Context Protocol) servers:
 
-## 🚀 Quick Start
+- **knowledge** - RAG search over Thai finance knowledge base (ChromaDB)
+- **market_data** - Stock prices and finance news (Bright Data / yfinance)
+- **tax_calc** - Stateless tax and saving plan calculators
+- **finance_db** - User-scoped database operations (expenses, goals, reports)
+
+### RAG Knowledge Base
+ChromaDB vector store with 16+ Thai finance documents covering:
+- Personal income tax, deductions, filing guides, VAT/withholding
+- Thai stocks, mutual funds, ETFs, bonds, DCA strategy
+- Budgeting, emergency funds, debt management
+- Life/health insurance, social security
+- Retirement and financial planning
+
+## Quick Start
 
 ### Prerequisites
 - Python 3.11 or higher
 - Poetry (for dependency management)
-- Anthropic API key ([Get one here](https://console.anthropic.com/))
+- Google Gemini API key ([Get one here](https://aistudio.google.com/apikey))
+  - Or use Ollama / OpenRouter as alternative LLM providers
 
 ### Installation
 
@@ -68,85 +77,90 @@ make test
 ### Running the Application
 
 ```bash
-# Start the API server
-make run
-
-# Or run in development mode with auto-reload
+# Start the FastAPI backend (development mode with auto-reload)
 make dev
+
+# Or run production server
+make run
 ```
 
 The API will be available at `http://localhost:8000`
+Interactive API docs at `http://localhost:8000/docs`
 
-## 📖 Usage Examples
+MCP servers are mounted at `/mcp/*` endpoints for external MCP clients.
+
+## Usage Examples
 
 ### Calculate Taxes
 
 ```python
-from finance_ai.agents import TaxAgent
+from finance_ai.agents.llm_factory import create_chat_model
+from finance_ai.agents.router_agent import orchestrate_query
 
-agent = TaxAgent()
-
-result = agent.calculate_tax(
-    gross_income=1_200_000,  # 1.2M THB/year
-    deductions={
-        "personal": 60_000,
-        "spouse": 60_000,
-        "children": 2,  # 2 kids = 60,000 deduction
-        "rmf": 100_000,
-        "social_security": 9_000,
-    }
+result = orchestrate_query(
+    "คำนวณภาษี เงินเดือน 1,200,000 บาท มีบุตร 2 คน ซื้อ RMF 100,000",
+    chat_model=create_chat_model(),
+    user_id="your-user-id",
 )
 
-print(f"Total Tax: {result.total_tax:,.2f} THB")
-print(f"Effective Rate: {result.effective_rate:.2f}%")
+print(result["intent"])    # "tax"
+print(result["response"])  # Thai-language tax breakdown
 ```
 
-### Track Portfolio
+### Chat with Streaming
 
 ```python
-from finance_ai.agents import InvestmentAgent
+from finance_ai.agents.stream_utils import orchestrate_query_stream
 
-agent = InvestmentAgent()
-
-portfolio = agent.get_portfolio_summary(user_id=1)
-
-print(f"Total Value: {portfolio.total_value:,.2f} THB")
-print(f"Total Gain/Loss: {portfolio.total_gain_loss:,.2f} THB ({portfolio.total_gain_loss_pct:.2f}%)")
+for event in orchestrate_query_stream(
+    "สรุปค่าใช้จ่ายเดือนนี้",
+    chat_model=create_chat_model(),
+    user_id="your-user-id",
+):
+    if event.event_type == "token":
+        print(event.content, end="", flush=True)
 ```
 
-## 🏗️ Project Structure
+## Project Structure
 
 ```
 personal-finance-ai/
-├── src/
-│   └── finance_ai/
-│       ├── agents/          # LangGraph agent implementations
-│       │   ├── router.py
-│       │   ├── tax_agent.py
-│       │   └── investment_agent.py
-│       ├── tools/           # Tools used by agents
-│       │   ├── tax_calculator.py
-│       │   └── portfolio_tracker.py
-│       ├── rag/             # RAG system for knowledge retrieval
-│       │   ├── vectorstore.py
-│       │   └── embeddings.py
-│       ├── database/        # Database models and CRUD
-│       │   ├── models.py
-│       │   └── crud.py
-│       └── core/            # Core utilities
-│           ├── config.py
-│           ├── logging.py
-│           └── llm/
-├── tests/                   # Test suite (mirrors src/)
-├── docs/                    # Documentation
-├── scripts/                 # Utility scripts
-├── .github/workflows/       # CI/CD pipelines
+├── src/finance_ai/
+│   ├── agents/              # LangGraph agent implementations
+│   │   ├── router_agent.py       # Intent classification + dispatch
+│   │   ├── tax_agent.py          # Tax Agent (ReAct graph)
+│   │   ├── expense_agent.py      # Expense Agent
+│   │   ├── asset_monitoring_agent.py
+│   │   ├── planning_agent.py
+│   │   ├── recommendation_agent.py
+│   │   ├── report_agent.py
+│   │   ├── llm_factory.py        # LLM provider factory
+│   │   ├── stream_utils.py       # Streaming agent responses
+│   │   └── prompts.py            # System prompts
+│   ├── mcp/                # MCP server implementations
+│   │   ├── knowledge_server.py   # RAG search server
+│   │   ├── market_data_server.py # Stock price + news server
+│   │   ├── tax_calc_server.py    # Stateless calculators
+│   │   └── finance_db_server.py  # User-scoped DB operations
+│   ├── tools/              # Service layer (business logic)
+│   ├── rag/                # ChromaDB vector store + embeddings
+│   ├── database/           # SQLAlchemy models + CRUD + Alembic
+│   ├── evaluation/         # Evaluation framework (6 dimensions)
+│   ├── core/               # Config, logging, LLM clients
+│   ├── ui/                 # Charts, export, constants (non-Streamlit)
+│   └── main.py             # FastAPI app entry point
+├── tests/                  # Test suite (mirrors src/)
+├── alembic/                # Database migrations
+├── docs/
+│   └── knowledge_base/     # RAG source documents (Thai finance)
+├── scripts/                # Utility scripts (eval, PDF generation)
+├── .github/workflows/      # CI/CD pipeline
 ├── pyproject.toml          # Dependencies and tool configs
 ├── Makefile                # Common commands
 └── README.md
 ```
 
-## 🛠️ Development
+## Development
 
 ### Setup Development Environment
 
@@ -168,108 +182,68 @@ make test        # Run tests
 
 This project follows strict code quality standards:
 
-- ✅ Type hints on all functions
-- ✅ Test coverage >90%
-- ✅ Linting score >9.0/10
-- ✅ Functions <20 lines
-- ✅ Comprehensive docstrings
+- Type hints on all functions
+- Test coverage >90%
+- Linting score >9.0/10
+- Functions <20 lines
+- Comprehensive docstrings
 
 See [CLAUDE.md](./CLAUDE.md) for full coding standards.
-
-### Running Tests
-
-```bash
-# Run all tests
-make test
-
-# Run with coverage report
-make coverage
-
-# Run specific test file
-pytest tests/agents/test_tax_agent.py
-
-# Run tests in watch mode
-pytest-watch
-```
 
 ### Available Make Commands
 
 ```bash
 make install     # Install dependencies
-make dev         # Run in development mode
+make dev         # Run development server (auto-reload)
 make run         # Run production server
-make test        # Run tests
-make coverage    # Generate coverage report
+make test        # Run tests with coverage
+make coverage    # Generate HTML coverage report
 make lint        # Check code quality
-make format      # Auto-format code
-make typecheck   # Type checking
+make format      # Format code with black
+make typecheck   # Type checking with mypy
 make check       # Run all checks (format, lint, typecheck, test)
 make clean       # Clean generated files
+make evaluate    # Run evaluation framework
 ```
 
-## 📚 Documentation
+## LLM Providers
 
-- [Development Milestones](./development_milestones.md) - Project roadmap and implementation plan
-- [Architecture Design](./docs/architecture.md) - System architecture and design decisions
-- [API Documentation](http://localhost:8000/docs) - Interactive API docs (when running)
-- [Code Standards](./CLAUDE.md) - Coding guidelines and best practices
+The system supports multiple LLM providers (configured in `.env`):
 
-## 🧪 Testing
+| Provider | Config key | Default model |
+|---|---|---|
+| Google Gemini | `llm_provider=google` | `gemini-2.5-flash` |
+| Ollama (local) | `llm_provider=ollama` | `THALLE` |
+| OpenRouter | `llm_provider=openrouter` | `deepseek/deepseek-chat-v3-0324` |
 
-We maintain >90% test coverage with comprehensive test suites:
+## Roadmap
 
-```bash
-# Run all tests with coverage
-make coverage
+### Completed
+- [x] Project foundation, dev tools, CI/CD config
+- [x] Database models + Alembic migrations
+- [x] Tax calculation engine (all Thai deductions + brackets)
+- [x] RAG knowledge base (ChromaDB + 16 Thai finance docs)
+- [x] Multi-agent system (Router + 6 specialized agents)
+- [x] Cross-agent collaboration tools
+- [x] Conversation history + memory (DB persistence)
+- [x] Evaluation framework (routing, RAG, accuracy, hallucination, performance)
+- [x] Dashboard, file upload, PDF/CSV export
+- [x] Asset monitoring with scheduled fetching + notifications
+- [x] Proactive recommendations + financial health scoring
 
-# View coverage report
-open htmlcov/index.html
-```
+### In Progress
+- [ ] MCP tool layer (agents consume tools via MCP servers)
+- [ ] FastAPI backend (replacing Streamlit)
+- [ ] Dependency upgrades (LangGraph 1.x, LangChain 1.x, google-genai 2.x)
 
-Test types:
-- **Unit Tests** - Individual function testing
-- **Integration Tests** - Component interaction testing
-- **End-to-End Tests** - Full workflow testing
-- **Property-Based Tests** - Edge case discovery with Hypothesis
-
-## 🔒 Security
-
-- 🔐 Database encrypted at rest (SQLCipher)
-- 🔒 HTTPS only in production
-- 🛡️ Input validation on all endpoints
-- 🚫 No API keys stored in database
-- ⚠️ Rate limiting enabled
-- 📝 Audit logging for sensitive operations
-
-## 🗺️ Roadmap
-
-### ✅ Milestone 0: Foundation (Complete)
-- [x] Project structure
-- [x] Development tools setup
-- [x] CI/CD pipeline
-
-### 🔄 Milestone 1: Core Features (In Progress)
-- [x] Database models
-- [x] Tax calculation engine
-- [ ] RAG system for tax laws
-- [ ] Basic API endpoints
-
-### 📅 Milestone 2: Multi-Agent System (Next)
-- [ ] LangGraph orchestration
-- [ ] Investment tracking
-- [ ] Portfolio analysis
-- [ ] Web interface
-
-### 🔮 Future
+### Future
+- [ ] Web frontend (Next.js or similar)
 - [ ] Mobile app
-- [ ] Real-time market data
-- [ ] Advanced tax strategies
-- [ ] Expense tracking
-- [ ] Budgeting tools
+- [ ] Real-time market data streaming
+- [ ] Advanced tax strategies (scenario modeling)
+- [ ] Broker statement auto-import
 
-## 🤝 Contributing
-
-Contributions are welcome! Please read our [Contributing Guide](./CONTRIBUTING.md) first.
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
@@ -278,29 +252,25 @@ Contributions are welcome! Please read our [Contributing Guide](./CONTRIBUTING.m
 5. Open a Pull Request
 
 All PRs must:
-- ✅ Pass all tests
-- ✅ Have >90% coverage
-- ✅ Pass linting (score >9.0)
-- ✅ Pass type checking
-- ✅ Include documentation
+- Pass all tests (`make check`)
+- Have >90% coverage
+- Pass linting (score >9.0)
+- Pass type checking
 
-## 📝 License
+## License
 
 This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - Built with [LangGraph](https://github.com/langchain-ai/langgraph) for agent orchestration
-- Powered by [Anthropic Claude](https://www.anthropic.com/) for LLM capabilities
+- Powered by [Google Gemini](https://ai.google.dev/) for LLM capabilities
+- Tools exposed via [MCP](https://modelcontextprotocol.io/) (Model Context Protocol)
+- RAG with [ChromaDB](https://www.trychroma.com/)
+- Market data from [Bright Data](https://brightdata.com/) and yfinance
 - Tax data from [Thai Revenue Department](https://www.rd.go.th/)
 - Market data from [SET](https://www.set.or.th/) and [AIMC](https://www.aimc.or.th/)
 
-## 📧 Contact
-
-- **Issues**: [GitHub Issues](https://github.com/yourusername/personal-finance-ai/issues)
-- **Email**: your.email@example.com
-- **Discord**: [Join our community](https://discord.gg/yourinvite)
-
 ---
 
-**⚠️ Disclaimer**: This tool is for informational purposes only and does not constitute financial advice. Always consult with a qualified financial advisor before making investment decisions. Tax calculations are based on current Thai tax laws and may not reflect the latest changes.
+**Disclaimer**: This tool is for informational purposes only and does not constitute financial advice. Always consult with a qualified financial advisor before making investment decisions. Tax calculations are based on current Thai tax laws and may not reflect the latest changes.

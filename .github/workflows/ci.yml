@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "upgrade/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Load cached venv
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ matrix.python-version }}-${{ hashFiles('poetry.lock') }}
+
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --with dev
+
+      - name: Check formatting
+        run: poetry run black --check src/finance_ai tests/
+
+      - name: Run linter
+        run: poetry run pylint src/finance_ai tests/ --fail-under=9.0
+
+      - name: Run type checker
+        run: poetry run mypy src/finance_ai tests/
+
+      - name: Run tests with coverage
+        run: poetry run pytest --cov=src/finance_ai --cov-fail-under=90
