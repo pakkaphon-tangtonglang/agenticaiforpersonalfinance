@@ -4,7 +4,7 @@ Shared pytest fixtures for all tests.
 Provides mock configurations, clients, and responses for testing.
 """
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import date
 from decimal import Decimal
 
@@ -140,3 +140,19 @@ def sample_user(test_session: Session) -> User:
     test_session.commit()
     test_session.refresh(user)
     return user
+
+
+@pytest.fixture
+def db_session_factory(test_engine: Engine) -> Callable[[], Session]:
+    """
+    Create a session factory bound to the test engine.
+
+    Each call creates a new session (matching production behavior).
+
+    Args:
+        test_engine: In-memory SQLite engine with tables created.
+
+    Returns:
+        Callable that creates new sessions from the test engine.
+    """
+    return sessionmaker(bind=test_engine)
