@@ -11,6 +11,7 @@ from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
+from finance_ai.agents.graph_utils import should_continue
 from finance_ai.agents.prompts import REPORT_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.report_tools import (
@@ -27,25 +28,6 @@ REPORT_AGENT_TOOLS = [
     get_financial_summary,
     search_finance_knowledge,
 ]
-
-
-def should_continue(state: ReportAgentState) -> str:
-    """Determine next node: continue to tools or end.
-
-    Args:
-        state: Current agent state.
-
-    Returns:
-        "tools" if the last message has tool_calls, "end" otherwise.
-
-    Example:
-        >>> should_continue({"messages": [msg], "report_result": None, "user_id": ""})
-        'end'
-    """
-    last_message = state["messages"][-1]
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "tools"
-    return "end"
 
 
 def create_llm_node(

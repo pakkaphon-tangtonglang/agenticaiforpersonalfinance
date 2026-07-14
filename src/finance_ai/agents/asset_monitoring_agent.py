@@ -18,6 +18,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from finance_ai.agents.asset_monitoring_tools import manage_watchlist
+from finance_ai.agents.graph_utils import should_continue
 from finance_ai.agents.market_data_tools import MARKET_DATA_TOOLS
 from finance_ai.agents.prompts import ASSET_MONITORING_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.rag_tool import search_finance_knowledge
@@ -30,25 +31,6 @@ ASSET_MONITORING_TOOLS = [
     manage_watchlist,
     search_finance_knowledge,
 ] + MARKET_DATA_TOOLS  # [get_stock_price, search_finance_news]
-
-
-def should_continue(state: AssetMonitoringAgentState) -> str:
-    """Determine next node: continue to tools or end.
-
-    Args:
-        state: Current agent state.
-
-    Returns:
-        "tools" if the last message has tool_calls, "end" otherwise.
-
-    Example:
-        >>> should_continue({"messages": [msg], "user_id": ""})
-        'end'
-    """
-    last_message = state["messages"][-1]
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "tools"
-    return "end"
 
 
 def create_llm_node(

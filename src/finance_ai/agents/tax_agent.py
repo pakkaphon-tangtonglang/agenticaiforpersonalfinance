@@ -12,6 +12,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 
 from finance_ai.agents.cross_agent_tools import TAX_CROSS_TOOLS
+from finance_ai.agents.graph_utils import should_continue
 from finance_ai.agents.prompts import TAX_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.schemas import TaxAgentState
@@ -21,25 +22,6 @@ from finance_ai.core.logging import get_logger
 logger = get_logger(__name__)
 
 TAX_TOOLS = [calculate_thai_tax, search_finance_knowledge] + TAX_CROSS_TOOLS
-
-
-def should_continue(state: TaxAgentState) -> str:
-    """Determine next node: continue to tools or end.
-
-    Args:
-        state: Current agent state.
-
-    Returns:
-        "tools" if the last message has tool_calls, "end" otherwise.
-
-    Example:
-        >>> should_continue({"messages": [msg], "tax_result": None})
-        'end'
-    """
-    last_message = state["messages"][-1]
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "tools"
-    return "end"
 
 
 def _create_first_turn_node(
