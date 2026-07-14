@@ -14,6 +14,7 @@ from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from finance_ai.agents.graph_cache import get_compiled_graph
 from finance_ai.agents.router_agent import (
     _build_messages,
     classify_query,
@@ -313,7 +314,7 @@ def _get_agent_graph(
     intent: str,
     chat_model: BaseChatModel | None = None,
 ) -> CompiledStateGraph | None:  # type: ignore[type-arg]
-    """Build and return the agent graph for a given intent.
+    """Get the cached agent graph for a given intent.
 
     Args:
         intent: Classified intent string.
@@ -322,36 +323,8 @@ def _get_agent_graph(
     Returns:
         Compiled graph or None for unsupported intents.
     """
-    builder_map = _get_builder_map()
-    builder_fn = builder_map.get(intent)
-    if builder_fn is None:
-        return None
-    return builder_fn(chat_model)
+    if chat_model is None:
+        from finance_ai.agents.llm_factory import create_chat_model  # noqa: PLC0415
 
-
-def _get_builder_map() -> dict[str, Callable[..., CompiledStateGraph]]:  # type: ignore[type-arg]
-    """Return mapping of intent to graph builder function.
-
-    Returns:
-        Dict mapping intent strings to builder callables.
-    """
-    from finance_ai.agents.expense_agent import build_expense_agent_graph  # noqa: PLC0415
-    from finance_ai.agents.asset_monitoring_agent import (
-        build_asset_monitoring_agent_graph,
-    )  # noqa: PLC0415
-    from finance_ai.agents.planning_agent import build_planning_agent_graph  # noqa: PLC0415
-    from finance_ai.agents.recommendation_agent import (
-        build_recommendation_agent_graph,
-    )  # noqa: PLC0415, E501
-    from finance_ai.agents.report_agent import build_report_agent_graph  # noqa: PLC0415
-    from finance_ai.agents.tax_agent import build_tax_agent_graph  # noqa: PLC0415
-
-    return {
-        "tax": build_tax_agent_graph,
-        "expense": build_expense_agent_graph,
-        "asset_monitoring": build_asset_monitoring_agent_graph,
-        "planning": build_planning_agent_graph,
-        "general": build_planning_agent_graph,
-        "recommendation": build_recommendation_agent_graph,
-        "report": build_report_agent_graph,
-    }
+        chat_model = create_chat_model()
+    return get_compiled_graph(intent, chat_model)

@@ -141,9 +141,9 @@ def execute_tax_agent(
     Example:
         >>> result = execute_tax_agent("คำนวณภาษี เงินเดือน 1 ล้าน")
     """
-    from finance_ai.agents.tax_agent import build_tax_agent_graph  # noqa: PLC0415
+    from finance_ai.agents.graph_cache import get_compiled_graph  # noqa: PLC0415
 
-    graph = build_tax_agent_graph(chat_model)
+    graph = get_compiled_graph("tax", chat_model)
     result = graph.invoke(
         {
             "messages": _build_messages(query, chat_history),
@@ -177,9 +177,9 @@ def execute_expense_agent(
     Example:
         >>> result = execute_expense_agent("จ่ายค่ากาแฟ 80 บาท")
     """
-    from finance_ai.agents.expense_agent import build_expense_agent_graph  # noqa: PLC0415
+    from finance_ai.agents.graph_cache import get_compiled_graph  # noqa: PLC0415
 
-    graph = build_expense_agent_graph(chat_model)
+    graph = get_compiled_graph("expense", chat_model)
     result = graph.invoke(
         {
             "messages": _build_messages(query, chat_history),
@@ -213,11 +213,9 @@ def execute_asset_monitoring_agent(
     Example:
         >>> result = execute_asset_monitoring_agent("ดูพอร์ตของฉัน")
     """
-    from finance_ai.agents.asset_monitoring_agent import (
-        build_asset_monitoring_agent_graph,
-    )  # noqa: PLC0415
+    from finance_ai.agents.graph_cache import get_compiled_graph  # noqa: PLC0415
 
-    graph = build_asset_monitoring_agent_graph(chat_model)
+    graph = get_compiled_graph("asset_monitoring", chat_model)
     result = graph.invoke(
         {
             "messages": _build_messages(query, chat_history),
@@ -251,9 +249,9 @@ def execute_planning_agent(
     Example:
         >>> result = execute_planning_agent("อยากออมเงิน 100,000 บาท")
     """
-    from finance_ai.agents.planning_agent import build_planning_agent_graph  # noqa: PLC0415
+    from finance_ai.agents.graph_cache import get_compiled_graph  # noqa: PLC0415
 
-    graph = build_planning_agent_graph(chat_model)
+    graph = get_compiled_graph("planning", chat_model)
     result = graph.invoke(
         {
             "messages": _build_messages(query, chat_history),
@@ -287,11 +285,9 @@ def execute_recommendation_agent(
     Example:
         >>> result = execute_recommendation_agent("วิเคราะห์การเงินของฉัน")
     """
-    from finance_ai.agents.recommendation_agent import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
-        build_recommendation_agent_graph,
-    )
+    from finance_ai.agents.graph_cache import get_compiled_graph  # noqa: PLC0415
 
-    graph = build_recommendation_agent_graph(chat_model)
+    graph = get_compiled_graph("recommendation", chat_model)
     result = graph.invoke(
         {
             "messages": _build_messages(query, chat_history),
@@ -325,11 +321,9 @@ def execute_report_agent(
     Example:
         >>> result = execute_report_agent("สร้างรายงานการเงิน")
     """
-    from finance_ai.agents.report_agent import (  # noqa: PLC0415
-        build_report_agent_graph,
-    )
+    from finance_ai.agents.graph_cache import get_compiled_graph  # noqa: PLC0415
 
-    graph = build_report_agent_graph(chat_model)
+    graph = get_compiled_graph("report", chat_model)
     result = graph.invoke(
         {
             "messages": _build_messages(query, chat_history),

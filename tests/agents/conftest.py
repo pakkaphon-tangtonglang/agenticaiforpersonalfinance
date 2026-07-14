@@ -11,8 +11,17 @@ from langchain_core.messages import AIMessage
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from finance_ai.agents.graph_cache import clear_graph_cache
 from finance_ai.database.base import Base
 from finance_ai.database.models.user import User
+
+
+@pytest.fixture(autouse=True)
+def _clear_graph_cache() -> Generator[None, None, None]:
+    """Clear the graph cache before and after each agent test."""
+    clear_graph_cache()
+    yield
+    clear_graph_cache()
 
 
 @pytest.fixture
