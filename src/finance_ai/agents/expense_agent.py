@@ -18,6 +18,7 @@ from finance_ai.agents.expense_tools import (
     query_expenses_by_category,
     summarize_monthly_expenses,
 )
+from finance_ai.agents.graph_utils import should_continue
 from finance_ai.agents.prompts import EXPENSE_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.schemas import ExpenseAgentState
@@ -32,25 +33,6 @@ EXPENSE_TOOLS = [
     query_expenses_by_category,
     search_finance_knowledge,
 ] + EXPENSE_CROSS_TOOLS
-
-
-def should_continue(state: ExpenseAgentState) -> str:
-    """Determine next node: continue to tools or end.
-
-    Args:
-        state: Current agent state.
-
-    Returns:
-        "tools" if the last message has tool_calls, "end" otherwise.
-
-    Example:
-        >>> should_continue({"messages": [msg], "expense_result": None, "user_id": ""})
-        'end'
-    """
-    last_message = state["messages"][-1]
-    if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-        return "tools"
-    return "end"
 
 
 def create_llm_node(
