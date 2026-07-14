@@ -33,8 +33,6 @@ def _to_float(value: Any) -> float:
     Returns:
         Python float.
     """
-    if isinstance(value, Decimal):
-        return float(value)
     return float(value)
 
 
