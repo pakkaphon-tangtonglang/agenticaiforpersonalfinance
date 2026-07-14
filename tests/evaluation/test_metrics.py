@@ -15,6 +15,7 @@ from finance_ai.evaluation.metrics import (
     compute_precision_at_k,
     compute_recall_at_k,
     extract_thai_number,
+    safe_mean,
 )
 
 
@@ -252,6 +253,22 @@ class TestMeanDecimal:
         """Test mean of single value."""
         result = compute_mean_decimal([Decimal("4.5")])
         assert result == Decimal("4.5000")
+
+
+class TestSafeMean:
+    """Tests for safe_mean."""
+
+    def test_safe_mean_empty_list(self) -> None:
+        """Return 0.0 for empty list."""
+        assert safe_mean([]) == 0.0
+
+    def test_safe_mean_normal_values(self) -> None:
+        """Return correct mean for normal values."""
+        assert safe_mean([1.0, 2.0, 3.0]) == pytest.approx(2.0)
+
+    def test_safe_mean_single_value(self) -> None:
+        """Return the value itself for single-element list."""
+        assert safe_mean([5.0]) == pytest.approx(5.0)
 
 
 class TestExtractThaiNumber:

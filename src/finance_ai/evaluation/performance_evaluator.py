@@ -11,7 +11,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from sqlalchemy.orm import Session
 
 from finance_ai.agents.router_agent import orchestrate_query
-from finance_ai.evaluation.metrics import compute_percentile
+from finance_ai.evaluation.metrics import compute_percentile, safe_mean as _safe_mean
 from finance_ai.evaluation.models import (
     PerformanceAggregateResult,
     PerformanceResult,
@@ -191,17 +191,3 @@ def _sum_costs(results: list[PerformanceResult]) -> Decimal:
         (r.estimated_cost_usd for r in results if r.estimated_cost_usd),
         Decimal("0"),
     )
-
-
-def _safe_mean(values: list[float]) -> float:
-    """Compute mean of floats, returning 0.0 for empty list.
-
-    Args:
-        values: List of float values.
-
-    Returns:
-        Mean value or 0.0 if empty.
-    """
-    if not values:
-        return 0.0
-    return sum(values) / len(values)

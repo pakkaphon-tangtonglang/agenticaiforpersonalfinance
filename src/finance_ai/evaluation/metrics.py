@@ -211,6 +211,24 @@ def compute_mean_decimal(values: list[Decimal]) -> Decimal:
     return (total / Decimal(len(values))).quantize(Decimal("0.0001"))
 
 
+def safe_mean(values: list[float]) -> float:
+    """Compute mean of floats, returning 0.0 for empty list.
+
+    Args:
+        values: List of float values.
+
+    Returns:
+        Mean value or 0.0 if empty.
+
+    Example:
+        >>> safe_mean([1.0, 2.0, 3.0])
+        2.0
+    """
+    if not values:
+        return 0.0
+    return sum(values) / len(values)
+
+
 def extract_thai_number(text: str, pattern: str) -> Decimal | None:
     """Extract a Thai-formatted number from text using a regex pattern.
 
