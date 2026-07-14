@@ -73,16 +73,16 @@ def _execute_job(
             AssetScheduleCRUD,
         )
 
-        crud = AssetScheduleCRUD(session)
-        schedules = crud.get_by_user_and_id(schedule_id)
-        if schedules is None:
+        crud = AssetScheduleCRUD()
+        schedule = crud.get_by_id(session, schedule_id)
+        if schedule is None:
             logger.warning("Schedule %s not found, skipping", schedule_id)
             return
 
-        notification = execute_scheduled_fetch(session, schedules)
+        notification = execute_scheduled_fetch(session, schedule)
         logger.info(
             "Scheduled fetch completed: %s → %s",
-            schedules.symbol,
+            schedule.symbol,
             notification.content[:50],
         )
     except Exception as exc:  # noqa: BLE001
@@ -181,8 +181,8 @@ def load_all_schedules(session_factory: Any) -> int:
 
     session = session_factory()
     try:
-        crud = AssetScheduleCRUD(session)
-        all_active = crud.get_all_active()
+        crud = AssetScheduleCRUD()
+        all_active = crud.get_all_active(session)
         for schedule in all_active:
             register_schedule(
                 schedule.id,

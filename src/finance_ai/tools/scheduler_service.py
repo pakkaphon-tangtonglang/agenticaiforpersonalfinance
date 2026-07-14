@@ -44,8 +44,8 @@ def create_schedule(
     Example:
         >>> schedule = create_schedule(session, "u1", "GC=F", "ราคาทอง", "0 21 * * *")
     """
-    crud = AssetScheduleCRUD(session)
-    return crud.create(user_id, symbol, description, cron_expression, max_runs)
+    crud = AssetScheduleCRUD()
+    return crud.create(session, user_id, symbol, description, cron_expression, max_runs)
 
 
 def get_user_schedules(
@@ -66,10 +66,10 @@ def get_user_schedules(
     Example:
         >>> schedules = get_user_schedules(session, "u1", active_only=True)
     """
-    crud = AssetScheduleCRUD(session)
+    crud = AssetScheduleCRUD()
     if active_only:
-        return crud.get_active_by_user(user_id)
-    return crud.get_by_user(user_id)
+        return crud.get_active_by_user(session, user_id)
+    return crud.get_by_user(session, user_id)
 
 
 def delete_schedule(
@@ -91,8 +91,8 @@ def delete_schedule(
         >>> delete_schedule(session, "sched-1", "u1")
         True
     """
-    crud = AssetScheduleCRUD(session)
-    return crud.delete(schedule_id, user_id)
+    crud = AssetScheduleCRUD()
+    return crud.delete(session, schedule_id, user_id)
 
 
 def deactivate_schedule(
@@ -114,8 +114,8 @@ def deactivate_schedule(
         >>> deactivate_schedule(session, "sched-1", "u1")
         True
     """
-    crud = AssetScheduleCRUD(session)
-    return crud.deactivate(schedule_id, user_id)
+    crud = AssetScheduleCRUD()
+    return crud.deactivate(session, schedule_id, user_id)
 
 
 def execute_scheduled_fetch(
@@ -138,18 +138,19 @@ def execute_scheduled_fetch(
         >>> notification = execute_scheduled_fetch(session, schedule)
     """
     content = _fetch_asset_summary(schedule.symbol)
-    notif_crud = AssetNotificationCRUD(session)
+    notif_crud = AssetNotificationCRUD()
     notification = notif_crud.create(
+        session,
         user_id=schedule.user_id,
         symbol=schedule.symbol,
         content=content,
         schedule_id=schedule.id,
     )
 
-    sched_crud = AssetScheduleCRUD(session)
-    new_count = sched_crud.increment_run_count(schedule.id)
+    sched_crud = AssetScheduleCRUD()
+    new_count = sched_crud.increment_run_count(session, schedule.id)
     if schedule.max_runs and new_count >= schedule.max_runs:
-        sched_crud.deactivate(schedule.id, schedule.user_id)
+        sched_crud.deactivate(session, schedule.id, schedule.user_id)
         _auto_unregister(schedule.id)
 
     return notification
@@ -199,8 +200,9 @@ def execute_immediate_fetch(
     else:
         content = _fetch_asset_summary(symbol, chat_model)
 
-    crud = AssetNotificationCRUD(session)
+    crud = AssetNotificationCRUD()
     return crud.create(
+        session,
         user_id=user_id,
         symbol=symbol.strip().upper(),
         content=content,
@@ -356,8 +358,8 @@ def get_unread_notifications(
     Example:
         >>> notifications = get_unread_notifications(session, "u1")
     """
-    crud = AssetNotificationCRUD(session)
-    return crud.get_unread_by_user(user_id)
+    crud = AssetNotificationCRUD()
+    return crud.get_unread_by_user(session, user_id)
 
 
 def mark_notification_read(
@@ -379,8 +381,8 @@ def mark_notification_read(
         >>> mark_notification_read(session, "n1", "u1")
         True
     """
-    crud = AssetNotificationCRUD(session)
-    return crud.mark_as_read(notification_id, user_id)
+    crud = AssetNotificationCRUD()
+    return crud.mark_as_read(session, notification_id, user_id)
 
 
 def mark_all_notifications_read(
@@ -400,5 +402,5 @@ def mark_all_notifications_read(
         >>> mark_all_notifications_read(session, "u1")
         3
     """
-    crud = AssetNotificationCRUD(session)
-    return crud.mark_all_as_read(user_id)
+    crud = AssetNotificationCRUD()
+    return crud.mark_all_as_read(session, user_id)
