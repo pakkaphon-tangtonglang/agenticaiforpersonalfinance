@@ -121,34 +121,6 @@ def get_income_summary_cross(
 
 
 @tool
-def get_tax_summary_cross(
-    tax_year: str = "",
-    user_id: Annotated[str, InjectedState("user_id")] = "",
-    db_session_factory: Annotated[Any, InjectedState("db_session_factory")] = None,
-) -> dict[str, Any]:
-    """Get tax filing summary from the Tax domain.
-
-    Use this tool to view a user's tax filing data when analyzing
-    from another agent (Investment for tax-loss harvesting, Planning).
-
-    Args:
-        tax_year: Tax year (e.g., "2025"). Defaults to current year.
-        user_id: UUID of the user (injected from graph state).
-        db_session_factory: Session factory (injected from graph state).
-
-    Returns:
-        Dict with tax filing data or not_found status.
-    """
-    from finance_ai.tools.cross_agent_service import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
-        get_tax_filing_summary,
-    )
-
-    parsed_year = int(tax_year) if tax_year else date.today().year
-    with get_tool_session(db_session_factory) as session:
-        return get_tax_filing_summary(session, user_id, parsed_year)
-
-
-@tool
 def update_savings_goal_cross(
     search_term: str,
     current_amount: str,
@@ -232,4 +204,4 @@ PLANNING_CROSS_TOOLS = [
 
 EXPENSE_CROSS_TOOLS = [get_goals_summary_cross, update_savings_goal_cross]
 
-ASSET_MONITORING_CROSS_TOOLS = [get_tax_summary_cross]
+ASSET_MONITORING_CROSS_TOOLS = []

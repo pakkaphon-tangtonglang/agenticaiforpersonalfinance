@@ -16,7 +16,6 @@ from finance_ai.agents.cross_agent_tools import (
     get_expense_summary_cross,
     get_goals_summary_cross,
     get_income_summary_cross,
-    get_tax_summary_cross,
 )
 from finance_ai.database.crud.income_crud import IncomeCRUD
 from finance_ai.database.crud.transaction_crud import TransactionCRUD
@@ -44,10 +43,9 @@ class TestToolLists:
         tool_names = [t.name for t in EXPENSE_CROSS_TOOLS]
         assert "get_goals_summary_cross" in tool_names
 
-    def test_asset_monitoring_cross_tools_has_tax(self) -> None:
-        """Asset monitoring agent should have tax cross-tool."""
-        tool_names = [t.name for t in ASSET_MONITORING_CROSS_TOOLS]
-        assert "get_tax_summary_cross" in tool_names
+    def test_asset_monitoring_cross_tools_is_empty(self) -> None:
+        """Asset monitoring agent has no cross-tools."""
+        assert ASSET_MONITORING_CROSS_TOOLS == []
 
 
 class TestGetExpenseSummaryCross:
@@ -182,23 +180,3 @@ class TestGetIncomeSummaryCross:
         )
         assert result["total_income"] == "60000.00"
         assert result["source_count"] == 1
-
-
-class TestGetTaxSummaryCross:
-    """Tests for get_tax_summary_cross tool."""
-
-    def test_returns_not_found(
-        self,
-        sample_user: User,
-        db_session_factory: Callable[[], Session],
-    ) -> None:
-        """No filing returns not_found status."""
-        result = get_tax_summary_cross.invoke(
-            {
-                "tax_year": "2025",
-                "user_id": sample_user.id,
-                "db_session_factory": db_session_factory,
-            },
-        )
-        assert result["domain"] == "tax"
-        assert result["status"] == "not_found"
