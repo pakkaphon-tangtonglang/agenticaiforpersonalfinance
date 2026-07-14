@@ -11,6 +11,7 @@ from finance_ai.evaluation.metrics import (
     compute_mrr,
     compute_precision_at_k,
     compute_recall_at_k,
+    safe_mean as _safe_mean,
 )
 from finance_ai.evaluation.models import (
     RAGAggregateResult,
@@ -90,20 +91,6 @@ def evaluate_rag_dataset(
         mean_latency_seconds=_safe_mean([r.latency_seconds for r in results]),
         results=results,
     )
-
-
-def _safe_mean(values: list[float]) -> float:
-    """Compute mean of floats, returning 0.0 for empty list.
-
-    Args:
-        values: List of float values.
-
-    Returns:
-        Mean value or 0.0 if empty.
-    """
-    if not values:
-        return 0.0
-    return sum(values) / len(values)
 
 
 def _compute_per_domain_precision(
