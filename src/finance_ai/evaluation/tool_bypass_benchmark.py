@@ -23,7 +23,6 @@ from finance_ai.agents.schemas import TaxAgentState
 from finance_ai.evaluation.accuracy_evaluator import extract_tax_from_response
 from finance_ai.tools.tax_calculator import calculate_tax
 
-
 # ---------------------------------------------------------------------------
 # Test cases
 # ---------------------------------------------------------------------------
@@ -192,6 +191,7 @@ def _build_notool_graph(chat_model: BaseChatModel) -> Any:
     Returns:
         Compiled LangGraph StateGraph.
     """
+
     def notool_node(state: TaxAgentState) -> dict[str, Any]:
         """LLM node with no tools available.
 
@@ -283,8 +283,7 @@ def _evaluate_case(
     notool_resp, notool_latency = _run_notool(notool_graph, case["query"])
     notool_extracted = extract_tax_from_response(notool_resp)
     notool_ok = (
-        notool_extracted is not None
-        and abs(notool_extracted - case["expected_tax"]) <= tolerance
+        notool_extracted is not None and abs(notool_extracted - case["expected_tax"]) <= tolerance
     )
 
     tool_tax = _compute_tool_tax(case)
@@ -334,9 +333,7 @@ def run_tool_bypass_benchmark(
         print(
             f"    No-tool : extracted={result.notool_extracted_tax}, ok={result.notool_within_tolerance}"
         )
-        print(
-            f"    Tool    : result={result.tool_tax}, ok={result.tool_within_tolerance}"
-        )
+        print(f"    Tool    : result={result.tool_tax}, ok={result.tool_within_tolerance}")
         results.append(result)
 
     total = len(results)

@@ -202,7 +202,8 @@ def _check_expense_concentration(
                     category="expense_optimization",
                     priority=3,
                     title=f"ค่าใช้จ่ายหมวด{label}สูง",
-                    description=f"หมวด{label}คิดเป็น {pct}% ของรายจ่ายทั้งหมด" f" (แนะนำไม่เกิน 40%)",
+                    description=f"หมวด{label}คิดเป็น {pct}% ของรายจ่ายทั้งหมด"
+                    f" (แนะนำไม่เกิน 40%)",
                     action_items=[f"หาทางลดค่า{label}"],
                     estimated_impact=f"ลดค่า{label}ได้ ~{amount - total_expense * EXPENSE_CONCENTRATION_THRESHOLD:.0f} บาท/เดือน",
                 )
