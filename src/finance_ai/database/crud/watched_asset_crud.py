@@ -1,19 +1,19 @@
-"""CRUD operations for the WatchedAsset model."""
+"""CRUD operations for WatchedAsset model."""
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from finance_ai.database.crud.base_crud import BaseCRUD
 from finance_ai.database.models.watched_asset import WatchedAsset
 
 
-class WatchedAssetCRUD:
-    """Create, read, and delete operations for the user asset watchlist.
+class WatchedAssetCRUD(BaseCRUD[WatchedAsset]):
+    """CRUD operations for watched assets."""
 
-    Example:
-        >>> crud = WatchedAssetCRUD()
-        >>> crud.add(session, user_id, "PTT.BK", "PTT")
-    """
+    def __init__(self) -> None:
+        """Initialize with the WatchedAsset model."""
+        super().__init__(WatchedAsset)
 
     def add(
         self,
@@ -22,40 +22,45 @@ class WatchedAssetCRUD:
         symbol: str,
         name: str = "",
     ) -> WatchedAsset | None:
-        """Add a symbol to the watchlist, ignoring duplicates.
+        """Add a new watched asset.
 
         Args:
             session: Database session.
             user_id: UUID of the user.
-            symbol: Ticker symbol (e.g., "PTT.BK").
-            name: Display name (e.g., "PTT"). Defaults to symbol.
+            symbol: Ticker symbol.
+            name: Optional asset name.
 
         Returns:
-            New WatchedAsset record, or None if already exists.
-
-        Example:
-            >>> asset = crud.add(session, uid, "PTT.BK", "PTT")
+            Created WatchedAsset or None if duplicate.
         """
-        record = WatchedAsset(
+        asset = WatchedAsset(
             user_id=user_id,
-            symbol=symbol.upper(),
-            name=name or symbol.upper(),
+            symbol=symbol.strip().upper(),
+            name=name,
         )
+        session.add(asset)
         try:
-            session.add(record)
             session.flush()
-            return record
         except IntegrityError:
             session.rollback()
             return None
+        return asset
 
-    def remove(
-        self,
-        session: Session,
-        user_id: str,
-        symbol: str,
-    ) -> bool:
-        """Remove a symbol from the watchlist.
+    def get_by_user(self, session: Session, user_id: str) -> list[WatchedAsset]:
+        """Get all watched assets for a user.
+
+        Args:
+            session: Database session.
+            user_id: UUID of the user.
+
+        Returns:
+            List of watched assets.
+        """
+        stmt = select(WatchedAsset).where(WatchedAsset.user_id == user_id)
+        return list(session.execute(stmt).scalars().all())
+
+    def remove(self, session: Session, user_id: str, symbol: str) -> bool:
+        """Remove a watched asset.
 
         Args:
             session: Database session.
@@ -63,40 +68,12 @@ class WatchedAssetCRUD:
             symbol: Ticker symbol to remove.
 
         Returns:
-            True if a record was deleted, False if not found.
-
-        Example:
-            >>> deleted = crud.remove(session, uid, "PTT.BK")
+            True if removed, False if not found.
         """
-        cursor = session.execute(
-            delete(WatchedAsset).where(
-                WatchedAsset.user_id == user_id,
-                WatchedAsset.symbol == symbol.upper(),
-            )
+        stmt = delete(WatchedAsset).where(
+            WatchedAsset.user_id == user_id,
+            WatchedAsset.symbol == symbol.strip().upper(),
         )
-        return bool(getattr(cursor, "rowcount", 0) > 0)
-
-    def list_all(
-        self,
-        session: Session,
-        user_id: str,
-    ) -> list[WatchedAsset]:
-        """List all watched assets for a user.
-
-        Args:
-            session: Database session.
-            user_id: UUID of the user.
-
-        Returns:
-            List of WatchedAsset records ordered by symbol.
-
-        Example:
-            >>> assets = crud.list_all(session, uid)
-        """
-        return list(
-            session.execute(
-                select(WatchedAsset)
-                .where(WatchedAsset.user_id == user_id)
-                .order_by(WatchedAsset.symbol)
-            ).scalars()
-        )
+        result = session.execute(stmt)
+        rowcount: int = result.rowcount  # type: ignore[attr-defined]
+        return rowcount > 0

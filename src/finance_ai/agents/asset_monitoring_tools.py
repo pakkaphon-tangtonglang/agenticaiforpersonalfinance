@@ -132,6 +132,6 @@ def _handle_list(
         Dict with watchlist items.
     """
     with get_tool_session(db_session_factory) as session:
-        assets = crud.list_all(session, user_id)
+        assets = crud.get_by_user(session, user_id)
         items = [{"symbol": a.symbol, "name": a.name} for a in assets]
     return {"action": "list", "count": len(items), "watchlist": items}
