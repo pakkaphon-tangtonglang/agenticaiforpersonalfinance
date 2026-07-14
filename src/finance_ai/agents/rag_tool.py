@@ -4,6 +4,7 @@ Provides a @tool-decorated function that agents can use to search
 the Thai personal finance knowledge base.
 """
 
+import threading
 from typing import Any
 
 from langchain_core.tools import tool
@@ -14,12 +15,13 @@ from finance_ai.rag.retriever import FinanceRetriever
 logger = get_logger(__name__)
 
 _retriever: FinanceRetriever | None = None
+_retriever_lock = threading.Lock()
 
 
 def get_retriever() -> FinanceRetriever:
     """Get or create the shared FinanceRetriever instance.
 
-    Lazily initializes the retriever from application settings on first call.
+    Thread-safe singleton using a lock to prevent race conditions.
 
     Returns:
         Configured FinanceRetriever instance.
@@ -28,8 +30,9 @@ def get_retriever() -> FinanceRetriever:
         >>> retriever = get_retriever()
     """
     global _retriever  # noqa: PLW0603
-    if _retriever is None:
-        _retriever = _create_retriever_from_settings()
+    with _retriever_lock:
+        if _retriever is None:
+            _retriever = _create_retriever_from_settings()
     return _retriever
 
 
@@ -63,7 +66,8 @@ def reset_retriever() -> None:
         >>> reset_retriever()
     """
     global _retriever  # noqa: PLW0603
-    _retriever = None
+    with _retriever_lock:
+        _retriever = None
 
 
 @tool
