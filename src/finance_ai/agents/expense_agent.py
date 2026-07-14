@@ -9,6 +9,7 @@ from typing import Any
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
 
 from finance_ai.agents.cross_agent_tools import EXPENSE_CROSS_TOOLS
@@ -73,7 +74,7 @@ def create_llm_node(
 
 def build_expense_agent_graph(
     chat_model: BaseChatModel | None = None,
-) -> Any:
+) -> CompiledStateGraph[ExpenseAgentState, Any]:
     """Build the LangGraph StateGraph for the Expense Agent.
 
     Creates a ReAct-style graph: agent -> (tool_calls?) -> tools -> agent -> END.

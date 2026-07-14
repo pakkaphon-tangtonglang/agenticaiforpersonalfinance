@@ -49,7 +49,7 @@ def create_google_chat_model(settings: Settings) -> BaseChatModel:
     if not settings.google_api_key:
         raise ValueError("google_api_key is required when llm_provider is 'google'.")
     logger.info("Creating Google ChatModel with model=%s", settings.google_model)
-    return ChatGoogleGenerativeAI(  # type: ignore[no-any-return]
+    return ChatGoogleGenerativeAI(
         model=settings.google_model,
         google_api_key=settings.google_api_key,
         temperature=settings.llm_temperature,

@@ -9,6 +9,7 @@ from typing import Any
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
 
 from finance_ai.agents.cross_agent_tools import TAX_CROSS_TOOLS
@@ -94,7 +95,7 @@ def _create_respond_node(
 
 def build_tax_agent_graph(
     chat_model: BaseChatModel | None = None,
-) -> Any:
+) -> CompiledStateGraph[TaxAgentState, Any]:
     """Build the LangGraph StateGraph for the Tax Agent.
 
     Graph flow: first_turn (force tool) -> tools -> respond -> END.
