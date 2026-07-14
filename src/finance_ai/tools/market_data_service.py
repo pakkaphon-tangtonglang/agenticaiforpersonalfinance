@@ -19,11 +19,11 @@ from finance_ai.tools.market_data_models import (
     StockDashboardResult,
 )
 from finance_ai.tools.price_client import (
-    _build_headers,
-    _get_api_token,
-    _get_zone,
-    _parse_price_string,
-    _serp_request,
+    build_headers,
+    get_api_token,
+    get_zone,
+    parse_price_string,
+    serp_request,
 )
 
 logger = get_logger(__name__)
@@ -68,7 +68,7 @@ def _extract_price(info: dict[str, Any]) -> Optional[Decimal]:
     for key in ("price", "current_price", "value"):
         raw = info.get(key)
         if raw is not None:
-            return _parse_price_string(str(raw))
+            return parse_price_string(str(raw))
     return None
 
 
@@ -182,7 +182,7 @@ def _fetch_dashboard_from_serp(symbol: str) -> StockDashboardResult:
         StockDashboardResult populated from SERP, or empty on failure.
     """
     query = f"{symbol} stock"
-    data = _serp_request(query)
+    data = serp_request(query)
     if data is None:
         return StockDashboardResult()
 
@@ -208,18 +208,18 @@ def _build_dashboard_from_knowledge(
         name=info.get("title") or info.get("name"),
         current_price=_extract_price(info),
         currency=info.get("currency"),
-        fifty_two_week_high=_parse_price_string(
+        fifty_two_week_high=parse_price_string(
             str(info.get("52_week_high", "")),
         ),
-        fifty_two_week_low=_parse_price_string(
+        fifty_two_week_low=parse_price_string(
             str(info.get("52_week_low", "")),
         ),
         pe_ratio=_to_decimal(info.get("pe_ratio") or info.get("trailingPE")),
-        market_cap=_parse_price_string(
+        market_cap=parse_price_string(
             str(info.get("market_cap", "")),
         ),
         dividend_yield_percent=_calculate_dividend_yield(info),
-        analyst_target_price=_parse_price_string(
+        analyst_target_price=parse_price_string(
             str(info.get("target_price", "")),
         ),
         recommendation=info.get("recommendation"),
@@ -300,7 +300,7 @@ def _fetch_exchange_rate(from_currency: str, to_currency: str) -> Decimal:
         ValueError: If exchange rate is unavailable.
     """
     query = f"1 {from_currency} to {to_currency}"
-    data = _serp_request(query)
+    data = serp_request(query)
     if data is None:
         raise ValueError(f"ไม่สามารถดึงอัตราแลกเปลี่ยน {from_currency}/{to_currency}")
 
@@ -309,14 +309,14 @@ def _fetch_exchange_rate(from_currency: str, to_currency: str) -> Decimal:
     for key in ("price", "value", "result", "conversion"):
         raw = knowledge.get(key)
         if raw is not None:
-            rate = _parse_price_string(str(raw))
+            rate = parse_price_string(str(raw))
             if rate is not None:
                 return rate
 
     # Try parsing from title (e.g., "34.50 Thai Baht")
     title = knowledge.get("title", "")
     if title:
-        rate = _parse_price_string(title)
+        rate = parse_price_string(title)
         if rate is not None:
             return rate
 
@@ -379,7 +379,7 @@ def fetch_finance_news(symbol: str) -> FinanceNewsResult:
     """
     query = f"{symbol} stock news"
     try:
-        data = _serp_request(query)
+        data = serp_request(query)
     except ValueError as exc:
         logger.warning("Bright Data config error for news: %s", exc)
         return FinanceNewsResult(

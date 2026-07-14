@@ -8,8 +8,8 @@ import pytest
 from finance_ai.tools.price_client import (
     _extract_price_from_knowledge,
     _extract_price_from_organic,
-    _parse_price_string,
-    _serp_request,
+    parse_price_string,
+    serp_request,
     fetch_current_price,
     fetch_multiple_prices,
     is_valid_ticker,
@@ -19,31 +19,31 @@ MODULE_PATH = "finance_ai.tools.price_client"
 
 
 class TestParsepriceString:
-    """Tests for _parse_price_string helper."""
+    """Tests for parse_price_string helper."""
 
     def test_simple_number(self) -> None:
         """Parses a simple decimal number."""
-        assert _parse_price_string("178.25") == Decimal("178.25")
+        assert parse_price_string("178.25") == Decimal("178.25")
 
     def test_with_dollar_sign(self) -> None:
         """Strips dollar sign and parses."""
-        assert _parse_price_string("$178.25") == Decimal("178.25")
+        assert parse_price_string("$178.25") == Decimal("178.25")
 
     def test_with_thousands_separator(self) -> None:
         """Handles comma thousands separators."""
-        assert _parse_price_string("1,234.56") == Decimal("1234.56")
+        assert parse_price_string("1,234.56") == Decimal("1234.56")
 
     def test_with_currency_suffix(self) -> None:
         """Strips currency text suffix."""
-        assert _parse_price_string("35.50 THB") == Decimal("35.50")
+        assert parse_price_string("35.50 THB") == Decimal("35.50")
 
     def test_empty_string(self) -> None:
         """Returns None for empty string."""
-        assert _parse_price_string("") is None
+        assert parse_price_string("") is None
 
     def test_no_number(self) -> None:
         """Returns None for non-numeric text."""
-        assert _parse_price_string("no price here") is None
+        assert parse_price_string("no price here") is None
 
 
 class TestExtractPriceFromKnowledge:
@@ -90,10 +90,10 @@ class TestExtractPriceFromOrganic:
 
 
 class TestSerpRequest:
-    """Tests for _serp_request."""
+    """Tests for serp_request."""
 
-    @patch(f"{MODULE_PATH}._get_zone", return_value="ai_agent")
-    @patch(f"{MODULE_PATH}._get_api_token", return_value="test-token")
+    @patch(f"{MODULE_PATH}.get_zone", return_value="ai_agent")
+    @patch(f"{MODULE_PATH}.get_api_token", return_value="test-token")
     @patch(f"{MODULE_PATH}.httpx.Client")
     def test_successful_request(
         self,
@@ -111,23 +111,23 @@ class TestSerpRequest:
         )
         mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
 
-        result = _serp_request("AMZN stock price")
+        result = serp_request("AMZN stock price")
         assert result == {"knowledge": {}, "organic": []}
         mock_client.post.assert_called_once()
 
-    @patch(f"{MODULE_PATH}._get_api_token", side_effect=ValueError("No token"))
+    @patch(f"{MODULE_PATH}.get_api_token", side_effect=ValueError("No token"))
     def test_returns_none_on_config_error(
         self,
         mock_token: MagicMock,
     ) -> None:
         """Returns None when token is missing."""
-        assert _serp_request("test") is None
+        assert serp_request("test") is None
 
 
 class TestFetchCurrentPrice:
     """Tests for fetch_current_price."""
 
-    @patch(f"{MODULE_PATH}._serp_request")
+    @patch(f"{MODULE_PATH}.serp_request")
     def test_returns_price_from_knowledge(
         self,
         mock_serp: MagicMock,
@@ -141,7 +141,7 @@ class TestFetchCurrentPrice:
         assert result == Decimal("42.50")
         mock_serp.assert_called_once_with("PTT.BK stock price")
 
-    @patch(f"{MODULE_PATH}._serp_request")
+    @patch(f"{MODULE_PATH}.serp_request")
     def test_falls_back_to_organic(self, mock_serp: MagicMock) -> None:
         """Uses organic results when knowledge has no price."""
         mock_serp.return_value = {
@@ -153,14 +153,14 @@ class TestFetchCurrentPrice:
         result = fetch_current_price("AOT.BK")
         assert result == Decimal("35.00")
 
-    @patch(f"{MODULE_PATH}._serp_request")
+    @patch(f"{MODULE_PATH}.serp_request")
     def test_returns_none_when_no_data(self, mock_serp: MagicMock) -> None:
         """Returns None when no price in knowledge or organic."""
         mock_serp.return_value = {"knowledge": {}, "organic": []}
         result = fetch_current_price("INVALID")
         assert result is None
 
-    @patch(f"{MODULE_PATH}._serp_request")
+    @patch(f"{MODULE_PATH}.serp_request")
     def test_returns_none_when_serp_fails(
         self,
         mock_serp: MagicMock,
