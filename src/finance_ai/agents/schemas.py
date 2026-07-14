@@ -14,19 +14,17 @@ class TaxAgentState(TypedDict):
 
     Attributes:
         messages: Conversation messages (LangGraph manages append via add_messages).
-        tax_result: The computed TaxCalculationResult dict, if available.
         user_id: UUID of the user for cross-agent DB operations.
         db_session_factory: Optional session factory for DB access (injected into tools).
 
     Example:
         >>> state: TaxAgentState = {
-        ...     "messages": [], "tax_result": None, "user_id": "",
+        ...     "messages": [], "user_id": "",
         ...     "db_session_factory": None,
         ... }
     """
 
     messages: Annotated[list[Any], add_messages]
-    tax_result: dict[str, Any] | None
     user_id: str
     db_session_factory: Callable[[], Session] | None
 
@@ -36,19 +34,17 @@ class ExpenseAgentState(TypedDict):
 
     Attributes:
         messages: Conversation messages (LangGraph manages append via add_messages).
-        expense_result: The computed expense result dict, if available.
         user_id: UUID of the user for DB operations.
         db_session_factory: Optional session factory for DB access (injected into tools).
 
     Example:
         >>> state: ExpenseAgentState = {
-        ...     "messages": [], "expense_result": None, "user_id": "abc-123",
+        ...     "messages": [], "user_id": "abc-123",
         ...     "db_session_factory": None,
         ... }
     """
 
     messages: Annotated[list[Any], add_messages]
-    expense_result: dict[str, Any] | None
     user_id: str
     db_session_factory: Callable[[], Session] | None
 
@@ -86,19 +82,17 @@ class AssetMonitoringAgentState(TypedDict):
 
     Attributes:
         messages: Conversation messages (LangGraph manages append via add_messages).
-        investment_result: The computed portfolio result dict, if available.
         user_id: UUID of the user for DB operations.
         db_session_factory: Optional session factory for DB access (injected into tools).
 
     Example:
         >>> state: AssetMonitoringAgentState = {
-        ...     "messages": [], "investment_result": None, "user_id": "abc-123",
+        ...     "messages": [], "user_id": "abc-123",
         ...     "db_session_factory": None,
         ... }
     """
 
     messages: Annotated[list[Any], add_messages]
-    investment_result: dict[str, Any] | None
     user_id: str
     db_session_factory: Callable[[], Session] | None
 
@@ -108,19 +102,17 @@ class PlanningAgentState(TypedDict):
 
     Attributes:
         messages: Conversation messages (LangGraph manages append via add_messages).
-        planning_result: The computed planning result dict, if available.
         user_id: UUID of the user for DB operations.
         db_session_factory: Optional session factory for DB access (injected into tools).
 
     Example:
         >>> state: PlanningAgentState = {
-        ...     "messages": [], "planning_result": None, "user_id": "abc-123",
+        ...     "messages": [], "user_id": "abc-123",
         ...     "db_session_factory": None,
         ... }
     """
 
     messages: Annotated[list[Any], add_messages]
-    planning_result: dict[str, Any] | None
     user_id: str
     db_session_factory: Callable[[], Session] | None
 
@@ -130,19 +122,17 @@ class RecommendationAgentState(TypedDict):
 
     Attributes:
         messages: Conversation messages (LangGraph manages append via add_messages).
-        recommendation_result: The computed recommendation result dict, if available.
         user_id: UUID of the user for DB operations.
         db_session_factory: Optional session factory for DB access (injected into tools).
 
     Example:
         >>> state: RecommendationAgentState = {
-        ...     "messages": [], "recommendation_result": None,
+        ...     "messages": [],
         ...     "user_id": "abc-123", "db_session_factory": None,
         ... }
     """
 
     messages: Annotated[list[Any], add_messages]
-    recommendation_result: dict[str, Any] | None
     user_id: str
     db_session_factory: Callable[[], Session] | None
 
@@ -152,39 +142,16 @@ class ReportAgentState(TypedDict):
 
     Attributes:
         messages: Conversation messages (LangGraph manages append via add_messages).
-        report_result: The computed financial report dict, if available.
         user_id: UUID of the user for DB operations.
         db_session_factory: Optional session factory for DB access (injected into tools).
 
     Example:
         >>> state: ReportAgentState = {
-        ...     "messages": [], "report_result": None,
+        ...     "messages": [],
         ...     "user_id": "abc-123", "db_session_factory": None,
         ... }
     """
 
     messages: Annotated[list[Any], add_messages]
-    report_result: dict[str, Any] | None
     user_id: str
     db_session_factory: Callable[[], Session] | None
-
-
-class ExtractedTaxParameters(BaseModel):
-    """Parameters extracted from user's natural language tax query.
-
-    Attributes:
-        tax_year: The tax year to calculate for.
-        gross_income: Annual gross income in THB.
-        deductions_by_type: Mapping of deduction type to amount.
-        withholding_tax_paid: Total withholding tax already paid.
-        missing_fields: Fields the user did not provide.
-
-    Example:
-        >>> params = ExtractedTaxParameters(gross_income=Decimal("1200000"))
-    """
-
-    tax_year: int | None = Field(default=None)
-    gross_income: Decimal | None = Field(default=None)
-    deductions_by_type: dict[str, Decimal] = Field(default_factory=dict)
-    withholding_tax_paid: Decimal = Field(default=Decimal("0"))
-    missing_fields: list[str] = Field(default_factory=list)
