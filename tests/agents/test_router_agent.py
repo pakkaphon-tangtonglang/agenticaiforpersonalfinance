@@ -206,7 +206,7 @@ class TestRouteQuery:
 class TestExecuteAssetMonitoringAgent:
     """Tests for execute_asset_monitoring_agent."""
 
-    @patch("finance_ai.agents.asset_monitoring_agent.build_asset_monitoring_agent_graph")
+    @patch("finance_ai.agents.graph_cache.get_compiled_graph")
     def test_returns_asset_monitoring_response(self, mock_build: MagicMock) -> None:
         """Returns dict with intent='asset_monitoring' and response."""
         mock_graph = MagicMock()
@@ -219,7 +219,7 @@ class TestExecuteAssetMonitoringAgent:
         assert result["intent"] == "asset_monitoring"
         assert "500,000" in result["response"]
 
-    @patch("finance_ai.agents.asset_monitoring_agent.build_asset_monitoring_agent_graph")
+    @patch("finance_ai.agents.graph_cache.get_compiled_graph")
     def test_passes_user_id_and_session_factory(self, mock_build: MagicMock) -> None:
         """Passes user_id and db_session_factory to the graph invoke."""
         mock_graph = MagicMock()
@@ -237,7 +237,7 @@ class TestExecuteAssetMonitoringAgent:
 class TestExecutePlanningAgent:
     """Tests for execute_planning_agent."""
 
-    @patch("finance_ai.agents.planning_agent.build_planning_agent_graph")
+    @patch("finance_ai.agents.graph_cache.get_compiled_graph")
     def test_returns_planning_response(self, mock_build: MagicMock) -> None:
         """Returns dict with intent='planning' and response."""
         mock_graph = MagicMock()
@@ -250,7 +250,7 @@ class TestExecutePlanningAgent:
         assert result["intent"] == "planning"
         assert "100,000" in result["response"]
 
-    @patch("finance_ai.agents.planning_agent.build_planning_agent_graph")
+    @patch("finance_ai.agents.graph_cache.get_compiled_graph")
     def test_passes_user_id_and_session_factory(self, mock_build: MagicMock) -> None:
         """Passes user_id and db_session_factory to the graph invoke."""
         mock_graph = MagicMock()
@@ -302,7 +302,7 @@ class TestBuildMessages:
 class TestChatHistoryPassing:
     """Tests that chat_history is correctly passed through to agents."""
 
-    @patch("finance_ai.agents.tax_agent.build_tax_agent_graph")
+    @patch("finance_ai.agents.graph_cache.get_compiled_graph")
     def test_tax_agent_receives_history(self, mock_build: MagicMock) -> None:
         """Tax agent receives chat history in messages."""
         mock_graph = MagicMock()
@@ -319,7 +319,7 @@ class TestChatHistoryPassing:
         assert messages[0] == ("user", "prev")
         assert messages[2] == ("user", "new query")
 
-    @patch("finance_ai.agents.tax_agent.build_tax_agent_graph")
+    @patch("finance_ai.agents.graph_cache.get_compiled_graph")
     def test_tax_agent_no_history(self, mock_build: MagicMock) -> None:
         """Tax agent works without history (backward compatible)."""
         mock_graph = MagicMock()
@@ -353,7 +353,7 @@ class TestChatHistoryPassing:
 class TestExecuteReportAgent:
     """Tests for execute_report_agent."""
 
-    @patch("finance_ai.agents.report_agent.build_report_agent_graph")
+    @patch("finance_ai.agents.graph_cache.get_compiled_graph")
     def test_returns_report_response(self, mock_build: MagicMock) -> None:
         """Returns dict with intent='report' and response."""
         mock_graph = MagicMock()
@@ -366,7 +366,7 @@ class TestExecuteReportAgent:
         assert result["intent"] == "report"
         assert "รายงาน" in result["response"]
 
-    @patch("finance_ai.agents.report_agent.build_report_agent_graph")
+    @patch("finance_ai.agents.graph_cache.get_compiled_graph")
     def test_passes_user_id(self, mock_build: MagicMock) -> None:
         """Passes user_id to the graph invoke."""
         mock_graph = MagicMock()
