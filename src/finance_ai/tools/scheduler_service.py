@@ -280,7 +280,9 @@ def _fetch_asset_summary(
 
     price = fetch_current_price(symbol)
     price_text = (
-        f"💰 **{symbol}**: ราคาปัจจุบัน {price:,.2f}" if price else f"ไม่สามารถดึงราคา {symbol} ได้ในขณะนี้"
+        f"💰 **{symbol}**: ราคาปัจจุบัน {price:,.2f}"
+        if price
+        else f"ไม่สามารถดึงราคา {symbol} ได้ในขณะนี้"
     )
 
     news_result = fetch_finance_news(symbol)

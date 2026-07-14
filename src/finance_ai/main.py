@@ -162,9 +162,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_session)) -> ChatRespo
         chat_history=history,
     )
 
-    save_assistant_message(
-        session, req.conversation_id or "", result["response"], result["intent"]
-    )
+    save_assistant_message(session, req.conversation_id or "", result["response"], result["intent"])
     return ChatResponse(intent=result["intent"], response=result["response"])
 
 
@@ -286,10 +284,7 @@ def list_conversations(
         List of conversation summaries.
     """
     convs = list_user_conversations(session, user_id, limit=50)
-    return [
-        ConversationSummary(id=str(conv.id), title=conv.title or "แชทใหม่")
-        for conv in convs
-    ]
+    return [ConversationSummary(id=str(conv.id), title=conv.title or "แชทใหม่") for conv in convs]
 
 
 @app.post("/conversations", response_model=ConversationSummary)
@@ -310,9 +305,7 @@ def create_new_conv(
 
 
 @app.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])
-def get_messages(
-    conversation_id: str, session: Session = Depends(get_session)
-) -> list[MessageOut]:
+def get_messages(conversation_id: str, session: Session = Depends(get_session)) -> list[MessageOut]:
     """Get all messages in a conversation.
 
     Args:

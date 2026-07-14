@@ -1,5 +1,6 @@
 """Tests for evaluation CLI helpers."""
 
+from typing import cast
 from unittest.mock import MagicMock, patch
 
 from finance_ai.evaluation.cli import (
@@ -68,7 +69,7 @@ class TestCliHelpers:
     def test_build_settings_unknown_provider(self) -> None:
         """_build_settings handles unknown provider gracefully."""
         settings = _build_settings("unknown", "model-x")
-        assert settings.llm_provider == "unknown"
+        assert cast(str, settings.llm_provider) == "unknown"
 
     @patch("finance_ai.evaluation.cli._build_settings")
     @patch("finance_ai.agents.llm_factory.create_chat_model")

@@ -119,9 +119,7 @@ def _section_per_case_table(result: "ToolBypassBenchmarkResult") -> str:
     for i, case in enumerate(result.cases, 1):
         expected = f"{case.expected_tax:,}"
         notool_ans = (
-            f"{case.notool_extracted_tax:,}"
-            if case.notool_extracted_tax is not None
-            else "-"
+            f"{case.notool_extracted_tax:,}" if case.notool_extracted_tax is not None else "-"
         )
         notool_ok = "v" if case.notool_within_tolerance else "**x**"
         tool_ans = f"{case.tool_tax:,}"
@@ -146,10 +144,7 @@ def _section_error_detail(result: "ToolBypassBenchmarkResult") -> str:
     """
     wrong_cases = [c for c in result.cases if not c.notool_within_tolerance]
     if not wrong_cases:
-        return (
-            "## 3. รายละเอียด Cases ที่ LLM คำนวณผิด\n\n"
-            "LLM คำนวณถูกต้องทุก case"
-        )
+        return "## 3. รายละเอียด Cases ที่ LLM คำนวณผิด\n\n" "LLM คำนวณถูกต้องทุก case"
 
     lines = [
         "## 3. รายละเอียด: Cases ที่ LLM คำนวณเองแล้วผิด",
@@ -193,7 +188,7 @@ def _section_conclusion(result: "ToolBypassBenchmarkResult") -> str:
     wrong_notool = total - sum(1 for c in result.cases if c.notool_within_tolerance)
 
     return (
-        "## 4. สรุป: ทำไมต้องบังคับ tool_choice=\"any\"?\n\n"
+        '## 4. สรุป: ทำไมต้องบังคับ tool_choice="any"?\n\n'
         f"จากการทดสอบ {total} queries กับ **{short_name}**:\n\n"
         f"1. **LLM คำนวณเองแม่นยำ {result.notool_accuracy_pct:.0f}%**: "
         f"ผิดพลาด {wrong_notool}/{total} cases\n\n"
@@ -205,7 +200,7 @@ def _section_conclusion(result: "ToolBypassBenchmarkResult") -> str:
         "   - เพดาน SSF/RMF ต่างกัน (30% และ 30% ของรายได้)\n"
         "   - ลดหย่อนบุตร 30,000 บาท/คน (ไม่ใช่ 50,000)\n\n"
         "4. **วิธีแก้ใน Production**:\n"
-        "   - `tax_agent.py` ใช้ `tool_choice=\"any\"` บน first_turn\n"
+        '   - `tax_agent.py` ใช้ `tool_choice="any"` บน first_turn\n'
         "   - ทุก query จะผ่าน `calculate_thai_tax` เสมอ\n"
         "   - แก้กฎใหม่ได้ทันทีโดยไม่ต้อง retrain LLM\n\n"
         f"> **ข้อสรุป**: {short_name} มีความสามารถสูง แต่ภาษีไทยมีรายละเอียด "

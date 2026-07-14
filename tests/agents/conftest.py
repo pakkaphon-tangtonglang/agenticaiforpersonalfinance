@@ -227,5 +227,3 @@ def recommendation_formatted_response() -> AIMessage:
     return AIMessage(
         content="คำแนะนำการเงิน: พบ 3 ข้อแนะนำ คะแนนสุขภาพ 75/100",
     )
-
-
