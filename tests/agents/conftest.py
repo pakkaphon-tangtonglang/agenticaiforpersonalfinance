@@ -1,19 +1,16 @@
 """Test fixtures for agent tests."""
 
 from collections.abc import Callable, Generator
-from datetime import date
 from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
-from sqlalchemy import Engine, create_engine
+from sqlalchemy import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from finance_ai.agents.graph_cache import clear_graph_cache
-from finance_ai.database.base import Base
-from finance_ai.database.models.user import User
 
 
 @pytest.fixture(autouse=True)
@@ -235,66 +232,7 @@ def recommendation_formatted_response() -> AIMessage:
 
 
 @pytest.fixture
-def test_engine() -> Engine:
-    """Create an in-memory SQLite engine for agent testing.
-
-    Returns:
-        Engine: SQLAlchemy engine using in-memory SQLite.
-    """
-    engine = create_engine("sqlite:///:memory:", echo=False)
-    Base.metadata.create_all(bind=engine)
-    return engine
-
-
-@pytest.fixture
-def test_session(test_engine: Engine) -> Generator[Session, None, None]:
-    """Create a test session that rolls back after each test.
-
-    Args:
-        test_engine: In-memory SQLite engine.
-
-    Yields:
-        Session: Clean database session for testing.
-    """
-    factory = sessionmaker(bind=test_engine)
-    session = factory()
-    try:
-        yield session
-    finally:
-        session.rollback()
-        session.close()
-
-
-@pytest.fixture
-def sample_user(test_session: Session) -> User:
-    """Create and persist a sample user for agent testing.
-
-    Args:
-        test_session: Database session.
-
-    Returns:
-        User: Persisted test user instance.
-    """
-    user = User(
-        email="agent-test@example.com",
-        hashed_password="hashed_password_123",
-        full_name="Agent Test User",
-        tax_id="1234567890123",
-        date_of_birth=date(1990, 1, 15),
-        marital_status="single",
-        number_of_children=0,
-        number_of_parents=2,
-    )
-    test_session.add(user)
-    test_session.commit()
-    test_session.refresh(user)
-    return user
-
-
-@pytest.fixture
-def db_session_factory(
-    test_engine: Engine,
-) -> Callable[[], Session]:
+def db_session_factory(test_engine: Engine) -> Callable[[], Session]:
     """Create a session factory bound to the test engine.
 
     Each call creates a new session (matching production behavior).
