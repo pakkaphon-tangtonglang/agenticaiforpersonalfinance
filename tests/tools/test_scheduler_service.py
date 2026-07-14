@@ -196,8 +196,8 @@ class TestNotificationService:
             AssetNotificationCRUD,
         )
 
-        crud = AssetNotificationCRUD(session)
-        crud.create(user.id, "GC=F", "ราคา 2,350")
+        crud = AssetNotificationCRUD()
+        crud.create(session, user.id, "GC=F", "ราคา 2,350")
 
         result = get_unread_notifications(session, user.id)
         assert len(result) == 1
@@ -208,8 +208,8 @@ class TestNotificationService:
             AssetNotificationCRUD,
         )
 
-        crud = AssetNotificationCRUD(session)
-        n = crud.create(user.id, "GC=F", "ราคา 2,350")
+        crud = AssetNotificationCRUD()
+        n = crud.create(session, user.id, "GC=F", "ราคา 2,350")
 
         assert mark_notification_read(session, n.id, user.id) is True
         assert get_unread_notifications(session, user.id) == []
@@ -220,9 +220,9 @@ class TestNotificationService:
             AssetNotificationCRUD,
         )
 
-        crud = AssetNotificationCRUD(session)
-        crud.create(user.id, "GC=F", "ราคา 2,350")
-        crud.create(user.id, "PTT.BK", "ราคา 35.50")
+        crud = AssetNotificationCRUD()
+        crud.create(session, user.id, "GC=F", "ราคา 2,350")
+        crud.create(session, user.id, "PTT.BK", "ราคา 35.50")
 
         count = mark_all_notifications_read(session, user.id)
         assert count == 2
