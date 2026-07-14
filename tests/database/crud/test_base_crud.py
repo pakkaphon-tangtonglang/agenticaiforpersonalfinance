@@ -90,3 +90,16 @@ class TestBaseCRUD:
         crud = BaseCRUD(User)
         deleted = crud.delete(test_session, "fake-id")
         assert deleted is False
+
+    def test_create_does_not_auto_commit(self, test_session: Session) -> None:
+        """create() should not commit — caller controls the transaction."""
+        crud = BaseCRUD(User)
+        user = crud.create(
+            test_session,
+            email="test@example.com",
+            hashed_password="hash",
+            full_name="Test",
+        )
+        test_session.rollback()
+        retrieved = test_session.get(User, user.id)
+        assert retrieved is None  # Rollback should undo the insert

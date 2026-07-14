@@ -77,7 +77,7 @@ def create_expense_transaction(  # pylint: disable=too-many-arguments,too-many-p
     validate_expense_amount(amount)
     normalized_category = validate_expense_category(category)
     crud = TransactionCRUD()
-    return crud.create(
+    transaction = crud.create(
         session,
         user_id=user_id,
         transaction_type=EXPENSE_TRANSACTION_TYPE,
@@ -86,6 +86,9 @@ def create_expense_transaction(  # pylint: disable=too-many-arguments,too-many-p
         amount=amount,
         transaction_date=transaction_date,
     )
+    session.commit()
+    session.refresh(transaction)
+    return transaction
 
 
 def get_expenses_for_date_range(
