@@ -26,7 +26,6 @@ class TestShouldContinue:
         """Routes to 'tools' when last message has tool_calls."""
         state = {
             "messages": [expense_tool_call_message],
-            "expense_result": None,
             "user_id": "test-user",
             "db_session_factory": None,
         }
@@ -39,7 +38,6 @@ class TestShouldContinue:
         """Routes to 'end' when last message has no tool_calls."""
         state = {
             "messages": [expense_formatted_response],
-            "expense_result": None,
             "user_id": "test-user",
             "db_session_factory": None,
         }
@@ -50,7 +48,6 @@ class TestShouldContinue:
         message = AIMessage(content="response", tool_calls=[])
         state = {
             "messages": [message],
-            "expense_result": None,
             "user_id": "test-user",
             "db_session_factory": None,
         }
@@ -67,7 +64,6 @@ class TestCreateLlmNode:
 
         state = {
             "messages": [HumanMessage(content="จ่ายค่ากาแฟ 80 บาท")],
-            "expense_result": None,
             "user_id": "test-user",
             "db_session_factory": None,
         }
@@ -86,7 +82,6 @@ class TestCreateLlmNode:
         result = node(
             {
                 "messages": [HumanMessage(content="test")],
-                "expense_result": None,
                 "user_id": "test-user",
                 "db_session_factory": None,
             }

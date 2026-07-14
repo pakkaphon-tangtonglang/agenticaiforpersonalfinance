@@ -51,7 +51,6 @@ class TestCreateFirstTurnNode:
 
         state = {
             "messages": [HumanMessage(content="คำนวณภาษี")],
-            "tax_result": None,
         }
         node(state)
 

@@ -7,7 +7,6 @@ from pydantic import ValidationError
 
 from finance_ai.agents.schemas import (
     ExpenseAgentState,
-    ExtractedTaxParameters,
     OrchestratorDecision,
 )
 
@@ -67,44 +66,6 @@ class TestOrchestratorDecision:
         assert decision.confidence == Decimal("1")
 
 
-class TestExtractedTaxParameters:
-    """Tests for ExtractedTaxParameters model."""
-
-    def test_defaults(self) -> None:
-        """ExtractedTaxParameters has correct default values."""
-        params = ExtractedTaxParameters()
-        assert params.tax_year is None
-        assert params.gross_income is None
-        assert params.deductions_by_type == {}
-        assert params.withholding_tax_paid == Decimal("0")
-        assert params.missing_fields == []
-
-    def test_with_all_fields(self) -> None:
-        """ExtractedTaxParameters populates all fields correctly."""
-        params = ExtractedTaxParameters(
-            tax_year=2024,
-            gross_income=Decimal("1200000"),
-            deductions_by_type={"personal_allowance": Decimal("60000"), "rmf": Decimal("100000")},
-            withholding_tax_paid=Decimal("120000"),
-            missing_fields=["spouse_status"],
-        )
-        assert params.tax_year == 2024
-        assert params.gross_income == Decimal("1200000")
-        assert len(params.deductions_by_type) == 2
-        assert params.withholding_tax_paid == Decimal("120000")
-        assert "spouse_status" in params.missing_fields
-
-    def test_partial_fields(self) -> None:
-        """ExtractedTaxParameters works with partial fields."""
-        params = ExtractedTaxParameters(
-            gross_income=Decimal("500000"),
-            missing_fields=["tax_year"],
-        )
-        assert params.gross_income == Decimal("500000")
-        assert params.tax_year is None
-        assert params.missing_fields == ["tax_year"]
-
-
 class TestExpenseAgentState:
     """Tests for ExpenseAgentState TypedDict."""
 
@@ -112,22 +73,8 @@ class TestExpenseAgentState:
         """ExpenseAgentState can be instantiated with all fields."""
         state: ExpenseAgentState = {
             "messages": [],
-            "expense_result": None,
             "user_id": "test-user-123",
             "db_session_factory": None,
         }
         assert state["messages"] == []
-        assert state["expense_result"] is None
         assert state["user_id"] == "test-user-123"
-
-    def test_with_expense_result(self) -> None:
-        """ExpenseAgentState stores expense result dict."""
-        result = {"total_amount": "400.00", "transaction_count": 3}
-        state: ExpenseAgentState = {
-            "messages": [],
-            "expense_result": result,
-            "user_id": "test-user-456",
-            "db_session_factory": None,
-        }
-        assert state["expense_result"] is not None
-        assert state["expense_result"]["total_amount"] == "400.00"

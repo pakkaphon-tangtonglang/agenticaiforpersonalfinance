@@ -30,7 +30,6 @@ class TestShouldContinue:
         )
         state = {
             "messages": [message],
-            "report_result": None,
             "user_id": "",
             "db_session_factory": None,
         }
@@ -41,7 +40,6 @@ class TestShouldContinue:
         message = AIMessage(content="รายงานการเงิน: ...")
         state = {
             "messages": [message],
-            "report_result": None,
             "user_id": "",
             "db_session_factory": None,
         }
@@ -52,7 +50,6 @@ class TestShouldContinue:
         message = AIMessage(content="done", tool_calls=[])
         state = {
             "messages": [message],
-            "report_result": None,
             "user_id": "",
             "db_session_factory": None,
         }
@@ -68,7 +65,6 @@ class TestCreateLlmNode:
         node = create_llm_node(mock_chat_model)
         state: dict[str, Any] = {
             "messages": [("user", "สร้างรายงานการเงิน")],
-            "report_result": None,
             "user_id": "",
             "db_session_factory": None,
         }
@@ -83,7 +79,6 @@ class TestCreateLlmNode:
         node = create_llm_node(mock_chat_model)
         state: dict[str, Any] = {
             "messages": [("user", "test")],
-            "report_result": None,
             "user_id": "",
             "db_session_factory": None,
         }
