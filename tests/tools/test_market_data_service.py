@@ -107,7 +107,7 @@ class TestCalculateDividendYield:
 class TestFetchStockDashboard:
     """Tests for fetch_stock_dashboard function."""
 
-    @patch(f"{SERVICE_PATH}._serp_request")
+    @patch(f"{SERVICE_PATH}.serp_request")
     def test_returns_full_dashboard(self, mock_serp: MagicMock) -> None:
         """Should return populated StockDashboardResult."""
         mock_serp.return_value = {
@@ -135,7 +135,7 @@ class TestFetchStockDashboard:
         assert result.dividend_yield_percent == Decimal("3.5")
         assert result.recommendation == "buy"
 
-    @patch(f"{SERVICE_PATH}._serp_request")
+    @patch(f"{SERVICE_PATH}.serp_request")
     def test_handles_empty_knowledge(self, mock_serp: MagicMock) -> None:
         """Should return empty model when knowledge is empty."""
         mock_serp.return_value = {"knowledge": {}, "organic": []}
@@ -146,7 +146,7 @@ class TestFetchStockDashboard:
         assert result.current_price is None
         assert result.dividend_yield_percent == Decimal("0")
 
-    @patch(f"{SERVICE_PATH}._serp_request", return_value=None)
+    @patch(f"{SERVICE_PATH}.serp_request", return_value=None)
     def test_handles_serp_failure(self, mock_serp: MagicMock) -> None:
         """Should return empty model when SERP returns None."""
         result = fetch_stock_dashboard("FAIL")
@@ -268,7 +268,7 @@ class TestFormatNewsFromOrganic:
 class TestFetchFinanceNews:
     """Tests for fetch_finance_news function."""
 
-    @patch(f"{SERVICE_PATH}._serp_request")
+    @patch(f"{SERVICE_PATH}.serp_request")
     def test_returns_news_content(self, mock_serp: MagicMock) -> None:
         """Should return news when organic results available."""
         mock_serp.return_value = {
@@ -288,7 +288,7 @@ class TestFetchFinanceNews:
         assert result.has_news is True
         assert "Apple" in result.news_content
 
-    @patch(f"{SERVICE_PATH}._serp_request")
+    @patch(f"{SERVICE_PATH}.serp_request")
     def test_handles_no_news(self, mock_serp: MagicMock) -> None:
         """Should set has_news=False when no organic results."""
         mock_serp.return_value = {"knowledge": {}, "organic": []}
@@ -296,7 +296,7 @@ class TestFetchFinanceNews:
         result = fetch_finance_news("XYZ")
         assert result.has_news is False
 
-    @patch(f"{SERVICE_PATH}._serp_request", return_value=None)
+    @patch(f"{SERVICE_PATH}.serp_request", return_value=None)
     def test_handles_serp_failure(self, mock_serp: MagicMock) -> None:
         """Should return graceful result when SERP fails."""
         result = fetch_finance_news("AAPL")
@@ -304,7 +304,7 @@ class TestFetchFinanceNews:
         assert result.has_news is False
         assert "ข้อผิดพลาด" in result.news_content
 
-    @patch(f"{SERVICE_PATH}._serp_request")
+    @patch(f"{SERVICE_PATH}.serp_request")
     def test_handles_empty_articles(self, mock_serp: MagicMock) -> None:
         """Should handle organic results with empty content."""
         mock_serp.return_value = {

@@ -22,7 +22,7 @@ _REQUEST_TIMEOUT = 30
 _SERP_API_URL = "https://api.brightdata.com/request"
 
 
-def _get_api_token() -> str:
+def get_api_token() -> str:
     """Get Bright Data API token from settings.
 
     Returns:
@@ -41,7 +41,7 @@ def _get_api_token() -> str:
     return settings.bright_data_api_token
 
 
-def _get_zone() -> str:
+def get_zone() -> str:
     """Get Bright Data zone name from settings.
 
     Returns:
@@ -52,7 +52,7 @@ def _get_zone() -> str:
     return get_settings().bright_data_zone
 
 
-def _build_headers(token: str) -> dict[str, str]:
+def build_headers(token: str) -> dict[str, str]:
     """Build HTTP headers for Bright Data SERP API requests.
 
     Args:
@@ -67,7 +67,7 @@ def _build_headers(token: str) -> dict[str, str]:
     }
 
 
-def _serp_request(query: str) -> Optional[dict[str, Any]]:
+def serp_request(query: str) -> Optional[dict[str, Any]]:
     """Send a SERP search request to Bright Data API.
 
     Args:
@@ -77,9 +77,9 @@ def _serp_request(query: str) -> Optional[dict[str, Any]]:
         Parsed JSON response, or None on failure.
     """
     try:
-        token = _get_api_token()
-        zone = _get_zone()
-        headers = _build_headers(token)
+        token = get_api_token()
+        zone = get_zone()
+        headers = build_headers(token)
         search_url = f"https://www.google.com/search" f"?q={quote_plus(query)}&brd_json=1"
         payload = {
             "zone": zone,
@@ -127,19 +127,19 @@ def _extract_price_from_knowledge(
     for key in ("price", "current_price", "value"):
         raw = knowledge.get(key)
         if raw is not None:
-            return _parse_price_string(str(raw))
+            return parse_price_string(str(raw))
 
     # Try title/description that may contain price
     title = knowledge.get("title", "")
     if title:
-        price = _parse_price_string(title)
+        price = parse_price_string(title)
         if price is not None:
             return price
 
     return None
 
 
-def _parse_price_string(text: str) -> Optional[Decimal]:
+def parse_price_string(text: str) -> Optional[Decimal]:
     """Parse a price value from a text string.
 
     Handles formats like "178.25", "$178.25", "1,234.56", "35.50 THB".
@@ -180,7 +180,7 @@ def _extract_price_from_organic(
         snippet = result.get("description", "") or result.get("snippet", "")
         match = price_pattern.search(snippet)
         if match:
-            return _parse_price_string(match.group(1))
+            return parse_price_string(match.group(1))
     return None
 
 
@@ -200,7 +200,7 @@ def fetch_current_price(symbol: str) -> Optional[Decimal]:
         >>> price = fetch_current_price("PTT.BK")
     """
     query = f"{symbol} stock price"
-    data = _serp_request(query)
+    data = serp_request(query)
     if data is None:
         return None
 
