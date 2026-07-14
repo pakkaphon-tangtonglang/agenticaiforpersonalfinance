@@ -5,7 +5,7 @@ and generates prioritized recommendations. Each analyze function
 checks a specific domain for potential improvements.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -602,7 +602,7 @@ def _build_report(
     """
     return RecommendationReport(
         user_id=user_id,
-        generated_at=datetime.now().isoformat(),
+        generated_at=datetime.now(timezone.utc).isoformat(),
         total_recommendations=len(recommendations),
         health_score=health_score,
         recommendations=recommendations,

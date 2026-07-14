@@ -4,7 +4,7 @@ Reuses gather_all_financial_data() and generate_recommendations()
 from recommendation_service, then builds structured report sections.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
@@ -127,7 +127,7 @@ def _assemble_report(
 
     return FinancialReport(
         user_id=user_id,
-        generated_at=datetime.now().isoformat(),
+        generated_at=datetime.now(timezone.utc).isoformat(),
         report_type=DEFAULT_REPORT_TYPE,
         year=year,
         month=month,
