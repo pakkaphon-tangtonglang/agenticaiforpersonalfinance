@@ -36,6 +36,9 @@ from finance_ai.evaluation.quality_evaluator import evaluate_quality_dataset
 from finance_ai.evaluation.rag_evaluator import evaluate_rag_dataset
 from finance_ai.evaluation.routing_evaluator import evaluate_routing_dataset
 from finance_ai.rag.vector_store import FinanceVectorStore
+from finance_ai.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class EvaluationRunner:
@@ -236,7 +239,8 @@ def _generate_agent_responses(
                 db_session_factory=db_session_factory,
             )
             responses[case.case_id] = result.get("response", "")
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to generate response for %s: %s", case.case_id, exc)
             responses[case.case_id] = ""
     return responses
 
@@ -252,10 +256,10 @@ def _safe_run(name: str, method: Callable[[], Any]) -> Any:
         Result or None if an error occurred.
     """
     try:
-        print(f"  [{name}] running...")
+        logger.info("[%s] running...", name)
         result = method()
-        print(f"  [{name}] done")
+        logger.info("[%s] done", name)
         return result
     except Exception as exc:  # noqa: BLE001
-        print(f"  [{name}] SKIPPED — {exc}")
+        logger.warning("[%s] SKIPPED — %s", name, exc)
         return None
