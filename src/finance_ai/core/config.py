@@ -33,8 +33,9 @@ class Settings(BaseSettings):
     db_url: str = Field(default="sqlite:///./finance_ai.db", description="Database connection URL")
 
     # LLM Provider Selection
-    llm_provider: Literal["google", "ollama", "openrouter"] = Field(
-        default="google", description="LLM provider to use (google, ollama, or openrouter)"
+    llm_provider: Literal["google", "ollama", "openrouter", "opencode"] = Field(
+        default="google",
+        description="LLM provider to use (google, ollama, openrouter, or opencode)",
     )
 
     # Google Gemini Configuration
@@ -49,6 +50,13 @@ class Settings(BaseSettings):
     openrouter_api_key: Optional[str] = Field(default=None, description="OpenRouter API key")
     openrouter_model: str = Field(
         default="deepseek/deepseek-chat-v3.1", description="OpenRouter model name"
+    )
+
+    # OpenCode Configuration (OpenAI-compatible API)
+    opencode_api_key: Optional[str] = Field(default=None, description="OpenCode API key")
+    opencode_model: str = Field(default="glm-5.2", description="OpenCode model name")
+    opencode_base_url: str = Field(
+        default="https://opencode.ai/zen/go/v1", description="OpenCode API base URL"
     )
 
     # General LLM Settings

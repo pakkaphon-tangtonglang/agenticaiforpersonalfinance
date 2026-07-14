@@ -48,6 +48,32 @@ def get_llm_client(settings: "Settings") -> "BaseLLMClient":
 
         return OLLAMAClient(base_url=settings.ollama_base_url, model=settings.ollama_model)
 
+    if provider == "openrouter":
+        from finance_ai.core.llm.openrouter_client import (
+            OpenRouterClient,
+        )  # pylint: disable=import-outside-toplevel
+
+        if not settings.openrouter_api_key:
+            raise ValueError("OpenRouter API key is required")
+        return OpenRouterClient(
+            api_key=settings.openrouter_api_key,
+            model=settings.openrouter_model,
+        )
+
+    if provider == "opencode":
+        from finance_ai.core.llm.opencode_client import (
+            OpenCodeClient,
+        )  # pylint: disable=import-outside-toplevel
+
+        if not settings.opencode_api_key:
+            raise ValueError("OpenCode API key is required")
+        return OpenCodeClient(
+            api_key=settings.opencode_api_key,
+            model=settings.opencode_model,
+            base_url=settings.opencode_base_url,
+        )
+
     raise ValueError(
-        f"Unsupported LLM provider: {provider}. " f"Supported providers: google, ollama"
+        f"Unsupported LLM provider: {provider}. "
+        f"Supported providers: google, ollama, openrouter, opencode"
     )

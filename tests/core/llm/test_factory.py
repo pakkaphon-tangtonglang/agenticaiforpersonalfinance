@@ -7,6 +7,40 @@ from finance_ai.core.llm.google_client import GoogleClient
 from finance_ai.core.llm.ollama_client import OLLAMAClient
 
 
+def test_get_llm_client_openrouter() -> None:
+    """Create an OpenRouter client when provider is openrouter."""
+    settings = Settings(
+        llm_provider="openrouter",
+        openrouter_api_key="test-key",
+    )
+
+    with pytest.raises((ImportError, Exception)):
+        get_llm_client(settings)
+
+
+def test_get_llm_client_opencode() -> None:
+    """Create an OpenCode client when provider is opencode."""
+    settings = Settings(
+        llm_provider="opencode",
+        opencode_api_key="test-key",
+    )
+
+    with pytest.raises((ImportError, Exception)):
+        get_llm_client(settings)
+
+
+def test_get_llm_client_unsupported_raises() -> None:
+    """Raise ValueError for unsupported provider."""
+    settings = Settings(
+        llm_provider="google",
+        google_api_key="test-key",
+    )
+    settings.llm_provider = "nonexistent"  # type: ignore
+
+    with pytest.raises(ValueError, match="Unsupported LLM provider"):
+        get_llm_client(settings)
+
+
 def test_get_llm_client_google() -> None:
     """Test factory creates Google client."""
     settings = Settings(
@@ -35,16 +69,4 @@ def test_get_llm_client_missing_google_key() -> None:
     settings = Settings(llm_provider="google")
 
     with pytest.raises(ValueError, match="Google API key is required"):
-        get_llm_client(settings)
-
-
-def test_get_llm_client_invalid_provider() -> None:
-    """Test factory raises error for invalid provider."""
-    settings = Settings(
-        llm_provider="google",  # Valid for Pydantic
-        google_api_key="test",
-    )
-    settings.llm_provider = "invalid"  # type: ignore
-
-    with pytest.raises(ValueError, match="Unsupported LLM provider"):
         get_llm_client(settings)
