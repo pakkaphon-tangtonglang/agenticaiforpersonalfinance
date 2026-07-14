@@ -151,6 +151,7 @@ def store_tax_filing_result(
         tax_filing_crud.update(session, existing.id, **filing_data)
     else:
         tax_filing_crud.create(session, user_id=user_id, tax_year=tax_year, **filing_data)
+    session.commit()
 
 
 def calculate_tax_for_user(session: Session, user_id: str, tax_year: int) -> TaxCalculationResult:

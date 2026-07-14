@@ -92,7 +92,7 @@ def create_goal(  # pylint: disable=too-many-arguments,too-many-positional-argum
     is_completed = safe_current >= target_amount
 
     crud = FinancialGoalCRUD()
-    return crud.create(
+    goal = crud.create(
         session,
         user_id=user_id,
         goal_type=normalized_type,
@@ -103,6 +103,9 @@ def create_goal(  # pylint: disable=too-many-arguments,too-many-positional-argum
         priority=priority,
         is_completed=is_completed,
     )
+    session.commit()
+    session.refresh(goal)
+    return goal
 
 
 def get_user_goals(
@@ -226,7 +229,9 @@ def delete_goal(
         True
     """
     crud = FinancialGoalCRUD()
-    return crud.delete(session, goal_id)
+    deleted = crud.delete(session, goal_id)
+    session.commit()
+    return deleted
 
 
 def summarize_goals_for_user(

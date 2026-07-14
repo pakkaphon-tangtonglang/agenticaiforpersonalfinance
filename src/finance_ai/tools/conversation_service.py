@@ -41,7 +41,10 @@ def create_conversation(
     Example:
         >>> conv = create_conversation(session, "user-123")
     """
-    return _conversation_crud.create(session, user_id=user_id, title=title)
+    conversation = _conversation_crud.create(session, user_id=user_id, title=title)
+    session.commit()
+    session.refresh(conversation)
+    return conversation
 
 
 def save_user_message(
@@ -62,12 +65,15 @@ def save_user_message(
     Example:
         >>> msg = save_user_message(session, conv_id, "คำนวณภาษี")
     """
-    return _message_crud.create(
+    message = _message_crud.create(
         session,
         conversation_id=conversation_id,
         role="user",
         content=content,
     )
+    session.commit()
+    session.refresh(message)
+    return message
 
 
 def save_assistant_message(
@@ -90,13 +96,16 @@ def save_assistant_message(
     Example:
         >>> msg = save_assistant_message(session, conv_id, "ผล...", "tax")
     """
-    return _message_crud.create(
+    message = _message_crud.create(
         session,
         conversation_id=conversation_id,
         role="assistant",
         content=content,
         intent=intent,
     )
+    session.commit()
+    session.refresh(message)
+    return message
 
 
 def get_recent_history_as_tuples(
@@ -208,7 +217,11 @@ def update_conversation_title(
         >>> update_conversation_title(session, conv_id, "ภาษี 2026")
     """
     truncated = title[:CONVERSATION_TITLE_MAX_LENGTH]
-    return _conversation_crud.update(session, conversation_id, title=truncated)
+    conversation = _conversation_crud.update(session, conversation_id, title=truncated)
+    if conversation is not None:
+        session.commit()
+        session.refresh(conversation)
+    return conversation
 
 
 def list_user_conversations(

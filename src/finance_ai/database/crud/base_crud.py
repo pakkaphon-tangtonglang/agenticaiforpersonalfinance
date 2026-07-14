@@ -57,7 +57,7 @@ class BaseCRUD(Generic[ModelType]):
 
     def create(self, session: Session, **kwargs: Any) -> ModelType:
         """
-        Create a new record.
+        Create a new record. Caller must commit.
 
         Args:
             session: Database session.
@@ -68,13 +68,12 @@ class BaseCRUD(Generic[ModelType]):
         """
         instance = self.model(**kwargs)
         session.add(instance)
-        session.commit()
-        session.refresh(instance)
+        session.flush()
         return instance
 
     def update(self, session: Session, record_id: str, **kwargs: Any) -> Optional[ModelType]:
         """
-        Update an existing record by ID.
+        Update an existing record by ID. Caller must commit.
 
         Args:
             session: Database session.
@@ -89,13 +88,12 @@ class BaseCRUD(Generic[ModelType]):
             return None
         for key, value in kwargs.items():
             setattr(instance, key, value)
-        session.commit()
-        session.refresh(instance)
+        session.flush()
         return instance
 
     def delete(self, session: Session, record_id: str) -> bool:
         """
-        Delete a record by ID.
+        Delete a record by ID. Caller must commit.
 
         Args:
             session: Database session.
@@ -108,5 +106,5 @@ class BaseCRUD(Generic[ModelType]):
         if instance is None:
             return False
         session.delete(instance)
-        session.commit()
+        session.flush()
         return True

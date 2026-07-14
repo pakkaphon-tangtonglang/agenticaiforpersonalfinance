@@ -187,6 +187,8 @@ def add_investment_holding(  # noqa: PLR0913
         price_per_unit,
         purchase_date,
     )
+    session.commit()
+    session.refresh(holding)
     return holding
 
 
