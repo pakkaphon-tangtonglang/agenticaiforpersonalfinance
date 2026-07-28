@@ -118,3 +118,23 @@ class TestBuildTaxAgentGraph:
         last_message = result["messages"][-1]
         assert "ผลการคำนวณภาษี" in last_message.content
         assert mock_chat_model.invoke.call_count == 2
+
+
+class TestTaxAgentPromptTableTemplate:
+    """Guard the structured markdown-table template in the system prompt."""
+
+    def test_prompt_requires_gfm_table(self) -> None:
+        """The prompt must instruct the model to emit GFM markdown tables."""
+        assert "GFM markdown table" in TAX_AGENT_SYSTEM_PROMPT
+
+    def test_prompt_has_summary_table_header(self) -> None:
+        """Summary table header uses the fixed two-column layout."""
+        assert "| รายการ | จำนวนเงิน (บาท) |" in TAX_AGENT_SYSTEM_PROMPT
+
+    def test_prompt_has_bracket_table_header(self) -> None:
+        """Bracket table header uses the fixed four-column layout."""
+        assert "| ช่วงรายได้ | อัตรา | เงินได้ในขั้น | ภาษี |" in TAX_AGENT_SYSTEM_PROMPT
+
+    def test_prompt_mentions_effective_tax_rate(self) -> None:
+        """The template requires the effective tax rate summary line."""
+        assert "อัตราภาษีที่แท้จริง" in TAX_AGENT_SYSTEM_PROMPT
