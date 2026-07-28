@@ -6,6 +6,8 @@ upload, dashboard, asset monitoring, and evaluation.
 Run with: make dev (development) or make run (production)
 """
 
+import json
+
 from collections.abc import Generator
 from typing import Any
 
@@ -243,9 +245,12 @@ def _format_sse_event(event: StreamEvent) -> str | None:
         SSE-formatted string, or None for status events.
     """
     if event.event_type == "token":
-        return f"data: {event.content}\n\n"
+        # JSON-encode so newlines and Thai characters inside content survive
+        # the SSE transport. A raw newline in a `data:` field would terminate
+        # the event early and drop the rest of the token.
+        return f"data: {json.dumps(event.content, ensure_ascii=False)}\n\n"
     if event.event_type == "complete":
-        return f"event: complete\ndata: {event.intent}\n\n"
+        return "event: complete\n" f"data: {json.dumps(event.intent, ensure_ascii=False)}\n\n"
     return None
 
 

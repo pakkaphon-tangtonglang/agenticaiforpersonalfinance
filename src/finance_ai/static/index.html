@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>การเงินส่วนบุคคล — Personal Finance AI</title>
+<meta name="description" content="ผู้ช่วยการเงินอัจฉริยะสำหรับคนไทย คำนวณภาษี ติดตามรายจ่าย ลงทุน และวางแผนการเงิน" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/static/styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" defer></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<a href="#main" class="skip-link">ข้ามไปยังเนื้อหาหลัก</a>
+
+<!-- ───────────── App Shell ───────────── -->
+<div class="app">
+  <!-- Sidebar -->
+  <aside class="sidebar" id="sidebar" aria-label="เมนูและประวัติแชท">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">✦</span>
+      <span class="brand-name">การเงินส่วนบุคคล</span>
+    </div>
+
+    <nav class="nav" aria-label="เมนูหลัก">
+      <button class="nav-item is-active" data-view="chat" type="button">
+        <span aria-hidden="true">💬</span><span>แชท</span>
+      </button>
+      <button class="nav-item" data-view="dashboard" type="button">
+        <span aria-hidden="true">📊</span><span>แดชบอร์ด</span>
+      </button>
+      <button class="nav-item" data-view="upload" type="button">
+        <span aria-hidden="true">⬆️</span><span>นำเข้าเอกสาร</span>
+      </button>
+      <button class="nav-item" data-view="assets" type="button">
+        <span aria-hidden="true">📈</span><span>สินทรัพย์</span>
+      </button>
+      <button class="nav-item" data-view="eval" type="button">
+        <span aria-hidden="true">🔬</span><span>ประเมินผล</span>
+      </button>
+    </nav>
+
+    <div class="conv-section">
+      <h2 class="conv-heading">ประวัติแชท</h2>
+      <button class="conv-new" id="newChatBtn" type="button">+ แชทใหม่</button>
+      <ul class="conv-list" id="convList" aria-label="รายการบทสนทนา"></ul>
+    </div>
+
+    <div class="user-box">
+      <span class="user-id" id="userIdLabel">—</span>
+      <button class="user-reset" id="resetUserBtn" type="button" title="สร้างไอดีใหม่">รีเซ็ต</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main" id="main">
+    <!-- Mobile minibar -->
+    <div class="minibar">
+      <button class="menu-toggle" id="menuToggle" type="button" aria-label="เปิดเมนู">☰</button>
+      <span class="minibar-title" id="minibarTitle">แชท</span>
+      <button class="health-chip" id="healthChip" data-view="dashboard" type="button" title="คะแนนสุขภาพการเงิน">
+        <span class="health-dot" aria-hidden="true"></span>
+        <span class="health-value" id="healthValue">—</span>
+      </button>
+    </div>
+
+    <div class="main-inner">
+      <!-- ───────── Chat View ───────── -->
+      <section class="view view-chat is-active" id="view-chat" aria-label="แชทกับผู้ช่วยการเงิน">
+        <!-- Hero (search-centric home) -->
+        <div class="hero" id="chatHero">
+          <nav class="cat-nav" id="catNav" aria-label="หมวดคำถาม">
+            <button class="cat-link is-active" type="button" data-cat="all">ทั้งหมด</button>
+            <button class="cat-link" type="button" data-cat="tax">ภาษี</button>
+            <button class="cat-link" type="button" data-cat="expense">ค่าใช้จ่าย</button>
+            <button class="cat-link" type="button" data-cat="asset">สินทรัพย์</button>
+            <button class="cat-link" type="button" data-cat="planning">วางแผน</button>
+            <button class="cat-link" type="button" data-cat="report">รายงาน</button>
+          </nav>
+
+          <h1 class="wordmark">การเงินส่วนบุคคล</h1>
+
+          <div class="search-wrap">
+            <form class="search-form" id="chatForm">
+              <label class="sr-only" for="chatInput">ข้อความ</label>
+              <textarea id="chatInput" class="search-input" rows="1"
+                placeholder="ถามอะไรก็ได้เกี่ยวกับการเงิน เช่น คำนวณภาษี สรุปรายจ่าย ดูพอร์ตลงทุน"
+                autocomplete="off"></textarea>
+              <button class="search-send" id="chatSend" type="submit" disabled>ส่ง</button>
+            </form>
+          </div>
+
+          <!-- Suggestion card grid -->
+          <div class="suggestion-grid" id="suggestionGrid"></div>
+        </div>
+
+        <!-- Chat thread (shown once a conversation starts) -->
+        <div class="chat-thread" id="chatThread" aria-live="polite" hidden></div>
+        <form class="composer" id="threadComposer" hidden>
+          <label class="sr-only" for="threadInput">ข้อความ</label>
+          <textarea id="threadInput" class="composer-input" rows="1"
+            placeholder="พิมพ์ข้อความต่อ…"
+            autocomplete="off"></textarea>
+          <button class="composer-send" id="threadSend" type="submit" disabled>ส่ง</button>
+        </form>
+      </section>
+
+      <!-- ───────── Dashboard View ───────── -->
+      <section class="view view-dashboard" id="view-dashboard" aria-label="แดชบอร์ดการเงิน">
+        <div class="page-head">
+          <h1 class="page-title">แดชบอร์ด</h1>
+          <p class="page-desc">ภาพรวมการเงินของคุณ รายเดือน</p>
+        </div>
+
+        <div class="dash-controls">
+          <label class="field">
+            <span class="field-label">ปี</span>
+            <select id="dashYear" class="field-select"></select>
+          </label>
+          <label class="field">
+            <span class="field-label">เดือน</span>
+            <select id="dashMonth" class="field-select"></select>
+          </label>
+          <button class="btn btn-ghost" id="dashLoad" type="button">โหลดข้อมูล</button>
+        </div>
+
+        <div class="dash-empty" id="dashEmpty">
+          <p class="dash-empty-title">ยังไม่มีข้อมูลในแดชบอร์ด</p>
+          <p>เลือกเดือนและปีแล้วกดโหลดข้อมูล เพื่อดูภาพรวมการเงินของคุณ</p>
+        </div>
+
+        <div class="dash-content" id="dashContent" hidden>
+          <div class="gauge-card">
+            <h2 class="card-title">สุขภาพการเงิน</h2>
+            <div class="gauge-wrap">
+              <svg class="gauge" viewBox="0 0 200 120" role="img" aria-label="คะแนนสุขภาพการเงิน">
+                <path class="gauge-track" d="M20,110 A80,80 0 0,1 180,110" fill="none" />
+                <path class="gauge-fill" id="gaugeFill" d="M20,110 A80,80 0 0,1 180,110" fill="none" />
+              </svg>
+              <div class="gauge-text">
+                <span class="gauge-value" id="gaugeValue">0</span>
+                <span class="gauge-unit">/ 100</span>
+              </div>
+            </div>
+            <p class="gauge-caption" id="gaugeCaption">—</p>
+          </div>
+
+          <div class="overview-grid">
+            <div class="stat-card">
+              <span class="stat-label">รายได้เดือนนี้</span>
+              <span class="stat-value" id="statIncome">—</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">รายจ่ายเดือนนี้</span>
+              <span class="stat-value" id="statExpense">—</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">เหลือออมได้</span>
+              <span class="stat-value" id="statNet">—</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">อัตราการออม</span>
+              <span class="stat-value" id="statRate">—</span>
+            </div>
+          </div>
+
+          <div class="charts-grid">
+            <div class="chart-card">
+              <h3 class="card-title">รายจ่ายแยกตามหมวดหมู่</h3>
+              <div class="chart-box"><canvas id="expenseChart"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <h3 class="card-title">พอร์ตการลงทุน</h3>
+              <div class="chart-box"><canvas id="portfolioChart"></canvas></div>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <h3 class="card-title">รายการถือครอง <span class="badge-count" id="holdCount">0</span></h3>
+            <div class="table-wrap">
+              <table class="data-table" id="portfolioTable">
+                <thead><tr><th>สัญลักษณ์</th><th>จำนวน</th><th>ราคาเฉลี่ย</th><th>มูลค่าปัจจุบัน</th><th>กำไร/ขาดทุน</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="goals-card">
+            <h3 class="card-title">เป้าหมายการเงิน</h3>
+            <ul class="goals-list" id="goalsList"></ul>
+          </div>
+
+          <div class="tax-card">
+            <h3 class="card-title">สถานะภาษี</h3>
+            <dl class="tax-grid" id="taxGrid"></dl>
+          </div>
+
+          <div class="highlights-card">
+            <h3 class="card-title">ข้อสังเกตสำคัญ</h3>
+            <ul class="highlights-list" id="highlightsList"></ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────── Upload View ───────── -->
+      <section class="view view-upload" id="view-upload" aria-label="นำเข้าเอกสาร">
+        <div class="page-head">
+          <h1 class="page-title">นำเข้าเอกสาร</h1>
+          <p class="page-desc">สแกนใบเสร็จ/สลิป/PDF ให้ AI กรอกให้ แล้วตรวจสอบก่อนบันทึก หรือนำเข้าไฟล์ CSV/XLSX รายการเดินบัญชี</p>
+        </div>
+        <div class="panel">
+          <div class="upload-tabs" id="uploadTabs" role="tablist">
+            <button class="upload-tab is-active" type="button" data-mode="scan" role="tab" aria-selected="true">สแกนเอกสาร</button>
+            <button class="upload-tab" type="button" data-mode="bank" role="tab" aria-selected="false">นำเข้าธนาคาร</button>
+          </div>
+
+          <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="เลือกไฟล์เพื่ออัปโหลด">
+            <span class="dropzone-icon" aria-hidden="true">📄</span>
+            <span class="dropzone-text">ลากไฟล์มาวาง หรือคลิกเพื่อเลือกไฟล์</span>
+            <span class="dropzone-hint" id="dropzoneHint">รองรับรูปภาพ (JPG/PNG) และ PDF</span>
+            <input type="file" id="fileInput" accept="image/*,.pdf" hidden />
+          </div>
+
+          <p class="upload-result" id="uploadResult" hidden></p>
+
+          <!-- Recheck table for scanned documents (pre-confirmation) -->
+          <div class="recheck" id="recheckArea" hidden>
+            <div class="recheck-head">
+              <h2 class="recheck-title">ตรวจสอบก่อนบันทึก</h2>
+              <span class="recheck-hint">แก้ไขหรือลบรายการที่ AI กรอกให้ แล้วกดบันทึก</span>
+            </div>
+            <div class="recheck-table-wrap">
+              <table class="recheck-table">
+                <thead>
+                  <tr>
+                    <th>ประเภท</th>
+                    <th>จำนวนเงิน</th>
+                    <th>วันที่</th>
+                    <th>หมวดหมู่</th>
+                    <th>รายละเอียด</th>
+                    <th aria-label="ลบ"></th>
+                  </tr>
+                </thead>
+                <tbody id="recheckBody"></tbody>
+              </table>
+            </div>
+            <div class="recheck-actions">
+              <button class="btn btn-primary" id="confirmBtn" type="button">บันทึกทั้งหมด</button>
+              <button class="btn btn-ghost" id="cancelRecheckBtn" type="button">ยกเลิก</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────── Assets View ───────── -->
+      <section class="view view-assets" id="view-assets" aria-label="ติดตามสินทรัพย์">
+        <div class="page-head">
+          <h1 class="page-title">ติดตามสินทรัพย์</h1>
+          <p class="page-desc">ดึงราคาและข่าวสินทรัพย์ที่คุณสนใจ พร้อมการแจ้งเตือน</p>
+        </div>
+        <div class="panel">
+          <form class="asset-form" id="assetForm">
+            <label class="field">
+              <span class="field-label">สัญลักษณ์</span>
+              <input type="text" id="assetSymbol" class="field-input" placeholder="เช่น PTT.BK" required />
+            </label>
+            <label class="field">
+              <span class="field-label">ประเภท</span>
+              <select id="assetType" class="field-select">
+                <option value="price">ราคา</option>
+                <option value="news">ข่าว</option>
+              </select>
+            </label>
+            <button class="btn" type="submit">ดึงข้อมูล</button>
+          </form>
+          <div class="asset-result" id="assetResult" hidden></div>
+
+          <div class="notif-section">
+            <div class="notif-head">
+              <h3 class="card-title">การแจ้งเตือน</h3>
+              <button class="btn btn-ghost" id="markNotifBtn" type="button">ทำเครื่องหมายว่าอ่านแล้ว</button>
+            </div>
+            <ul class="notif-list" id="notifList">
+              <li class="notif-empty">ยังไม่มีการแจ้งเตือน</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- ───────── Evaluation View ───────── -->
+      <section class="view view-eval" id="view-eval" aria-label="ประเมินผลระบบ">
+        <div class="page-head">
+          <h1 class="page-title">ประเมินผลระบบ</h1>
+          <p class="page-desc">รันกรอบการประเมินเพื่อวัดคุณภาพการตอบของระบบ AI ในหลายมิติ</p>
+        </div>
+        <div class="panel">
+          <button class="btn" id="runEvalBtn" type="button">รันการประเมิน</button>
+          <div class="eval-result" id="evalResult" hidden></div>
+        </div>
+      </section>
+    </div>
+  </main>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+</body>
+</html>
