@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     # OLLAMA Configuration (for THALLE and other local models)
     ollama_base_url: str = Field(default="http://localhost:11434", description="OLLAMA base URL")
     ollama_model: str = Field(default="THALLE", description="OLLAMA model name")
+    ollama_api_key: Optional[str] = Field(
+        default=None,
+        description="Ollama Cloud API key (https://ollama.com/settings/keys)",
+    )
 
     # OpenRouter Configuration (OpenAI-compatible API)
     openrouter_api_key: Optional[str] = Field(default=None, description="OpenRouter API key")
@@ -57,6 +61,49 @@ class Settings(BaseSettings):
     opencode_model: str = Field(default="glm-5.2", description="OpenCode model name")
     opencode_base_url: str = Field(
         default="https://opencode.ai/zen/go/v1", description="OpenCode API base URL"
+    )
+
+    # OCR Provider Configuration (vision model for document scanning)
+    # Separate from the main LLM provider so OCR can use a vision model
+    # (e.g. gemma4:31b on Ollama Cloud) without affecting chat agents.
+    ocr_provider: Literal["google", "ollama"] = Field(
+        default="ollama",
+        description="OCR/vision provider for document scanning (google or ollama)",
+    )
+    ocr_model: str = Field(
+        default="gemma4:31b",
+        description="Vision model name for OCR (must support images). Use a name from https://ollama.com/api/tags.",
+    )
+    ocr_api_key: Optional[str] = Field(
+        default=None,
+        description="API key for the OCR provider (Ollama Cloud or Google).",
+    )
+    ocr_base_url: str = Field(
+        default="https://ollama.com",
+        description="Base URL for the OCR provider (Ollama Cloud default).",
+    )
+    ocr_temperature: float = Field(
+        default=0.0,
+        ge=0.0,
+        le=2.0,
+        description="OCR model temperature (0.0 = deterministic; lower is faster).",
+    )
+    ocr_max_tokens: int = Field(
+        default=2000,
+        ge=1,
+        le=8000,
+        description="Max output tokens for OCR (a short JSON array needs little).",
+    )
+    ocr_timeout: float = Field(
+        default=120.0,
+        ge=1.0,
+        description="Server-side timeout for a single OCR request (seconds).",
+    )
+    ocr_max_image_edge: int = Field(
+        default=1568,
+        ge=256,
+        le=4096,
+        description="Max image edge (px) before sending to OCR; larger images are downscaled.",
     )
 
     # General LLM Settings

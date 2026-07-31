@@ -3,6 +3,8 @@
 Supports Google Gemini and OLLAMA providers based on application settings.
 """
 
+from typing import Any
+
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -28,7 +30,7 @@ def import_chat_ollama() -> type:
             "langchain-ollama is required for OLLAMA provider. "
             "Install with: pip install langchain-ollama"
         ) from exc
-    return ChatOllama  # type: ignore[no-any-return]
+    return ChatOllama
 
 
 def create_google_chat_model(settings: Settings) -> BaseChatModel:
@@ -57,8 +59,35 @@ def create_google_chat_model(settings: Settings) -> BaseChatModel:
     )
 
 
+def _ollama_client_kwargs(settings: Settings) -> dict[str, Any]:
+    """Build ChatOllama constructor kwargs from settings.
+
+    Adds a bearer Authorization header via client_kwargs when an Ollama
+    Cloud API key is configured, so the same provider works for local
+    Ollama (no key) and Ollama Cloud (https://ollama.com).
+
+    Args:
+        settings: Application settings with OLLAMA config.
+
+    Returns:
+        kwargs dict for ChatOllama.
+    """
+    kwargs: dict[str, Any] = {
+        "model": settings.ollama_model,
+        "base_url": settings.ollama_base_url,
+        "temperature": settings.llm_temperature,
+    }
+    if settings.ollama_api_key:
+        kwargs["client_kwargs"] = {
+            "headers": {"Authorization": f"Bearer {settings.ollama_api_key}"}
+        }
+    return kwargs
+
+
 def create_ollama_chat_model(settings: Settings) -> BaseChatModel:
     """Create a ChatOllama instance from settings.
+
+    Supports local Ollama (no key) and Ollama Cloud (bearer API key).
 
     Args:
         settings: Application settings with OLLAMA config.
@@ -74,11 +103,7 @@ def create_ollama_chat_model(settings: Settings) -> BaseChatModel:
     """
     chat_ollama_cls = import_chat_ollama()
     logger.info("Creating OLLAMA ChatModel with model=%s", settings.ollama_model)
-    return chat_ollama_cls(  # type: ignore[no-any-return]
-        model=settings.ollama_model,
-        base_url=settings.ollama_base_url,
-        temperature=settings.llm_temperature,
-    )
+    return chat_ollama_cls(**_ollama_client_kwargs(settings))  # type: ignore[no-any-return]
 
 
 def import_chat_openai() -> type:
@@ -156,3 +181,101 @@ def create_chat_model(settings: Settings | None = None) -> BaseChatModel:
     if settings.llm_provider == "openrouter":
         return create_openrouter_chat_model(settings)
     raise ValueError(f"Unsupported LLM provider: {settings.llm_provider}")
+
+
+def create_ocr_google_chat_model(settings: Settings) -> BaseChatModel:
+    """Create a ChatGoogleGenerativeAI vision model from OCR settings.
+
+    Args:
+        settings: Application settings with OCR config.
+
+    Returns:
+        Configured ChatGoogleGenerativeAI instance for OCR.
+
+    Raises:
+        ValueError: If ocr_api_key is not set.
+
+    Example:
+        >>> model = create_ocr_google_chat_model(settings)
+    """
+    if not settings.ocr_api_key:
+        raise ValueError("ocr_api_key is required when ocr_provider is 'google'.")
+    logger.info("Creating Google OCR ChatModel with model=%s", settings.ocr_model)
+    return ChatGoogleGenerativeAI(
+        model=settings.ocr_model,
+        google_api_key=settings.ocr_api_key,
+        temperature=settings.ocr_temperature,
+        max_output_tokens=settings.ocr_max_tokens,
+        request_timeout=settings.ocr_timeout,
+    )
+
+
+def _ocr_ollama_client_kwargs(settings: Settings) -> dict[str, Any]:
+    """Build ChatOllama constructor kwargs from OCR settings.
+
+    Args:
+        settings: Application settings with OCR config.
+
+    Returns:
+        kwargs dict for ChatOllama (with bearer header when key is set).
+    """
+    kwargs: dict[str, Any] = {
+        "model": settings.ocr_model,
+        "base_url": settings.ocr_base_url,
+        "temperature": settings.ocr_temperature,
+        "num_predict": settings.ocr_max_tokens,
+        "timeout": settings.ocr_timeout,
+    }
+    if settings.ocr_api_key:
+        kwargs["client_kwargs"] = {"headers": {"Authorization": f"Bearer {settings.ocr_api_key}"}}
+    return kwargs
+
+
+def create_ocr_ollama_chat_model(settings: Settings) -> BaseChatModel:
+    """Create a ChatOllama vision model from OCR settings.
+
+    Supports local Ollama (no key) and Ollama Cloud (bearer API key).
+
+    Args:
+        settings: Application settings with OCR config.
+
+    Returns:
+        Configured ChatOllama instance for OCR.
+
+    Raises:
+        ImportError: If langchain-ollama is not installed.
+
+    Example:
+        >>> model = create_ocr_ollama_chat_model(settings)
+    """
+    chat_ollama_cls = import_chat_ollama()
+    logger.info("Creating OLLAMA OCR ChatModel with model=%s", settings.ocr_model)
+    return chat_ollama_cls(**_ocr_ollama_client_kwargs(settings))  # type: ignore[no-any-return]
+
+
+def create_ocr_chat_model(settings: Settings | None = None) -> BaseChatModel:
+    """Create a LangChain vision ChatModel for OCR from OCR_* settings.
+
+    Uses the dedicated OCR provider/model/key config, independent of the
+    main LLM_PROVIDER so document scanning can use a vision model (e.g.
+    qwen3.5:27b on Ollama Cloud) without affecting chat agents.
+
+    Args:
+        settings: Optional settings override. Uses get_settings() if None.
+
+    Returns:
+        A LangChain BaseChatModel instance for OCR (Google or Ollama).
+
+    Raises:
+        ValueError: If the OCR provider is unsupported or config is missing.
+
+    Example:
+        >>> model = create_ocr_chat_model()
+    """
+    if settings is None:
+        settings = get_settings()
+    if settings.ocr_provider == "google":
+        return create_ocr_google_chat_model(settings)
+    if settings.ocr_provider == "ollama":
+        return create_ocr_ollama_chat_model(settings)
+    raise ValueError(f"Unsupported OCR provider: {settings.ocr_provider}")

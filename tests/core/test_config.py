@@ -7,7 +7,7 @@ from finance_ai.core.config import Settings, get_settings
 
 def test_settings_default_values() -> None:
     """Test Settings creates with default values."""
-    settings = Settings(google_api_key="test-key")
+    settings = Settings(_env_file=None, google_api_key="test-key")
 
     assert settings.app_env == "development"
     assert settings.log_level == "INFO"
@@ -29,7 +29,7 @@ def test_settings_google_provider() -> None:
 
 def test_settings_ollama_provider() -> None:
     """Test Settings validates OLLAMA provider configuration."""
-    settings = Settings(llm_provider="ollama", ollama_model="THALLE")
+    settings = Settings(_env_file=None, llm_provider="ollama", ollama_model="THALLE")
 
     assert settings.llm_provider == "ollama"
     assert settings.ollama_base_url == "http://localhost:11434"
