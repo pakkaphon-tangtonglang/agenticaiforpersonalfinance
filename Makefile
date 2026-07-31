@@ -27,11 +27,11 @@ install:  ## Install dependencies
 
 dev:  ## Run development server with auto-reload
 	@echo "Starting development server..."
-	uv run uvicorn finance_ai.main:app --reload --host 0.0.0.0 --port 8000
+	uv run uvicorn finance_ai.main:app --reload --host 0.0.0.0 --port 8080
 
 run:  ## Run production server
 	@echo "Starting production server..."
-	uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port 8000 --workers 4
+	uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port 8080 --workers 4
 
 test:  ## Run tests with coverage
 	@echo "Running tests..."
