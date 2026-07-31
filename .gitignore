@@ -191,3 +191,33 @@ data/evaluation/test_dataset.pdf
 
 # Agent skills lockfile (local dev tooling)
 skills-lock.json
+
+# Local-only / private tooling and config
+.mcp.json
+.env.*.backup
+*.code-workspace
+.cursor/
+.continue/
+.aider*
+.pi/
+.opencode/
+.superpowers/
+docs/superpowers/
+
+# Local-only launcher / handoff artifacts
+start-webapp.bat
+start-webapp.ps1
+handoff*.md
+handoff-summary*.md
+
+# Personal / private documents (job applications, cover letters, resumes)
+cover_letter*.md
+*.cover_letter
+resume*.md
+resume*.pdf
+
+# Unrelated design-system reference (not part of this project)
+designref/
+
+# Presentation / slide artifacts (local-only)
+diagramforslide/
