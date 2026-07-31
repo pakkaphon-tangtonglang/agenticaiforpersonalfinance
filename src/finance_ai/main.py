@@ -3,21 +3,27 @@
 Provides REST API endpoints for chat, conversations, bank statement
 upload, dashboard, asset monitoring, and evaluation.
 
-Run with: make dev (development) or make run (production)
+Run with: make dev (development, port 8080) or make run (production)
 """
 
 import json
-
 from collections.abc import Generator
+from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
-from fastapi import Depends, FastAPI, File, UploadFile
+import asyncio
+
+from datetime import date, datetime
+
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from finance_ai.agents.llm_factory import create_chat_model
+from finance_ai.agents.llm_factory import create_chat_model, create_ocr_chat_model
 from finance_ai.agents.router_agent import orchestrate_query
 from finance_ai.agents.stream_utils import StreamEvent, orchestrate_query_stream
 from finance_ai.core.config import get_settings
@@ -25,6 +31,13 @@ from finance_ai.core.logging import get_logger
 from finance_ai.database.session import create_database_engine, create_session_factory
 from finance_ai.tools.bank_statement_parser import parse_bank_statement
 from finance_ai.tools.bank_statement_service import bulk_insert_transactions
+from finance_ai.tools.receipt_ocr import (
+    SUPPORTED_MIME_TYPES,
+    ReceiptOcrResult,
+    extract_document_fields,
+)
+from finance_ai.tools.receipt_ocr_service import confirm_receipt_transactions
+from finance_ai.tools.expense_constants import VALID_EXPENSE_CATEGORIES
 from finance_ai.tools.conversation_service import (
     create_conversation,
     get_recent_history_as_tuples,
@@ -60,6 +73,7 @@ app.add_middleware(
 _engine = create_database_engine()
 _session_factory = create_session_factory(_engine)
 _chat_model: Any = None
+_ocr_chat_model: Any = None
 
 
 def get_chat_model() -> Any:
@@ -72,6 +86,20 @@ def get_chat_model() -> Any:
     if _chat_model is None:
         _chat_model = create_chat_model()
     return _chat_model
+
+
+def get_ocr_chat_model() -> Any:
+    """Get or create the cached OCR (vision) chat model instance.
+
+    Uses the dedicated OCR_* settings, independent of the main LLM provider.
+
+    Returns:
+        LangChain BaseChatModel instance configured for OCR.
+    """
+    global _ocr_chat_model  # noqa: PLW0603
+    if _ocr_chat_model is None:
+        _ocr_chat_model = create_ocr_chat_model()
+    return _ocr_chat_model
 
 
 def get_session() -> Generator[Session, None, None]:
@@ -137,6 +165,67 @@ class ImportResult(BaseModel):
 
     inserted: int = Field(..., description="Number of transactions inserted")
     total: int = Field(..., description="Total transactions parsed")
+
+
+class ReceiptDraftOut(BaseModel):
+    """A single draft extracted from a document (pre-confirmation)."""
+
+    transaction_type: str = Field(..., description="'income' or 'expense'")
+    amount: str = Field(..., description="Amount in THB (string for Decimal)")
+    transaction_date: str = Field(..., description="ISO date YYYY-MM-DD")
+    description: str = Field(default="", description="Description text")
+    category: str = Field(default="other", description="Category key")
+    income_type: str = Field(default="other", description="Income type key")
+    withholding_tax: str = Field(default="0", description="Withholding tax THB")
+    employer_name: str | None = Field(default=None, description="Employer name")
+    confidence: float = Field(default=0.0, description="Model confidence 0-1")
+
+
+class ReceiptScanResponse(BaseModel):
+    """Response for receipt scan (drafts only, not yet persisted)."""
+
+    drafts: list[ReceiptDraftOut] = Field(default_factory=list)
+    total: int = Field(default=0, description="Number of drafts extracted")
+
+
+class ConfirmTransactionInput(BaseModel):
+    """A single user-confirmed transaction ready to persist."""
+
+    transaction_type: str = Field(..., description="'income' or 'expense'")
+    amount: Decimal = Field(..., gt=0, description="Amount in THB (must be > 0)")
+    transaction_date: str = Field(..., description="ISO date YYYY-MM-DD")
+    description: str = Field(default="", description="Description text")
+    category: str = Field(default="other", description="Category key")
+    income_type: str = Field(default="other", description="Income type key")
+    withholding_tax: Decimal = Field(default=Decimal("0"), description="Withholding tax THB")
+    employer_name: str | None = Field(default=None, description="Employer name")
+
+    @field_validator("transaction_type")
+    @classmethod
+    def _validate_type(cls, value: str) -> str:
+        """Ensure transaction_type is income or expense."""
+        if value not in ("income", "expense"):
+            raise ValueError(f"transaction_type must be 'income' or 'expense'. Received: '{value}'")
+        return value
+
+    @field_validator("category")
+    @classmethod
+    def _validate_category(cls, value: str) -> str:
+        """Ensure category is a known key."""
+        if value not in VALID_EXPENSE_CATEGORIES:
+            raise ValueError(
+                f"category must be one of {VALID_EXPENSE_CATEGORIES}. Received: '{value}'"
+            )
+        return value
+
+
+class ConfirmTransactionRequest(BaseModel):
+    """Request body for confirming a batch of drafts."""
+
+    user_id: str = Field(..., description="User UUID")
+    transactions: list[ConfirmTransactionInput] = Field(
+        default_factory=list, description="Confirmed transactions to persist"
+    )
 
 
 # ──────────────────────────── Chat ────────────────────────────────
@@ -375,6 +464,208 @@ def _detect_file_type(filename: str) -> str:
     return "csv"
 
 
+def _detect_receipt_mime(file: UploadFile) -> str:
+    """Detect the MIME type of an uploaded receipt image/PDF.
+
+    Prefers the client-provided content_type; falls back to extension.
+
+    Args:
+        file: Uploaded file.
+
+    Returns:
+        MIME type string.
+
+    Raises:
+        ValueError: If the type is not a supported image/PDF.
+    """
+    mime = (file.content_type or "").lower()
+    if not mime:
+        mime = _mime_from_filename(file.filename or "")
+    if mime not in SUPPORTED_MIME_TYPES:
+        raise ValueError(f"Unsupported file type: '{mime}'. Supported: images and PDF.")
+    return mime
+
+
+def _mime_from_filename(filename: str) -> str:
+    """Infer a MIME type from a filename extension.
+
+    Args:
+        filename: Name of the uploaded file.
+
+    Returns:
+        MIME type string (empty string if unknown).
+    """
+    lower = filename.lower()
+    if lower.endswith(".png"):
+        return "image/png"
+    if lower.endswith((".jpg", ".jpeg")):
+        return "image/jpeg"
+    if lower.endswith(".webp"):
+        return "image/webp"
+    if lower.endswith((".heic", ".heif")):
+        return "image/heic"
+    if lower.endswith(".pdf"):
+        return "application/pdf"
+    return ""
+
+
+def _draft_to_out(draft: ReceiptOcrResult) -> ReceiptDraftOut:
+    """Convert a ReceiptOcrResult into a JSON-safe ReceiptDraftOut.
+
+    Args:
+        draft: Parsed draft from the OCR step.
+
+    Returns:
+        ReceiptDraftOut with Decimal/date fields serialized as strings.
+    """
+    return ReceiptDraftOut(
+        transaction_type=draft.transaction_type,
+        amount=str(draft.amount),
+        transaction_date=draft.transaction_date.isoformat(),
+        description=draft.description,
+        category=draft.category,
+        income_type=draft.income_type,
+        withholding_tax=str(draft.withholding_tax),
+        employer_name=draft.employer_name,
+        confidence=draft.confidence,
+    )
+
+
+@app.post("/upload/receipt", response_model=ReceiptScanResponse)
+async def upload_receipt(
+    user_id: str,
+    file: UploadFile = File(...),
+) -> ReceiptScanResponse:
+    """Scan a financial document image/PDF and return drafts (not persisted).
+
+    The model pre-fills transaction fields; the user must review and
+    confirm via /transactions/confirm before anything is saved.
+
+    Args:
+        user_id: User UUID.
+        file: Uploaded image or PDF.
+
+    Returns:
+        ReceiptScanResponse with extracted drafts.
+
+    Raises:
+        HTTPException: 400 if the file type is unsupported;
+                       503 if the AI provider is misconfigured or fails.
+    """
+    try:
+        mime_type = _detect_receipt_mime(file)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    content = await file.read()
+    try:
+        drafts = await _extract_drafts_async(content, mime_type)
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"AI ไม่พร้อมใช้งาน: ติดตั้ง/เปิดใช้ provider ไม่ได้: {exc}",
+        ) from exc
+    except asyncio.TimeoutError as exc:
+        raise HTTPException(
+            status_code=504,
+            detail="AI อ่านเอกสารนานเกินไป กรุณาลองอีกครั้ง",
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=f"AI ไม่สามารถอ่านเอกสารได้: {exc}",
+        ) from exc
+
+    return ReceiptScanResponse(
+        drafts=[_draft_to_out(d) for d in drafts],
+        total=len(drafts),
+    )
+
+
+def _extract_drafts(
+    content: bytes,
+    mime_type: str,
+) -> list[ReceiptOcrResult]:
+    """Extract transaction drafts from the document bytes using the OCR model.
+
+    Uses the dedicated OCR vision model (OCR_* settings), separate from the
+    main chat model, so document scanning can run on a vision-capable model.
+
+    Args:
+        content: Raw uploaded file bytes.
+        mime_type: Detected MIME type.
+
+    Returns:
+        List of parsed drafts.
+    """
+    return extract_document_fields(content, mime_type, get_ocr_chat_model())
+
+
+async def _extract_drafts_async(
+    content: bytes,
+    mime_type: str,
+) -> list[ReceiptOcrResult]:
+    """Run OCR in a worker thread with a server-side timeout.
+
+    The vision-model call is blocking; running it off the event loop keeps
+    the API responsive and lets us enforce ``ocr_timeout``. A timeout is
+    surfaced to the caller as an ``asyncio.TimeoutError`` (mapped to 504).
+
+    Args:
+        content: Raw uploaded file bytes.
+        mime_type: Detected MIME type.
+
+    Returns:
+        List of parsed drafts.
+
+    Raises:
+        asyncio.TimeoutError: If OCR takes longer than ``ocr_timeout``.
+    """
+    timeout = get_settings().ocr_timeout
+    return await asyncio.wait_for(
+        asyncio.to_thread(_extract_drafts, content, mime_type),
+        timeout=timeout,
+    )
+
+
+def _input_to_draft(
+    item: ConfirmTransactionInput,
+) -> ReceiptOcrResult:
+    """Convert a confirmed input into a ReceiptOcrResult for persistence.
+
+    Args:
+        item: User-confirmed transaction input.
+
+    Returns:
+        ReceiptOcrResult ready for confirm_receipt_transactions.
+    """
+    return ReceiptOcrResult(
+        transaction_type=item.transaction_type,
+        amount=item.amount,
+        transaction_date=datetime.strptime(item.transaction_date, "%Y-%m-%d").date(),
+        description=item.description,
+        category=item.category,
+        income_type=item.income_type,
+        withholding_tax=item.withholding_tax,
+        employer_name=item.employer_name,
+    )
+
+
+@app.post("/transactions/confirm", response_model=ImportResult)
+def confirm_transactions(req: ConfirmTransactionRequest) -> ImportResult:
+    """Persist user-confirmed transaction drafts to the database.
+
+    Args:
+        req: Confirm request with user_id and confirmed transactions.
+
+    Returns:
+        ImportResult with inserted and total counts.
+    """
+    drafts = [_input_to_draft(item) for item in req.transactions]
+    result = confirm_receipt_transactions(drafts, req.user_id, _session_factory)
+    return ImportResult(inserted=result.inserted, total=result.total)
+
+
 # ──────────────────────── Dashboard ──────────────────────────────
 
 
@@ -507,3 +798,9 @@ def health_check() -> dict[str, str]:
         Health status dictionary.
     """
     return {"status": "healthy", "service": "personal-finance-ai"}
+
+
+_static_dir = Path(__file__).parent / "static"
+if _static_dir.is_dir():
+    app.mount("/static", StaticFiles(directory=_static_dir), name="static")
+    app.mount("/", StaticFiles(directory=_static_dir, html=True), name="web")
