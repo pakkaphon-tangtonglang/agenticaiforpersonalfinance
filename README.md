@@ -2,7 +2,7 @@
 
 > Multi-Agent AI system for personal finance management designed for Thai users
 
-[![CI](https://img.shields.io/github/actions/workflow/status/yourusername/personal-finance-ai/ci.yml?branch=main)](./.github/workflows/ci.yml)
+[![CI](https://img.shields.io/github/actions/workflow/status/66070146-Pakkaphon/agenticaiforpersonalfinance/ci.yml?branch=main)](./.github/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
@@ -31,7 +31,7 @@ Powered by LangGraph with a Router + 6 specialized agents:
 - **Report Agent** - Comprehensive financial reports with PDF/CSV export
 
 ### RAG Knowledge Base
-ChromaDB vector store with 16+ Thai finance documents covering:
+ChromaDB vector store with 23 Thai finance documents covering:
 - Personal income tax, deductions, filing guides, VAT/withholding
 - Thai stocks, mutual funds, ETFs, bonds, DCA strategy
 - Budgeting, emergency funds, debt management
@@ -50,8 +50,8 @@ ChromaDB vector store with 16+ Thai finance documents covering:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/personal-finance-ai.git
-cd personal-finance-ai
+git clone https://github.com/66070146-Pakkaphon/agenticaiforpersonalfinance.git
+cd agenticaiforpersonalfinance
 
 # Install dependencies
 make install
@@ -60,7 +60,12 @@ make install
 cp .env.example .env
 
 # Edit .env and add your API keys
+#   At minimum set: LLM_PROVIDER (google | ollama | openrouter) + GOOGLE_API_KEY
+#   (ollama needs no API key — run it locally on http://localhost:11434)
 nano .env
+
+# Initialize the database (runs Alembic migrations to create all tables)
+make init-db
 
 # Run tests to verify setup
 make test
@@ -76,8 +81,9 @@ make dev
 make run
 ```
 
-The API will be available at `http://localhost:8000`
-Interactive API docs at `http://localhost:8000/docs`
+The API will be available at `http://localhost:8080`
+Web UI (chat interface) at `http://localhost:8080/`
+Interactive API docs at `http://localhost:8080/docs`
 
 ## Usage Examples
 
@@ -114,7 +120,7 @@ for event in orchestrate_query_stream(
 ## Project Structure
 
 ```
-personal-finance-ai/
+agenticaiforpersonalfinance/
 ├── src/finance_ai/
 │   ├── agents/              # LangGraph agent implementations
 │   │   ├── router_agent.py       # Intent classification + dispatch
@@ -133,6 +139,7 @@ personal-finance-ai/
 │   ├── evaluation/         # Evaluation framework (6 dimensions)
 │   ├── core/               # Config, logging, LLM clients
 │   ├── ui/                 # Charts, export, constants (non-Streamlit)
+│   ├── static/             # Web frontend (HTML/JS/CSS served by FastAPI)
 │   └── main.py             # FastAPI app entry point
 ├── tests/                  # Test suite (mirrors src/)
 ├── alembic/                # Database migrations
@@ -178,17 +185,24 @@ See [CLAUDE.md](./CLAUDE.md) for full coding standards.
 ### Available Make Commands
 
 ```bash
-make install     # Install dependencies
-make dev         # Run development server (auto-reload)
-make run         # Run production server
-make test        # Run tests with coverage
-make coverage    # Generate HTML coverage report
-make lint        # Check code quality
-make format      # Format code with black
-make typecheck   # Type checking with mypy
-make check       # Run all checks (format, lint, typecheck, test)
-make clean       # Clean generated files
-make evaluate    # Run evaluation framework
+make install          # Install dependencies (+ pre-commit hooks)
+make init-db          # Initialize database (run Alembic migrations)
+make migrate          # Create a new Alembic migration (prompts for a message)
+make dev              # Run development server with auto-reload (port 8080)
+make run              # Run production server (port 8080, 4 workers)
+make test             # Run tests with coverage
+make coverage         # Generate HTML coverage report (htmlcov/)
+make lint             # Run pylint
+make format           # Format code with black
+make format-check     # Check formatting without writing (CI mode)
+make typecheck        # Type checking with mypy
+make check            # Run all checks (format, lint, typecheck, test)
+make shell            # Open an IPython shell with app context
+make clean            # Clean generated files
+make evaluate         # Run the full evaluation framework
+make evaluate-routing # Run routing evaluation only
+make evaluate-rag     # Run RAG evaluation only
+make evaluate-compare # Compare multiple LLM providers
 ```
 
 ## LLM Providers
@@ -199,7 +213,7 @@ The system supports multiple LLM providers (configured in `.env`):
 |---|---|---|
 | Google Gemini | `llm_provider=google` | `gemini-2.5-flash` |
 | Ollama (local) | `llm_provider=ollama` | `THALLE` |
-| OpenRouter | `llm_provider=openrouter` | `deepseek/deepseek-chat-v3-0324` |
+| OpenRouter | `llm_provider=openrouter` | `deepseek/deepseek-chat-v3.1` |
 
 ## Roadmap
 
@@ -207,18 +221,20 @@ The system supports multiple LLM providers (configured in `.env`):
 - [x] Project foundation, dev tools, CI/CD config
 - [x] Database models + Alembic migrations
 - [x] Tax calculation engine (all Thai deductions + brackets)
-- [x] RAG knowledge base (ChromaDB + 16 Thai finance docs)
+- [x] RAG knowledge base (ChromaDB + 23 Thai finance docs)
 - [x] Multi-agent system (Router + 6 specialized agents)
 - [x] Cross-agent collaboration tools
 - [x] Conversation history + memory (DB persistence)
-- [x] Evaluation framework (routing, RAG, accuracy, hallucination, performance)
+- [x] Evaluation framework (routing, RAG, accuracy, hallucination, quality, performance)
 - [x] Dashboard, file upload, PDF/CSV export
 - [x] Asset monitoring with scheduled fetching + notifications
 - [x] Proactive recommendations + financial health scoring
+- [x] FastAPI backend (replaced Streamlit; 14 REST endpoints)
+- [x] Static web frontend (HTML/JS/CSS served by FastAPI)
+- [x] Dependency upgrades (LangGraph 1.x, LangChain 1.x, google-genai 2.x)
 
 ### In Progress
-- [ ] FastAPI backend (replacing Streamlit)
-- [ ] Dependency upgrades (LangGraph 1.x, LangChain 1.x, google-genai 2.x)
+- [ ] Streamlit code cleanup (legacy remnants in `ui/` and CRUD still reference Streamlit)
 
 ### Future
 - [ ] Web frontend (Next.js or similar)
