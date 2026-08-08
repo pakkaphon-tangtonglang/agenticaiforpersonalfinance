@@ -14,7 +14,7 @@ from finance_ai.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-_graph_cache: dict[str, CompiledStateGraph] = {}
+_graph_cache: dict[str, CompiledStateGraph[Any, None, Any, Any]] = {}
 
 _BUILDER_MAP: dict[str, str] = {
     "tax": "finance_ai.agents.tax_agent",
@@ -37,8 +37,8 @@ _BUILDER_FN: dict[str, str] = {
 
 def get_compiled_graph(
     intent: str,
-    chat_model: BaseChatModel,
-) -> CompiledStateGraph | None:
+    chat_model: BaseChatModel | None = None,
+) -> CompiledStateGraph[Any, None, Any, Any] | None:
     """Get a cached compiled graph for the given intent.
 
     Builds and caches the graph on first call per intent.

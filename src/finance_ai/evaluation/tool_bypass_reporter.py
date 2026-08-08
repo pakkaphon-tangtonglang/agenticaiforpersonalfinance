@@ -7,6 +7,7 @@ per-case details, and a conclusion — suitable for PDF conversion.
 from __future__ import annotations
 
 import os
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -154,7 +155,7 @@ def _section_error_detail(result: "ToolBypassBenchmarkResult") -> str:
         expected_str = f"{case.expected_tax:,}"
         if case.notool_extracted_tax is not None:
             error = abs(case.notool_extracted_tax - case.expected_tax)
-            pct = float(error / max(case.expected_tax, 1) * 100)
+            pct = float(error / max(case.expected_tax, Decimal(1)) * 100)
             got_str = f"{case.notool_extracted_tax:,}"
             error_str = f"ผิด {error:,} บาท ({pct:.1f}%)"
         else:

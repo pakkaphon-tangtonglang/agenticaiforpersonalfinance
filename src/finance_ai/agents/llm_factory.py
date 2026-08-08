@@ -30,7 +30,7 @@ def import_chat_ollama() -> type:
             "langchain-ollama is required for OLLAMA provider. "
             "Install with: pip install langchain-ollama"
         ) from exc
-    return ChatOllama
+    return ChatOllama  # type: ignore[no-any-return]
 
 
 def create_google_chat_model(settings: Settings) -> BaseChatModel:
@@ -51,7 +51,7 @@ def create_google_chat_model(settings: Settings) -> BaseChatModel:
     if not settings.google_api_key:
         raise ValueError("google_api_key is required when llm_provider is 'google'.")
     logger.info("Creating Google ChatModel with model=%s", settings.google_model)
-    return ChatGoogleGenerativeAI(
+    return ChatGoogleGenerativeAI(  # type: ignore[no-any-return]
         model=settings.google_model,
         google_api_key=settings.google_api_key,
         temperature=settings.llm_temperature,
@@ -201,7 +201,7 @@ def create_ocr_google_chat_model(settings: Settings) -> BaseChatModel:
     if not settings.ocr_api_key:
         raise ValueError("ocr_api_key is required when ocr_provider is 'google'.")
     logger.info("Creating Google OCR ChatModel with model=%s", settings.ocr_model)
-    return ChatGoogleGenerativeAI(
+    return ChatGoogleGenerativeAI(  # type: ignore[no-any-return]
         model=settings.ocr_model,
         google_api_key=settings.ocr_api_key,
         temperature=settings.ocr_temperature,

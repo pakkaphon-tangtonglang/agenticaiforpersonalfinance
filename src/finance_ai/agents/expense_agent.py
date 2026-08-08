@@ -74,7 +74,7 @@ def create_llm_node(
 
 def build_expense_agent_graph(
     chat_model: BaseChatModel | None = None,
-) -> CompiledStateGraph[ExpenseAgentState, Any]:
+) -> CompiledStateGraph[ExpenseAgentState, None, Any, Any]:
     """Build the LangGraph StateGraph for the Expense Agent.
 
     Creates a ReAct-style graph: agent -> (tool_calls?) -> tools -> agent -> END.

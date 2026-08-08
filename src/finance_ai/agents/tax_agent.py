@@ -95,7 +95,7 @@ def _create_respond_node(
 
 def build_tax_agent_graph(
     chat_model: BaseChatModel | None = None,
-) -> CompiledStateGraph[TaxAgentState, Any]:
+) -> CompiledStateGraph[TaxAgentState, None, Any, Any]:
     """Build the LangGraph StateGraph for the Tax Agent.
 
     Graph flow: first_turn (force tool) -> tools -> respond -> END.

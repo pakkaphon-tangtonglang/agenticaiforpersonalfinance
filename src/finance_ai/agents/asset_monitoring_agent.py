@@ -70,7 +70,7 @@ def create_llm_node(
 
 def build_asset_monitoring_agent_graph(
     chat_model: BaseChatModel | None = None,
-) -> CompiledStateGraph[AssetMonitoringAgentState, Any]:
+) -> CompiledStateGraph[AssetMonitoringAgentState, None, Any, Any]:
     """Build the LangGraph StateGraph for the Asset Monitoring Agent.
 
     Creates a ReAct-style graph: agent -> (tool_calls?) -> tools -> agent -> END.

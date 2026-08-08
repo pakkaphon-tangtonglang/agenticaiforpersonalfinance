@@ -16,7 +16,7 @@ import asyncio
 
 from datetime import date, datetime
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -231,7 +231,7 @@ class ConfirmTransactionRequest(BaseModel):
 # ──────────────────────────── Chat ────────────────────────────────
 
 
-@app.post("/chat", response_model=ChatResponse)
+@app.post("/chat", response_model=ChatResponse)  # type: ignore[misc]
 def chat(req: ChatRequest, session: Session = Depends(get_session)) -> ChatResponse:
     """Process a chat query (non-streaming).
 
@@ -257,7 +257,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_session)) -> ChatRespo
     return ChatResponse(intent=result["intent"], response=result["response"])
 
 
-@app.get("/chat/stream")
+@app.get("/chat/stream")  # type: ignore[misc]
 def chat_stream(
     query: str,
     user_id: str,
@@ -364,7 +364,7 @@ def _load_history(
 # ──────────────────────── Conversations ──────────────────────────
 
 
-@app.get("/conversations", response_model=list[ConversationSummary])
+@app.get("/conversations", response_model=list[ConversationSummary])  # type: ignore[misc]
 def list_conversations(
     user_id: str, session: Session = Depends(get_session)
 ) -> list[ConversationSummary]:
@@ -381,7 +381,7 @@ def list_conversations(
     return [ConversationSummary(id=str(conv.id), title=conv.title or "แชทใหม่") for conv in convs]
 
 
-@app.post("/conversations", response_model=ConversationSummary)
+@app.post("/conversations", response_model=ConversationSummary)  # type: ignore[misc]
 def create_new_conv(
     req: CreateConversationRequest, session: Session = Depends(get_session)
 ) -> ConversationSummary:
@@ -398,7 +398,7 @@ def create_new_conv(
     return ConversationSummary(id=str(conv.id), title=conv.title or "แชทใหม่")
 
 
-@app.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])
+@app.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])  # type: ignore[misc]
 def get_messages(conversation_id: str, session: Session = Depends(get_session)) -> list[MessageOut]:
     """Get all messages in a conversation.
 
@@ -423,7 +423,7 @@ def get_messages(conversation_id: str, session: Session = Depends(get_session)) 
 # ──────────────────────── Upload ─────────────────────────────────
 
 
-@app.post("/upload/bank-statement", response_model=ImportResult)
+@app.post("/upload/bank-statement", response_model=ImportResult)  # type: ignore[misc]
 async def upload_bank_statement(
     user_id: str,
     file: UploadFile = File(...),
@@ -531,7 +531,7 @@ def _draft_to_out(draft: ReceiptOcrResult) -> ReceiptDraftOut:
     )
 
 
-@app.post("/upload/receipt", response_model=ReceiptScanResponse)
+@app.post("/upload/receipt", response_model=ReceiptScanResponse)  # type: ignore[misc]
 async def upload_receipt(
     user_id: str,
     file: UploadFile = File(...),
@@ -651,7 +651,7 @@ def _input_to_draft(
     )
 
 
-@app.post("/transactions/confirm", response_model=ImportResult)
+@app.post("/transactions/confirm", response_model=ImportResult)  # type: ignore[misc]
 def confirm_transactions(req: ConfirmTransactionRequest) -> ImportResult:
     """Persist user-confirmed transaction drafts to the database.
 
@@ -669,7 +669,7 @@ def confirm_transactions(req: ConfirmTransactionRequest) -> ImportResult:
 # ──────────────────────── Dashboard ──────────────────────────────
 
 
-@app.get("/dashboard")
+@app.get("/dashboard")  # type: ignore[misc]
 def get_dashboard(
     user_id: str,
     year: int | None = None,
@@ -687,19 +687,20 @@ def get_dashboard(
     Returns:
         Financial report dictionary.
     """
+    today = date.today()
     report = generate_financial_report(
         session=session,
         user_id=user_id,
-        year=year,
-        month=month,
+        year=year if year is not None else today.year,
+        month=month if month is not None else today.month,
     )
-    return report.model_dump(mode="json") if hasattr(report, "model_dump") else report
+    return report.model_dump(mode="json")
 
 
 # ──────────────────────── Assets ─────────────────────────────────
 
 
-@app.post("/assets/fetch")
+@app.post("/assets/fetch")  # type: ignore[misc]
 def fetch_asset_data(
     req: AssetFetchRequest, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
@@ -721,7 +722,7 @@ def fetch_asset_data(
     return {"status": "ok", "result": result}
 
 
-@app.get("/assets/notifications")
+@app.get("/assets/notifications")  # type: ignore[misc]
 def get_asset_notifications(
     user_id: str, session: Session = Depends(get_session)
 ) -> list[dict[str, Any]]:
@@ -739,14 +740,14 @@ def get_asset_notifications(
         {
             "id": str(n.id),
             "symbol": n.symbol,
-            "message": n.message,
+            "message": n.content,
             "created_at": str(n.created_at),
         }
         for n in notifications
     ]
 
 
-@app.post("/assets/notifications/read")
+@app.post("/assets/notifications/read")  # type: ignore[misc]
 def mark_notifications_read(
     user_id: str, session: Session = Depends(get_session)
 ) -> dict[str, str]:
@@ -766,9 +767,9 @@ def mark_notifications_read(
 # ──────────────────────── Evaluation ─────────────────────────────
 
 
-@app.post("/evaluation/run")
+@app.post("/evaluation/run")  # type: ignore[misc]
 def run_evaluation(
-    dimensions: list[str] | None = None,
+    dimensions: list[str] | None = Query(default=None),
     session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     """Run the evaluation framework.
@@ -782,15 +783,44 @@ def run_evaluation(
     """
     from finance_ai.evaluation.runner import EvaluationRunner  # noqa: PLC0415
 
-    runner = EvaluationRunner(chat_model=get_chat_model(), session_factory=_session_factory)
-    results = runner.run_all(dimensions=dimensions)
-    return {"status": "ok", "results": results}
+    settings = get_settings()
+    runner = EvaluationRunner(
+        chat_model=get_chat_model(),
+        vector_store=None,
+        llm_provider=settings.llm_provider,
+        llm_model=settings.active_llm_model,
+        db_session_factory=_session_factory,
+    )
+    results = runner.run_all(skip=_dimensions_to_skip(dimensions))
+    return {"status": "ok", "results": results.model_dump(mode="json")}
+
+
+_ALL_EVAL_DIMENSIONS = frozenset(
+    {"routing", "rag", "accuracy", "hallucination", "quality", "performance"}
+)
+
+
+def _dimensions_to_skip(dimensions: list[str] | None) -> set[str] | None:
+    """Translate requested dimensions into the set of dimensions to skip.
+
+    The runner's ``run_all`` takes a ``skip`` set: we keep the requested
+    dimensions and skip the rest. ``None`` runs every dimension.
+
+    Args:
+        dimensions: Dimensions the caller wants to run, or None for all.
+
+    Returns:
+        Set of dimensions to skip, or None to run all.
+    """
+    if dimensions is None:
+        return None
+    return set(_ALL_EVAL_DIMENSIONS) - set(dimensions)
 
 
 # ──────────────────────── Health ─────────────────────────────────
 
 
-@app.get("/health")
+@app.get("/health")  # type: ignore[misc]
 def health_check() -> dict[str, str]:
     """Health check endpoint.
 
