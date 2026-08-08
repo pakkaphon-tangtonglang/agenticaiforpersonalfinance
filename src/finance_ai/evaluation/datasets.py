@@ -3,7 +3,7 @@
 from pathlib import Path
 from typing import Any
 
-import yaml  # type: ignore[import-untyped]
+import yaml
 
 from finance_ai.evaluation.models import (
     HallucinationDataset,

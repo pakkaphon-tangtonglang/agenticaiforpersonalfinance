@@ -63,6 +63,25 @@ class Settings(BaseSettings):
         default="https://opencode.ai/zen/go/v1", description="OpenCode API base URL"
     )
 
+    @property
+    def active_llm_model(self) -> str:
+        """Return the model name for the currently selected llm_provider.
+
+        Returns:
+            The configured model name for the active provider.
+
+        Example:
+            >>> settings.active_llm_model
+            'gemini-2.5-flash'
+        """
+        models = {
+            "google": self.google_model,
+            "ollama": self.ollama_model,
+            "openrouter": self.openrouter_model,
+            "opencode": self.opencode_model,
+        }
+        return models.get(self.llm_provider, self.google_model)
+
     # OCR Provider Configuration (vision model for document scanning)
     # Separate from the main LLM provider so OCR can use a vision model
     # (e.g. gemma4:31b on Ollama Cloud) without affecting chat agents.

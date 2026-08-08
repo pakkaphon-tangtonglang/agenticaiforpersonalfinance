@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from finance_ai.agents.prompts import TAX_AGENT_SYSTEM_PROMPT
 from finance_ai.agents.router_agent import execute_tax_agent
 from finance_ai.agents.schemas import TaxAgentState
-from finance_ai.agents.tax_agent import should_continue
+from finance_ai.agents.graph_utils import should_continue
 from finance_ai.agents.tax_tools import calculate_thai_tax
 from finance_ai.evaluation.metrics import extract_thai_number
 from finance_ai.evaluation.models import (

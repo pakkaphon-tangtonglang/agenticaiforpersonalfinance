@@ -165,6 +165,12 @@ module = [
     "google.genai.*",
     "google.generativeai.*",
     "yfinance.*",
+    # Third-party libs without py.typed markers / stubs.
+    "plotly.*",
+    "plotly.graph_objects.*",
+    "openai.*",
+    "openpyxl.*",
+    "apscheduler.*",
 ]
 ignore_missing_imports = true
 

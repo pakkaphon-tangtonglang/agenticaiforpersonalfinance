@@ -119,6 +119,46 @@ def classify_query(
     return parse_orchestrator_response(response.content)
 
 
+def _invoke_intent(
+    intent: str,
+    query: str,
+    chat_model: BaseChatModel | None,
+    user_id: str,
+    db_session_factory: Callable[[], Session] | None,
+    chat_history: list[tuple[str, str]] | None,
+) -> dict[str, Any]:
+    """Build, invoke, and return the response for a single specialist agent.
+
+    Args:
+        intent: Agent intent key (tax, expense, etc.).
+        query: The user's query.
+        chat_model: Optional ChatModel override.
+        user_id: UUID of the user for DB operations.
+        db_session_factory: Optional session factory for DB access.
+        chat_history: Optional previous messages for context.
+
+    Returns:
+        Dict with the intent and the agent's last message content.
+
+    Raises:
+        ValueError: If the intent has no registered graph builder.
+    """
+    from finance_ai.agents.graph_cache import get_compiled_graph  # noqa: PLC0415
+
+    graph = get_compiled_graph(intent, chat_model)
+    if graph is None:
+        raise ValueError(f"Unknown agent intent: {intent}")
+    result = graph.invoke(
+        {
+            "messages": _build_messages(query, chat_history),
+            "user_id": user_id,
+            "db_session_factory": db_session_factory,
+        }
+    )
+    last_message = result["messages"][-1]
+    return {"intent": intent, "response": last_message.content}
+
+
 def execute_tax_agent(
     query: str,
     chat_model: BaseChatModel | None = None,
@@ -141,18 +181,7 @@ def execute_tax_agent(
     Example:
         >>> result = execute_tax_agent("คำนวณภาษี เงินเดือน 1 ล้าน")
     """
-    from finance_ai.agents.graph_cache import get_compiled_graph  # noqa: PLC0415
-
-    graph = get_compiled_graph("tax", chat_model)
-    result = graph.invoke(
-        {
-            "messages": _build_messages(query, chat_history),
-            "user_id": user_id,
-            "db_session_factory": db_session_factory,
-        }
-    )
-    last_message = result["messages"][-1]
-    return {"intent": "tax", "response": last_message.content}
+    return _invoke_intent("tax", query, chat_model, user_id, db_session_factory, chat_history)
 
 
 def execute_expense_agent(
@@ -177,18 +206,7 @@ def execute_expense_agent(
     Example:
         >>> result = execute_expense_agent("จ่ายค่ากาแฟ 80 บาท")
     """
-    from finance_ai.agents.graph_cache import get_compiled_graph  # noqa: PLC0415
-
-    graph = get_compiled_graph("expense", chat_model)
-    result = graph.invoke(
-        {
-            "messages": _build_messages(query, chat_history),
-            "user_id": user_id,
-            "db_session_factory": db_session_factory,
-        }
-    )
-    last_message = result["messages"][-1]
-    return {"intent": "expense", "response": last_message.content}
+    return _invoke_intent("expense", query, chat_model, user_id, db_session_factory, chat_history)
 
 
 def execute_asset_monitoring_agent(
@@ -213,18 +231,9 @@ def execute_asset_monitoring_agent(
     Example:
         >>> result = execute_asset_monitoring_agent("ดูพอร์ตของฉัน")
     """
-    from finance_ai.agents.graph_cache import get_compiled_graph  # noqa: PLC0415
-
-    graph = get_compiled_graph("asset_monitoring", chat_model)
-    result = graph.invoke(
-        {
-            "messages": _build_messages(query, chat_history),
-            "user_id": user_id,
-            "db_session_factory": db_session_factory,
-        }
+    return _invoke_intent(
+        "asset_monitoring", query, chat_model, user_id, db_session_factory, chat_history
     )
-    last_message = result["messages"][-1]
-    return {"intent": "asset_monitoring", "response": last_message.content}
 
 
 def execute_planning_agent(
@@ -249,18 +258,7 @@ def execute_planning_agent(
     Example:
         >>> result = execute_planning_agent("อยากออมเงิน 100,000 บาท")
     """
-    from finance_ai.agents.graph_cache import get_compiled_graph  # noqa: PLC0415
-
-    graph = get_compiled_graph("planning", chat_model)
-    result = graph.invoke(
-        {
-            "messages": _build_messages(query, chat_history),
-            "user_id": user_id,
-            "db_session_factory": db_session_factory,
-        }
-    )
-    last_message = result["messages"][-1]
-    return {"intent": "planning", "response": last_message.content}
+    return _invoke_intent("planning", query, chat_model, user_id, db_session_factory, chat_history)
 
 
 def execute_recommendation_agent(
@@ -285,18 +283,9 @@ def execute_recommendation_agent(
     Example:
         >>> result = execute_recommendation_agent("วิเคราะห์การเงินของฉัน")
     """
-    from finance_ai.agents.graph_cache import get_compiled_graph  # noqa: PLC0415
-
-    graph = get_compiled_graph("recommendation", chat_model)
-    result = graph.invoke(
-        {
-            "messages": _build_messages(query, chat_history),
-            "user_id": user_id,
-            "db_session_factory": db_session_factory,
-        }
+    return _invoke_intent(
+        "recommendation", query, chat_model, user_id, db_session_factory, chat_history
     )
-    last_message = result["messages"][-1]
-    return {"intent": "recommendation", "response": last_message.content}
 
 
 def execute_report_agent(
@@ -321,18 +310,7 @@ def execute_report_agent(
     Example:
         >>> result = execute_report_agent("สร้างรายงานการเงิน")
     """
-    from finance_ai.agents.graph_cache import get_compiled_graph  # noqa: PLC0415
-
-    graph = get_compiled_graph("report", chat_model)
-    result = graph.invoke(
-        {
-            "messages": _build_messages(query, chat_history),
-            "user_id": user_id,
-            "db_session_factory": db_session_factory,
-        }
-    )
-    last_message = result["messages"][-1]
-    return {"intent": "report", "response": last_message.content}
+    return _invoke_intent("report", query, chat_model, user_id, db_session_factory, chat_history)
 
 
 def execute_general_chat(
