@@ -139,7 +139,7 @@ def extract_document_fields(
     prepared_bytes, prepared_mime = _preprocess_image(
         image_bytes, mime_type, get_settings().ocr_max_image_edge
     )
-    message = _build_vision_message(prepared_bytes, prepared_mime, chat_model)
+    message = _build_vision_message(prepared_bytes, prepared_mime)
     response = _invoke_vision_model(chat_model, [message])
     items = _parse_ocr_json_response(str(response.content))
     return _convert_ocr_items(items)
@@ -178,10 +178,11 @@ def _preprocess_image(
 ) -> tuple[bytes, str]:
     """Downscale and re-encode an image to speed up the vision model.
 
-    PDFs and HEIC files (which need extra native backends) are returned
-    unchanged. If Pillow cannot decode the bytes, the original is
-    returned so callers still get *some* input to the model rather than
-    a hard failure.
+    PDFs are returned unchanged. HEIC/HEIF files go through Pillow but
+    fall back to the original bytes when the optional decoder is missing.
+    If Pillow cannot decode the bytes, the original is returned so
+    callers still get *some* input to the model rather than a hard
+    failure.
 
     Args:
         image_bytes: Raw uploaded image/PDF bytes.
@@ -230,7 +231,12 @@ def _invoke_vision_model(
     chat_model: BaseChatModel,
     messages: list[HumanMessage],
 ) -> Any:
-    """Invoke the chat model, forcing JSON output for Ollama.
+    """Invoke the chat model without forcing a JSON output mode.
+
+    Ollama's format="json" constrains the root to a JSON object, which
+    conflicts with the array the prompt requests, and Ollama Cloud
+    silently ignores the parameter. The prompt plus the tolerant parser
+    are the reliable contract.
 
     Args:
         chat_model: Multimodal chat model.
@@ -239,21 +245,7 @@ def _invoke_vision_model(
     Returns:
         Model response.
     """
-    if _is_ollama_chat_model(chat_model):
-        return chat_model.invoke(messages, format="json")
     return chat_model.invoke(messages)
-
-
-def _is_ollama_chat_model(chat_model: BaseChatModel) -> bool:
-    """Return True if the model is an Ollama chat model.
-
-    Args:
-        chat_model: Chat model instance.
-
-    Returns:
-        True when the class name is ChatOllama.
-    """
-    return chat_model.__class__.__name__ == "ChatOllama"
 
 
 def _encode_image_data_url(image_bytes: bytes, mime_type: str) -> str:
@@ -273,23 +265,20 @@ def _encode_image_data_url(image_bytes: bytes, mime_type: str) -> str:
 def _build_image_content_block(
     image_bytes: bytes,
     mime_type: str,
-    chat_model: BaseChatModel,
 ) -> dict[str, Any]:
-    """Build the provider-specific image content block.
+    """Build a base64 data-URL image content block.
 
-    Google Gemini accepts raw bytes with mime_type. Ollama, OpenRouter
-    and OpenAI accept a base64 data URL in an image_url block.
+    Google Gemini, Ollama, OpenRouter and OpenAI all accept the Chat
+    Completions image_url block with a data URL, so a single shape
+    serves every provider.
 
     Args:
         image_bytes: Raw image/PDF bytes.
         mime_type: MIME type of the bytes.
-        chat_model: Chat model instance (used to pick the block shape).
 
     Returns:
-        Image content block dict for the provider.
+        Image content block dict.
     """
-    if chat_model.__class__.__name__ == "ChatGoogleGenerativeAI":
-        return {"type": "image", "data": image_bytes, "mime_type": mime_type}
     return {
         "type": "image_url",
         "image_url": {"url": _encode_image_data_url(image_bytes, mime_type)},
@@ -299,48 +288,105 @@ def _build_image_content_block(
 def _build_vision_message(
     image_bytes: bytes,
     mime_type: str,
-    chat_model: BaseChatModel,
 ) -> HumanMessage:
     """Build a multimodal HumanMessage with the image and the OCR prompt.
 
     Args:
         image_bytes: Raw image/PDF bytes.
         mime_type: MIME type of the bytes.
-        chat_model: Chat model instance (used to pick the block shape).
 
     Returns:
         HumanMessage containing the image part and the text prompt.
     """
     return HumanMessage(
         content=[
-            _build_image_content_block(image_bytes, mime_type, chat_model),
+            _build_image_content_block(image_bytes, mime_type),
             {"type": "text", "text": build_document_ocr_prompt()},
         ]
     )
 
 
 def _parse_ocr_json_response(text: str) -> list[dict[str, Any]]:
-    """Parse the model's JSON array response into a list of dicts.
+    """Parse the model's JSON response into a list of item dicts.
 
-    Strips markdown code fences and tolerates non-JSON output by
+    Strips markdown code fences, unwraps dict-wrapped arrays (the shape
+    Ollama's JSON mode forces), and tolerates non-JSON output by
     returning an empty list.
 
     Args:
         text: Raw model response text.
 
     Returns:
-        List of item dicts; empty if parsing fails or result is not a list.
+        List of item dicts; empty if parsing fails or no items found.
     """
-    cleaned = text.strip()
-    if cleaned.startswith("```"):
-        cleaned = cleaned.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+    cleaned = _strip_code_fences(text)
     try:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError:
         return []
-    if not isinstance(parsed, list):
+    return _extract_item_list(parsed)
+
+
+def _strip_code_fences(text: str) -> str:
+    """Strip a leading markdown code fence from model output.
+
+    Args:
+        text: Raw model response text.
+
+    Returns:
+        Text with a leading ``` fence removed, or the original text.
+    """
+    cleaned = text.strip()
+    if not cleaned.startswith("```"):
+        return cleaned
+    parts = cleaned.split("\n", 1)
+    if len(parts) < 2:
+        return ""
+    return parts[1].rsplit("```", 1)[0].strip()
+
+
+def _extract_item_list(parsed: Any) -> list[dict[str, Any]]:
+    """Extract a list of item dicts from a parsed JSON value.
+
+    Accepts a top-level list, a dict wrapping the list under a common
+    key, a numbered-object shape ({"0": {...}, "1": {...}}), or a single
+    item dict.
+
+    Args:
+        parsed: Value returned by json.loads.
+
+    Returns:
+        List of item dicts; empty if the value holds no items.
+    """
+    if isinstance(parsed, list):
+        return [item for item in parsed if isinstance(item, dict)]
+    if not isinstance(parsed, dict):
         return []
-    return [item for item in parsed if isinstance(item, dict)]
+    return [item for item in _unwrap_dict_items(parsed) if isinstance(item, dict)]
+
+
+def _unwrap_dict_items(parsed: dict[str, Any]) -> list[Any]:
+    """Unwrap a dict into a list of candidate item values.
+
+    Args:
+        parsed: Dict from json.loads.
+
+    Returns:
+        List of candidate item values (possibly empty).
+    """
+    for key in ("transactions", "items", "data", "drafts", "results"):
+        value = parsed.get(key)
+        if isinstance(value, list):
+            return value
+    for value in parsed.values():
+        if isinstance(value, list):
+            return value
+    dict_values = [value for value in parsed.values() if isinstance(value, dict)]
+    if dict_values:
+        return dict_values
+    if "amount" in parsed:
+        return [parsed]
+    return []
 
 
 def _convert_ocr_items(
