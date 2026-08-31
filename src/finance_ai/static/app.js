@@ -5,6 +5,9 @@
 (function () {
   "use strict";
 
+  // Backend API base: configurable via config.js (iHost deploy), same-origin by default.
+  const API_BASE = window.FINANCE_API_BASE ?? location.origin;
+
   // ─── Intent config (mirrors ui/app_constants.py INTENT_CONFIG) ───
   // One accent (#134611) for the primary intent; others muted neutrals.
   const INTENT_CONFIG = {
@@ -159,7 +162,7 @@
 
   // ─── API ───
   async function api(method, path, { json, params, form, signal } = {}) {
-    const url = new URL(path, location.origin);
+    const url = new URL(path, API_BASE);
     if (params) for (const [k, v] of Object.entries(params))
       if (v !== null && v !== undefined) url.searchParams.set(k, v);
     const opts = { method, headers: {} };
@@ -307,7 +310,7 @@
     try {
       const params = new URLSearchParams({ query: text, user_id: state.userId });
       if (state.conversationId) params.set("conversation_id", state.conversationId);
-      const source = new EventSource(`/chat/stream?${params}`);
+      const source = new EventSource(`${API_BASE}/chat/stream?${params}`);
 
       await new Promise((resolve, reject) => {
         source.addEventListener("message", (ev) => {
