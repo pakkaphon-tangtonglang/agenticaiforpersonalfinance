@@ -102,3 +102,51 @@ class TestDashboardWiring:
         """confirmRecheck aligns the dashboard filter to saved transactions."""
         response = self.client.get("/static/app.js")
         assert "alignDashboardFilterTo" in response.text
+
+
+class TestDeployableFrontendPaths:
+    """Tests for iHost-deployable frontend (relative assets + configurable API base).
+
+    The frontend must work both locally (FastAPI serves it at /) and on
+    iHost KMITL (served under /~username/). Root-relative paths like
+    /static/styles.css would 404 on iHost, so assets must be referenced
+    relatively, and the backend URL must be configurable via config.js.
+    """
+
+    client: TestClient = TestClient(app)
+
+    def test_index_uses_relative_asset_paths(self) -> None:
+        """index.html references styles.css and app.js relatively, not /static/."""
+        response = self.client.get("/")
+        assert 'href="styles.css"' in response.text
+        assert 'src="app.js"' in response.text
+        assert 'href="/static/styles.css"' not in response.text
+        assert 'src="/static/app.js"' not in response.text
+
+    def test_index_loads_config_before_app(self) -> None:
+        """config.js is loaded before app.js so FINANCE_API_BASE is set in time."""
+        response = self.client.get("/")
+        config_pos = response.text.index('src="config.js"')
+        app_pos = response.text.index('src="app.js"')
+        assert config_pos < app_pos
+
+    def test_config_js_served(self) -> None:
+        """GET /config.js returns JavaScript defining window.FINANCE_API_BASE."""
+        response = self.client.get("/config.js")
+        assert response.status_code == 200
+        assert "window.FINANCE_API_BASE" in response.text
+
+    def test_app_js_defines_api_base_with_fallback(self) -> None:
+        """app.js derives API_BASE from window.FINANCE_API_BASE with origin fallback."""
+        response = self.client.get("/static/app.js")
+        assert "const API_BASE = window.FINANCE_API_BASE ?? location.origin" in response.text
+
+    def test_app_js_api_helper_honors_api_base(self) -> None:
+        """api() builds URLs from API_BASE instead of location.origin."""
+        response = self.client.get("/static/app.js")
+        assert "new URL(path, API_BASE)" in response.text
+
+    def test_app_js_stream_honors_api_base(self) -> None:
+        """sendChat opens the SSE stream against API_BASE."""
+        response = self.client.get("/static/app.js")
+        assert "new EventSource(`${API_BASE}/chat/stream?${params}`)" in response.text
