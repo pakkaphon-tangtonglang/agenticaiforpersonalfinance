@@ -219,5 +219,8 @@ resume*.pdf
 # Unrelated design-system reference (not part of this project)
 designref/
 
+# Reference snippets (may contain hardcoded credentials)
+ref/
+
 # Presentation / slide artifacts (local-only)
 diagramforslide/

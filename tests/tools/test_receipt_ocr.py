@@ -12,6 +12,7 @@ from langchain_core.messages import AIMessage, HumanMessage
 from finance_ai.tools.receipt_ocr import (
     ReceiptOcrResult,
     _build_vision_message,
+    _parse_ocr_json_response,
     _preprocess_image,
     _shrink_image_bytes,
     build_document_ocr_prompt,
@@ -239,6 +240,21 @@ class TestExtractDocumentFields:
         assert len(drafts) == 1
         assert drafts[0].amount == Decimal("350.00")
 
+    def test_dict_wrapped_array_extracts_drafts(self) -> None:
+        """A dict-wrapped array (JSON-mode shape) still yields drafts."""
+        json_text = (
+            '{"transactions": [{"transaction_type":"expense","amount":"350.00",'
+            '"transaction_date":"2026-03-01","description":"ร้านอาหาร",'
+            '"category":"food","confidence":0.9}]}'
+        )
+        drafts = extract_document_fields(
+            b"\x89PNGfake",
+            "image/png",
+            _chat_model_returning(json_text),
+        )
+        assert len(drafts) == 1
+        assert drafts[0].amount == Decimal("350.00")
+
     def test_invalid_withholding_tax_defaults_to_zero(self) -> None:
         """An unparseable withholding_tax falls back to 0 for income."""
         json_text = (
@@ -263,6 +279,50 @@ class TestExtractDocumentFields:
             )
 
 
+class TestParseOcrJsonResponse:
+    """Tests for _parse_ocr_json_response tolerant parsing."""
+
+    def test_top_level_array_returned(self) -> None:
+        """A top-level JSON array is returned as-is."""
+        items = _parse_ocr_json_response('[{"transaction_type": "expense", "amount": "350"}]')
+        assert items == [{"transaction_type": "expense", "amount": "350"}]
+
+    def test_dict_wrapped_array_unwrapped(self) -> None:
+        """A dict wrapping the array under a common key is unwrapped."""
+        items = _parse_ocr_json_response(
+            '{"transactions": [{"transaction_type": "expense", "amount": "350"}]}'
+        )
+        assert items == [{"transaction_type": "expense", "amount": "350"}]
+
+    def test_numbered_object_shape_unwrapped(self) -> None:
+        """A numbered-object shape (JSON-mode output) is unwrapped."""
+        items = _parse_ocr_json_response(
+            '{"0": {"transaction_type": "expense", "amount": "350"},'
+            ' "1": {"transaction_type": "expense", "amount": "80"}}'
+        )
+        assert len(items) == 2
+        assert items[0]["amount"] == "350"
+        assert items[1]["amount"] == "80"
+
+    def test_single_item_dict_returned(self) -> None:
+        """A single item dict with an amount key is returned as one item."""
+        items = _parse_ocr_json_response('{"transaction_type": "expense", "amount": "350"}')
+        assert items == [{"transaction_type": "expense", "amount": "350"}]
+
+    def test_bare_fence_returns_empty(self) -> None:
+        """A bare code fence with no newline returns empty (no IndexError)."""
+        assert _parse_ocr_json_response("```") == []
+        assert _parse_ocr_json_response("```json") == []
+
+    def test_non_json_returns_empty(self) -> None:
+        """Non-JSON text returns an empty list."""
+        assert _parse_ocr_json_response("sorry, no data") == []
+
+    def test_non_dict_items_dropped(self) -> None:
+        """Non-dict array items are dropped."""
+        assert _parse_ocr_json_response('["a", 1]') == []
+
+
 class TestReceiptOcrResultModelDefaults:
     """Tests for the ReceiptOcrResult Pydantic model defaults."""
 
@@ -282,7 +342,7 @@ class TestReceiptOcrResultModelDefaults:
 
 
 class TestBuildVisionMessage:
-    """Tests for provider-specific multimodal message construction."""
+    """Tests for multimodal message construction."""
 
     def _model_named(self, name: str) -> Any:
         """Return a BaseChatModel mock with the given class name."""
@@ -296,39 +356,34 @@ class TestBuildVisionMessage:
 
     def test_ollama_uses_image_url_data_block(self) -> None:
         """Ollama gets a base64 data URL in an image_url block."""
-        model = self._model_named("ChatOllama")
-        message = _build_vision_message(b"\x89PNGfake", "image/png", model)
+        message = _build_vision_message(b"\x89PNGfake", "image/png")
         image_part = self._first_part(message)
         assert image_part["type"] == "image_url"
         assert image_part["image_url"]["url"].startswith("data:image/png;base64,")
 
-    def test_google_uses_raw_bytes_block(self) -> None:
-        """Google Gemini gets raw bytes with mime_type."""
-        model = self._model_named("ChatGoogleGenerativeAI")
-        message = _build_vision_message(b"\x89PNGfake", "image/png", model)
+    def test_google_uses_image_url_data_block(self) -> None:
+        """Google Gemini also gets a base64 data URL in an image_url block."""
+        message = _build_vision_message(b"\x89PNGfake", "image/png")
         image_part = self._first_part(message)
-        assert image_part["type"] == "image"
-        assert image_part["data"] == b"\x89PNGfake"
-        assert image_part["mime_type"] == "image/png"
+        assert image_part["type"] == "image_url"
+        assert image_part["image_url"]["url"].startswith("data:image/png;base64,")
 
     def test_openai_style_model_uses_image_url(self) -> None:
         """OpenAI-compatible models also get an image_url data block."""
-        model = self._model_named("ChatOpenAI")
-        message = _build_vision_message(b"\x89PNGfake", "image/png", model)
+        message = _build_vision_message(b"\x89PNGfake", "image/png")
         image_part = self._first_part(message)
         assert image_part["type"] == "image_url"
         assert "data:image/png;base64," in image_part["image_url"]["url"]
 
     def test_prompt_is_included_as_text_part(self) -> None:
         """The message always contains the OCR prompt as a text block."""
-        model = self._model_named("ChatOllama")
-        message = _build_vision_message(b"\x89PNGfake", "image/png", model)
+        message = _build_vision_message(b"\x89PNGfake", "image/png")
         text_part = cast(list[Any], message.content)[1]
         assert text_part["type"] == "text"
         assert "JSON" in text_part["text"]
 
-    def test_ollama_invokes_with_json_format(self) -> None:
-        """Ollama models receive format='json' for structured output."""
+    def test_ollama_invokes_without_json_format(self) -> None:
+        """Ollama models are no longer forced into JSON mode."""
         model = self._model_named("ChatOllama")
         model.invoke.return_value = AIMessage(content="[]")
         drafts = extract_document_fields(
@@ -339,7 +394,7 @@ class TestBuildVisionMessage:
         assert drafts == []
         model.invoke.assert_called_once()
         call_args = model.invoke.call_args
-        assert call_args.kwargs.get("format") == "json"
+        assert "format" not in call_args.kwargs
 
     def test_google_invokes_without_json_format(self) -> None:
         """Google models are not forced into JSON mode."""
@@ -353,24 +408,6 @@ class TestBuildVisionMessage:
         assert drafts == []
         call_args = model.invoke.call_args
         assert "format" not in call_args.kwargs
-
-
-class TestReceiptOcrResultModelDefaults:
-    """Tests for the ReceiptOcrResult Pydantic model defaults."""
-
-    def test_defaults_for_expense(self) -> None:
-        """Expense draft has sane defaults for income-only fields."""
-        result = ReceiptOcrResult(
-            transaction_type="expense",
-            amount=Decimal("100"),
-            transaction_date=date(2026, 1, 1),
-            description="test",
-            category="other",
-        )
-        assert result.income_type == "other"
-        assert result.withholding_tax == Decimal("0")
-        assert result.employer_name is None
-        assert result.confidence == 0.0
 
 
 def _make_png_bytes(size: int) -> bytes:
