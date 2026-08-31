@@ -224,3 +224,6 @@ ref/
 
 # Presentation / slide artifacts (local-only)
 diagramforslide/
+
+# Git worktrees (isolated feature workspaces)
+.worktrees/
