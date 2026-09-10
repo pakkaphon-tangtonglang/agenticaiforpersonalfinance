@@ -82,6 +82,17 @@ class KnowledgeBaseManager:
         logger.info("Indexed %d documents, %d total chunks", len(paths), total)
         return total
 
+    def get_document_count(self) -> int:
+        """Return the number of documents in the vector store.
+
+        Returns:
+            Number of documents stored.
+
+        Example:
+            >>> count = manager.get_document_count()
+        """
+        return self._vector_store.get_document_count()
+
     def rebuild_index(self, directory: Path) -> int:
         """Clear the collection and re-index all documents.
 
