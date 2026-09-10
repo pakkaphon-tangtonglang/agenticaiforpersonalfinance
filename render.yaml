@@ -34,18 +34,26 @@ services:
         value: sqlite:///./finance_ai.db
       - key: RAG_KNOWLEDGE_BASE_DIRECTORY
         value: docs/knowledge_base
-      # Values copied from your local .env — set in the Render dashboard
+      # LLM via Ollama Cloud (non-secret settings inlined from .env)
       - key: LLM_PROVIDER
-        sync: false
-      - key: GOOGLE_API_KEY
-        sync: false
-      - key: GOOGLE_MODEL
-        sync: false
+        value: ollama
+      - key: LLM_MAX_TOKENS
+        value: "7000"
+      - key: OLLAMA_BASE_URL
+        value: https://ollama.com
+      - key: OLLAMA_MODEL
+        value: minimax-m3
+      # OCR via Ollama Cloud (defaults already match .env, set explicitly)
       - key: OCR_PROVIDER
-        sync: false
+        value: ollama
       - key: OCR_MODEL
+        value: gemma4:31b
+      # Secrets — prompted in the Render dashboard, copy from local .env
+      - key: OLLAMA_API_KEY
         sync: false
       - key: OCR_API_KEY
         sync: false
-      - key: OCR_BASE_URL
-        sync: false
+      # Optional (add later via dashboard Environment tab):
+      #   GOOGLE_API_KEY — enables RAG knowledge base (Google embeddings).
+      #     Without it, bootstrap logs a warning and the API runs without RAG.
+      #   LANGSMITH_TRACING / LANGSMITH_API_KEY / LANGSMITH_PROJECT — tracing.
