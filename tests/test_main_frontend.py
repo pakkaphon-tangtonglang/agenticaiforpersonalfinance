@@ -126,7 +126,8 @@ class TestDeployableFrontendPaths:
     def test_index_loads_config_before_app(self) -> None:
         """config.js is loaded before app.js so FINANCE_API_BASE is set in time."""
         response = self.client.get("/")
-        config_pos = response.text.index('src="config.js"')
+        config_pos = response.text.index("config.js")
+        assert "config.js?v=" in response.text
         app_pos = response.text.index('src="app.js"')
         assert config_pos < app_pos
 
