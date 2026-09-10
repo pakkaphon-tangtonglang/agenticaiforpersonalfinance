@@ -40,8 +40,10 @@ iHost รันได้เฉพาะ PHP จึงใส่ FastAPI ลงไ
    |---|---|
    | Runtime | Python 3.13 |
    | Build command | `pip install uv && uv sync --frozen` |
-   | Start command | `uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT` |
-   | Release command | `uv run python scripts/bootstrap_runtime.py` |
+   | Start command | `uv run python scripts/bootstrap_runtime.py && uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT` |
+
+   Free plan has no pre-deploy/release command (`preDeployCommand`),
+   so bootstrap is folded into the start command.
 
    ใช้ worker เดียวเท่านั้น — SQLite + RAM ของแผนฟรีไม่พอสำหรับ `--workers 4`
    Render กำหนด `$PORT` ให้เอง
@@ -57,8 +59,8 @@ iHost รันได้เฉพาะ PHP จึงใส่ FastAPI ลงไ
    # {"status":"healthy","service":"personal-finance-ai"}
    ```
 
-**Release command ทำอะไร** — `scripts/bootstrap_runtime.py` (logic อยู่ใน
-`finance_ai.core.bootstrap`) รันได้ซ้ำได้ (idempotent) ทุกครั้งที่ deploy:
+**Bootstrap ทำอะไร** — `scripts/bootstrap_runtime.py` (logic อยู่ใน
+`finance_ai.core.bootstrap`) รันได้ซ้ำได้ (idempotent) ทุกครั้งที่ service เริ่มทำงาน:
 (1) `alembic upgrade head` แล้ว (2) สร้าง RAG index — ข้ามอัตโนมัติถ้ามี index อยู่แล้ว
 
 ### ติดตั้ง Frontend (iHost)
@@ -106,7 +108,7 @@ Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `a
 | 503 / timeout ทั้งที่ deploy สำเร็จ | Cold start (~50 s) — รอแล้วลองใหม่ หรือใช้ uptime pinger |
 | OCR คืน 503 | `OCR_*` env vars ใน Render dashboard ยังไม่ครบ/ผิด |
 | Mixed content (API calls ถูก block) | `FINANCE_API_BASE` ต้องเป็น HTTPS เสมอ |
-| RAG ไม่มีข้อมูลหลังตื่นจากหลับ | ดิสก์ ephemeral — deploy ใหม่เพื่อรัน release command อีกครั้ง |
+| RAG ไม่มีข้อมูลหลังตื่นจากหลับ | ดิสก์ ephemeral — bootstrap รันตอน start ทุกครั้ง จะสร้าง index ให้ใหม่ถ้าหาย |
 | Migration error ตอน deploy | ดู release log ตรวจ `DB_URL` ใน env vars |
 
 ### การพัฒนาต่อในอนาคต
@@ -136,8 +138,10 @@ is static HTML/JS and calls the backend over HTTPS via `config.js`.
    |---|---|
    | Runtime | Python 3.13 |
    | Build command | `pip install uv && uv sync --frozen` |
-   | Start command | `uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT` |
-   | Release command | `uv run python scripts/bootstrap_runtime.py` |
+   | Start command | `uv run python scripts/bootstrap_runtime.py && uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT` |
+
+   Free plan has no pre-deploy/release command (`preDeployCommand`),
+   so bootstrap is folded into the start command.
 
    One worker only: SQLite plus free-tier RAM cannot afford `--workers 4`
    (write contention). Render injects `$PORT`.
@@ -153,8 +157,8 @@ is static HTML/JS and calls the backend over HTTPS via `config.js`.
    # {"status":"healthy","service":"personal-finance-ai"}
    ```
 
-**What the release command does** — `scripts/bootstrap_runtime.py` (logic in
-`finance_ai.core.bootstrap`) is idempotent and safe on every deploy:
+**What the start-command bootstrap does** — `scripts/bootstrap_runtime.py` (logic in
+`finance_ai.core.bootstrap`) is idempotent and safe on every service start:
 (1) `alembic upgrade head`, then (2) index the RAG knowledge base — skipped
 automatically when the vector store is already populated.
 
@@ -207,7 +211,7 @@ works under the `/~<username>/` sub-path.
 | 503 / timeout despite successful deploy | Cold start (~50 s) — retry, or add an uptime pinger |
 | OCR returns 503 | `OCR_*` env vars in the Render dashboard are missing/wrong |
 | Mixed content (API calls blocked) | `FINANCE_API_BASE` must always be HTTPS |
-| RAG empty after wake from sleep | Ephemeral disk — redeploy to re-run the release command |
+| RAG empty after wake from sleep | Ephemeral disk — the start-command bootstrap re-indexes automatically on next start |
 | Migration error during deploy | Check the release log and the `DB_URL` env var |
 
 ### Future improvements
