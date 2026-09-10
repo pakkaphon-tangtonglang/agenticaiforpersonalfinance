@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from finance_ai.core.bootstrap import (
+    _DEFAULT_ALEMBIC_CONFIG,
     index_knowledge_base_if_empty,
     run_bootstrap,
     run_migrations,
@@ -20,8 +21,6 @@ class TestRunMigrations:
 
     def test_default_config_points_to_real_alembic_ini(self) -> None:
         """The default alembic.ini path exists at the project root."""
-        from finance_ai.core.bootstrap import _DEFAULT_ALEMBIC_CONFIG
-
         assert _DEFAULT_ALEMBIC_CONFIG.name == "alembic.ini"
         assert _DEFAULT_ALEMBIC_CONFIG.exists()
 
@@ -81,3 +80,20 @@ class TestRunBootstrap:
 
         mock_migrations.assert_called_once()
         mock_indexing.assert_called_once()
+
+    @patch("finance_ai.core.bootstrap.index_knowledge_base_if_empty")
+    @patch("finance_ai.core.bootstrap.run_migrations")
+    def test_survives_rag_indexing_failure(
+        self, mock_migrations: MagicMock, mock_indexing: MagicMock
+    ) -> None:
+        """A RAG indexing error never blocks startup (hosted API must still boot).
+
+        Example: on Render, embeddings default to Google but the API key
+        may be absent — the service must start anyway and serve traffic
+        without RAG.
+        """
+        mock_indexing.side_effect = RuntimeError("No Google API key configured")
+
+        run_bootstrap()
+
+        mock_migrations.assert_called_once()

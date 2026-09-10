@@ -48,10 +48,13 @@ iHost รันได้เฉพาะ PHP จึงใส่ FastAPI ลงไ
    ใช้ worker เดียวเท่านั้น — SQLite + RAM ของแผนฟรีไม่พอสำหรับ `--workers 4`
    Render กำหนด `$PORT` ให้เอง
 3. ตั้ง Environment variables ในหน้า Dashboard (ค่ามาจาก `.env` ในเครื่อง
-   ห้าม commit): `APP_ENV`, `DEBUG`, `LOG_LEVEL`, `DB_URL`,
-   `LLM_PROVIDER`, `GOOGLE_API_KEY`, `GOOGLE_MODEL`, `OCR_PROVIDER`,
-   `OCR_MODEL`, `OCR_API_KEY`, `OCR_BASE_URL`, `RAG_KNOWLEDGE_BASE_DIRECTORY`
-   และ `RAG_*` ที่เหลือตาม `.env.example`
+   ห้าม commit): ตัวที่ไม่ใช่ความลับ (`APP_ENV`, `DEBUG`, `LOG_LEVEL`,
+   `DB_URL`, `LLM_PROVIDER=ollama`, `LLM_MAX_TOKENS`, `OLLAMA_BASE_URL`,
+   `OLLAMA_MODEL`, `OCR_PROVIDER`, `OCR_MODEL`, `RAG_KNOWLEDGE_BASE_DIRECTORY`)
+   อยู่ใน `render.yaml` อยู่แล้ว — เหลือแค่ secret สองตัวที่ต้องกรอกตอน sync:
+   `OLLAMA_API_KEY` และ `OCR_API_KEY` (ใช้ค่า Ollama Cloud key เดียวกันได้)
+   ส่วน `GOOGLE_API_KEY` เป็นทางเลือก (เปิดใช้ RAG) — เพิ่มทีหลังได้
+   ถ้าไม่มี bootstrap จะข้าม RAG แต่ API ยังทำงานปกติ
 4. ตรวจสอบการติดตั้ง:
 
    ```bash
@@ -94,7 +97,8 @@ Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `a
 - **CORS** ล็อกเฉพาะ `https://www.it.kmitl.ac.th` กับ `http://localhost:8080`
   และปิด `allow_credentials` (ไม่ใช้ cookies; `user_id` ส่งใน request body)
   ดู `src/finance_ai/main.py`
-- **Secrets อยู่บนเซิร์ฟเวอร์เท่านั้น** — `GOOGLE_API_KEY`, `OCR_API_KEY`
+- **Secrets อยู่บนเซิร์ฟเวอร์เท่านั้น** — `OLLAMA_API_KEY`, `OCR_API_KEY`
+  (และ `GOOGLE_API_KEY` ถ้าเปิด RAG)
   มีเฉพาะใน environment variables ของ Render ห้ามใส่ใน repo หรือไฟล์ frontend
 - **ไม่มีระบบ login** — `user_id` เป็น UUID ที่ browser สร้างเอง (เก็บใน localStorage)
   ใครได้ UUID นั้นไปอ่าน/แก้ข้อมูลของ user คนนั้นได้ รับได้สำหรับ demo เพราะ
@@ -146,10 +150,14 @@ is static HTML/JS and calls the backend over HTTPS via `config.js`.
    One worker only: SQLite plus free-tier RAM cannot afford `--workers 4`
    (write contention). Render injects `$PORT`.
 3. Set environment variables in the Render dashboard (values mirror local
-   `.env`; never commit them): `APP_ENV`, `DEBUG`, `LOG_LEVEL`, `DB_URL`,
-   `LLM_PROVIDER`, `GOOGLE_API_KEY`, `GOOGLE_MODEL`, `OCR_PROVIDER`,
-   `OCR_MODEL`, `OCR_API_KEY`, `OCR_BASE_URL`,
-   `RAG_KNOWLEDGE_BASE_DIRECTORY`, remaining `RAG_*` per `.env.example`.
+   `.env`; never commit them): all non-secrets (`APP_ENV`, `DEBUG`,
+   `LOG_LEVEL`, `DB_URL`, `LLM_PROVIDER=ollama`, `LLM_MAX_TOKENS`,
+   `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OCR_PROVIDER`, `OCR_MODEL`,
+   `RAG_KNOWLEDGE_BASE_DIRECTORY`) already live in `render.yaml` — only two
+   secrets are prompted at sync: `OLLAMA_API_KEY` and `OCR_API_KEY`
+   (both can hold the same Ollama Cloud key). `GOOGLE_API_KEY` is optional
+   (enables RAG) — add it later via the Environment tab. Without it,
+   bootstrap skips RAG and the API still works.
 4. Verify the deploy:
 
    ```bash
@@ -194,7 +202,8 @@ works under the `/~<username>/` sub-path.
 - **CORS** is locked to `https://www.it.kmitl.ac.th` and
   `http://localhost:8080`, with `allow_credentials=False` (no cookies;
   `user_id` travels in request bodies). See `src/finance_ai/main.py`.
-- **Secrets stay server-side.** `GOOGLE_API_KEY` and `OCR_API_KEY` exist
+- **Secrets stay server-side.** `OLLAMA_API_KEY` and `OCR_API_KEY`
+  (plus `GOOGLE_API_KEY` when RAG is enabled) exist
   only as Render environment variables — never in the repository or the
   frontend files served from iHost.
 - **There is no authentication.** `user_id` is a client-generated UUID kept

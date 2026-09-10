@@ -66,10 +66,28 @@ def index_knowledge_base_if_empty() -> int:
 def run_bootstrap() -> None:
     """Run the full bootstrap sequence: migrations, then RAG indexing.
 
+    Migrations are required (the API cannot run without a schema), but a
+    RAG indexing failure only logs a warning — a hosted deployment must
+    still boot and serve traffic, even without a knowledge base index
+    (e.g. missing embedding API key on Render).
+
     Example:
         >>> run_bootstrap()
     """
     logger.info("Bootstrap starting")
     run_migrations()
-    index_knowledge_base_if_empty()
+    _index_knowledge_base_safely()
     logger.info("Bootstrap complete")
+
+
+def _index_knowledge_base_safely() -> None:
+    """Run RAG indexing, converting any failure into a logged warning.
+
+    Example:
+        >>> _index_knowledge_base_safely()  # never raises
+    """
+    try:
+        index_knowledge_base_if_empty()
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        # Broad by design: API startup must never be blocked by RAG.
+        logger.error("RAG indexing failed (agents run without knowledge base): %s", exc)
