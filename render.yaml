@@ -16,7 +16,7 @@ services:
     plan: free
     region: singapore # closest region to Thailand
     branch: main
-    buildCommand: pip install uv && uv sync --frozen
+    buildCommand: pip install uv && uv sync --frozen --all-extras --no-dev
     startCommand: uv run python scripts/bootstrap_runtime.py && uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT
     envVars:
       # Runtime
