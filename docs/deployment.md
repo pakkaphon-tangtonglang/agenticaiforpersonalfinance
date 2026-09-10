@@ -39,7 +39,7 @@ iHost รันได้เฉพาะ PHP จึงใส่ FastAPI ลงไ
    | การตั้งค่า | ค่า |
    |---|---|
    | Runtime | Python 3.13 |
-   | Build command | `pip install uv && uv sync --frozen` |
+   | Build command | `pip install uv && uv sync --frozen --all-extras --no-dev` |
    | Start command | `uv run python scripts/bootstrap_runtime.py && uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT` |
 
    Free plan has no pre-deploy/release command (`preDeployCommand`),
@@ -141,7 +141,7 @@ is static HTML/JS and calls the backend over HTTPS via `config.js`.
    | Setting | Value |
    |---|---|
    | Runtime | Python 3.13 |
-   | Build command | `pip install uv && uv sync --frozen` |
+   | Build command | `pip install uv && uv sync --frozen --all-extras --no-dev` |
    | Start command | `uv run python scripts/bootstrap_runtime.py && uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT` |
 
    Free plan has no pre-deploy/release command (`preDeployCommand`),
