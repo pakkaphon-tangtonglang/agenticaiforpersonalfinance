@@ -157,6 +157,20 @@ class TestRebuildIndex:
         assert total == 3
 
 
+class TestGetDocumentCount:
+    """Tests for delegating document count to the vector store."""
+
+    def test_delegates_to_vector_store(self, mock_vector_store: MagicMock) -> None:
+        """get_document_count returns the vector store's document count."""
+        mock_vector_store.get_document_count.return_value = 7
+
+        manager = KnowledgeBaseManager(vector_store=mock_vector_store)
+        count = manager.get_document_count()
+
+        assert count == 7
+        mock_vector_store.get_document_count.assert_called_once()
+
+
 class TestCreateKnowledgeBaseManager:
     """Tests for the factory function."""
 

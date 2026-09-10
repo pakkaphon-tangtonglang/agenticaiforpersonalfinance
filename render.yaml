@@ -1,0 +1,51 @@
+# Render Blueprint — Personal Finance AI backend (free tier).
+# Docs: https://render.com/docs/blueprint-spec
+#
+# Vars marked `sync: false` are prompted in the Render dashboard on first
+# sync — fill them with the values from your local `.env` (never commit
+# real API keys).
+#
+# Free-tier notes: the service sleeps after 15 min idle and its disk is
+# ephemeral — the release command re-applies migrations and the RAG index
+# on every deploy. See docs/deployment.md.
+services:
+  - type: web
+    name: personal-finance-ai
+    runtime: python
+    plan: free
+    region: singapore # closest region to Thailand
+    branch: main
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT
+    releaseCommand: uv run python scripts/bootstrap_runtime.py
+    envVars:
+      # Runtime
+      - key: PYTHON_VERSION
+        value: "3.13"
+      # Deployment mode
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LOG_LEVEL
+        value: WARNING
+      # SQLite on the ephemeral instance disk (resets on each deploy)
+      - key: DB_URL
+        value: sqlite:///./finance_ai.db
+      - key: RAG_KNOWLEDGE_BASE_DIRECTORY
+        value: docs/knowledge_base
+      # Values copied from your local .env — set in the Render dashboard
+      - key: LLM_PROVIDER
+        sync: false
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GOOGLE_MODEL
+        sync: false
+      - key: OCR_PROVIDER
+        sync: false
+      - key: OCR_MODEL
+        sync: false
+      - key: OCR_API_KEY
+        sync: false
+      - key: OCR_BASE_URL
+        sync: false
