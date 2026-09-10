@@ -6,8 +6,9 @@
 # real API keys).
 #
 # Free-tier notes: the service sleeps after 15 min idle and its disk is
-# ephemeral — the release command re-applies migrations and the RAG index
-# on every deploy. See docs/deployment.md.
+# ephemeral — bootstrap (migrations + RAG index) runs at every start.
+# preDeployCommand is NOT available on free instances, so it is folded
+# into startCommand. See docs/deployment.md.
 services:
   - type: web
     name: personal-finance-ai
@@ -16,8 +17,7 @@ services:
     region: singapore # closest region to Thailand
     branch: main
     buildCommand: pip install uv && uv sync --frozen
-    startCommand: uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT
-    releaseCommand: uv run python scripts/bootstrap_runtime.py
+    startCommand: uv run python scripts/bootstrap_runtime.py && uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT
     envVars:
       # Runtime
       - key: PYTHON_VERSION
