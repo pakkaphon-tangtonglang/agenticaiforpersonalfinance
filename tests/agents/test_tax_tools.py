@@ -154,3 +154,53 @@ class TestCalculateThaiTax:
         assert "tax_breakdown" in result
         assert isinstance(result["tax_breakdown"], list)
         assert len(result["tax_breakdown"]) > 0
+
+
+class TestCalculateThaiTaxNumericInput:
+    """The tool must accept numbers, not only strings (Gemini sends ints/floats)."""
+
+    def test_accepts_int_income(self) -> None:
+        """LLM may send gross_income as a JSON integer."""
+        result = calculate_thai_tax.invoke(
+            {
+                "gross_income": 1200000,
+                "deductions_by_type": {"personal_allowance": 60000},
+            }
+        )
+        assert isinstance(result, dict)
+        assert Decimal(str(result["total_tax"])) > Decimal("0")
+
+    def test_accepts_float_income(self) -> None:
+        """LLM may send gross_income as a JSON float."""
+        result = calculate_thai_tax.invoke(
+            {
+                "gross_income": 600000.5,
+                "deductions_by_type": {},
+            }
+        )
+        assert isinstance(result, dict)
+        assert "total_tax" in result
+
+    def test_accepts_mixed_deduction_value_types(self) -> None:
+        """Deduction dict values may mix str and numbers."""
+        result = calculate_thai_tax.invoke(
+            {
+                "gross_income": "1200000",
+                "deductions_by_type": {
+                    "personal_allowance": 60000,
+                    "rmf": "100000",
+                },
+            }
+        )
+        assert Decimal(str(result["total_deductions"])) > Decimal("60000")
+
+    def test_accepts_numeric_withholding_tax(self) -> None:
+        """withholding_tax_paid may arrive as a number."""
+        result = calculate_thai_tax.invoke(
+            {
+                "gross_income": 1200000,
+                "deductions_by_type": {"personal_allowance": "60000"},
+                "withholding_tax_paid": 12000,
+            }
+        )
+        assert "tax_due_or_refund" in result
