@@ -51,19 +51,20 @@ def parse_deductions_input(
 
 @tool
 def calculate_thai_tax(
-    gross_income: str,
-    deductions_by_type: dict[str, str],
-    withholding_tax_paid: str = "0",
+    gross_income: str | int | float,
+    deductions_by_type: dict[str, str | int | float],
+    withholding_tax_paid: str | int | float = 0,
 ) -> dict[str, Any]:
     """Calculate Thai personal income tax with full breakdown.
 
     Use this tool when you need to calculate Thai personal income tax.
     Provide gross income, deductions by type, and optionally withholding tax.
+    Numbers and numeric strings are both accepted (e.g. 1200000 or "1200000").
 
     Args:
-        gross_income: Annual gross income in THB (e.g., "1200000").
-        deductions_by_type: Deductions by type (e.g., {"personal_allowance": "60000"}).
-        withholding_tax_paid: Tax already withheld (e.g., "120000"). Defaults to "0".
+        gross_income: Annual gross income in THB (e.g., 1200000).
+        deductions_by_type: Deductions by type (e.g., {"personal_allowance": 60000}).
+        withholding_tax_paid: Tax already withheld (e.g., 120000). Defaults to 0.
 
     Returns:
         Dict with tax calculation results including total_tax, effective_tax_rate, etc.
