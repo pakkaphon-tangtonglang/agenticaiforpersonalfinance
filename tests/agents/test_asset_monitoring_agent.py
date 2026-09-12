@@ -10,8 +10,8 @@ from finance_ai.agents.asset_monitoring_agent import (
     ASSET_MONITORING_TOOLS,
     build_asset_monitoring_agent_graph,
     create_llm_node,
-    should_continue,
 )
+from finance_ai.agents.graph_utils import should_continue
 from finance_ai.agents.prompts import ASSET_MONITORING_AGENT_SYSTEM_PROMPT
 from finance_ai.database.models.user import User
 
@@ -29,7 +29,7 @@ class TestShouldContinue:
             "user_id": "test-user",
             "db_session_factory": None,
         }
-        assert should_continue(state) == "tools"  # type: ignore[arg-type]
+        assert should_continue(state) == "tools"
 
     def test_returns_end_when_no_tool_calls(
         self,
@@ -41,7 +41,7 @@ class TestShouldContinue:
             "user_id": "test-user",
             "db_session_factory": None,
         }
-        assert should_continue(state) == "end"  # type: ignore[arg-type]
+        assert should_continue(state) == "end"
 
     def test_returns_end_for_empty_tool_calls(self) -> None:
         """Routes to 'end' when tool_calls is an empty list."""
@@ -51,7 +51,7 @@ class TestShouldContinue:
             "user_id": "test-user",
             "db_session_factory": None,
         }
-        assert should_continue(state) == "end"  # type: ignore[arg-type]
+        assert should_continue(state) == "end"
 
 
 class TestCreateLlmNode:
@@ -135,3 +135,12 @@ class TestBuildAssetMonitoringAgentGraph:
         last_message = result["messages"][-1]
         assert "พอร์ตการลงทุน" in last_message.content
         assert mock_chat_model.invoke.call_count == 2
+
+
+class TestToolRegistry:
+    """Tests for the ASSET_MONITORING_TOOLS registry contents."""
+
+    def test_includes_resolve_asset_symbol(self) -> None:
+        """Tool list must expose the free-text symbol search tool."""
+        tool_names = [tool.name for tool in ASSET_MONITORING_TOOLS]
+        assert "resolve_asset_symbol" in tool_names

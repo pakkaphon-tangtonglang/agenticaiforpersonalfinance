@@ -1,7 +1,8 @@
 """Pydantic models for market data tool outputs.
 
 Provides type-safe, validated structures for stock dashboard data,
-currency conversion results, and finance news content.
+currency conversion results, finance news content, and symbol search
+candidates.
 """
 
 from decimal import Decimal
@@ -11,7 +12,7 @@ from pydantic import BaseModel, Field
 
 
 class StockDashboardResult(BaseModel):
-    """Comprehensive stock/asset overview from Bright Data API.
+    """Comprehensive stock/asset overview from yfinance (free, no key).
 
     Attributes:
         name: Full name of the asset (e.g., "PTT Public Company Limited").
@@ -45,7 +46,7 @@ class StockDashboardResult(BaseModel):
 
 
 class CurrencyConversionResult(BaseModel):
-    """Result of a real-time currency conversion via Bright Data API.
+    """Result of a real-time currency conversion via yfinance FX rates.
 
     Attributes:
         from_currency: Source currency code (e.g., "USD").
@@ -74,7 +75,7 @@ class FinanceNewsResult(BaseModel):
 
     Attributes:
         symbol: The ticker symbol queried.
-        news_content: Raw news text from Bright Data API.
+        news_content: Raw news text from Google News RSS.
         has_news: Whether any news articles were found.
 
     Example:
@@ -86,3 +87,26 @@ class FinanceNewsResult(BaseModel):
     symbol: str
     news_content: str
     has_news: bool
+
+
+class AssetSymbolMatch(BaseModel):
+    """A single candidate asset match from a free-text symbol search.
+
+    Attributes:
+        symbol: Ticker symbol (e.g., "PTT.BK").
+        name: Human-readable asset name (e.g., "PTT Public Company Limited").
+        exchange: Exchange display name (e.g., "SET" / "NASDAQ").
+        quote_type: Asset type (e.g., "EQUITY" / "CRYPTOCURRENCY" / "COMMODITY").
+
+    Example:
+        >>> match = AssetSymbolMatch(
+        ...     symbol="PTT.BK",
+        ...     name="PTT Public Company Limited",
+        ...     exchange="SET", quote_type="EQUITY",
+        ... )
+    """
+
+    symbol: str  # e.g. "PTT.BK"
+    name: str  # e.g. "PTT Public Company Limited"
+    exchange: str  # e.g. "SET" / "NASDAQ"
+    quote_type: str  # e.g. "EQUITY" / "CRYPTOCURRENCY" / "COMMODITY"

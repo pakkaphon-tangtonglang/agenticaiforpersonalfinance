@@ -159,19 +159,6 @@ class Settings(BaseSettings):
         default="docs/knowledge_base", description="Directory containing knowledge base documents"
     )
 
-    # Bright Data Configuration
-    bright_data_api_token: Optional[str] = Field(
-        default=None, description="Bright Data API token for market data"
-    )
-    bright_data_base_url: str = Field(
-        default="https://api.brightdata.com",
-        description="Bright Data API base URL",
-    )
-    bright_data_zone: str = Field(
-        default="ai_agent",
-        description="Bright Data zone name for SERP API requests",
-    )
-
     # API
     api_host: str = Field(default="127.0.0.1", description="API host")  # nosec B104
     api_port: int = Field(default=8000, ge=1024, le=65535, description="API port")
