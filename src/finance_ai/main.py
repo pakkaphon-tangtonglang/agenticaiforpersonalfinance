@@ -1,7 +1,7 @@
 """FastAPI application for Personal Finance AI.
 
 Provides REST API endpoints for chat, conversations, bank statement
-upload, dashboard, asset monitoring, and evaluation.
+upload, dashboard, and asset monitoring.
 
 Run with: make dev (development, port 8080) or make run (production)
 """
@@ -16,7 +16,7 @@ import asyncio
 
 from datetime import date, datetime
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -762,59 +762,6 @@ def mark_notifications_read(
     """
     mark_all_notifications_read(session, user_id)
     return {"status": "ok"}
-
-
-# ──────────────────────── Evaluation ─────────────────────────────
-
-
-@app.post("/evaluation/run")  # type: ignore[misc]
-def run_evaluation(
-    dimensions: list[str] | None = Query(default=None),
-    session: Session = Depends(get_session),
-) -> dict[str, Any]:
-    """Run the evaluation framework.
-
-    Args:
-        dimensions: Optional list of dimensions to evaluate.
-        session: Database session.
-
-    Returns:
-        Evaluation results dictionary.
-    """
-    from finance_ai.evaluation.runner import EvaluationRunner  # noqa: PLC0415
-
-    settings = get_settings()
-    runner = EvaluationRunner(
-        chat_model=get_chat_model(),
-        vector_store=None,
-        llm_provider=settings.llm_provider,
-        llm_model=settings.active_llm_model,
-        db_session_factory=_session_factory,
-    )
-    results = runner.run_all(skip=_dimensions_to_skip(dimensions))
-    return {"status": "ok", "results": results.model_dump(mode="json")}
-
-
-_ALL_EVAL_DIMENSIONS = frozenset(
-    {"routing", "rag", "accuracy", "hallucination", "quality", "performance"}
-)
-
-
-def _dimensions_to_skip(dimensions: list[str] | None) -> set[str] | None:
-    """Translate requested dimensions into the set of dimensions to skip.
-
-    The runner's ``run_all`` takes a ``skip`` set: we keep the requested
-    dimensions and skip the rest. ``None`` runs every dimension.
-
-    Args:
-        dimensions: Dimensions the caller wants to run, or None for all.
-
-    Returns:
-        Set of dimensions to skip, or None to run all.
-    """
-    if dimensions is None:
-        return None
-    return set(_ALL_EVAL_DIMENSIONS) - set(dimensions)
 
 
 # ──────────────────────── Health ─────────────────────────────────
