@@ -6,22 +6,27 @@ from unittest.mock import MagicMock, patch
 from finance_ai.agents.market_data_tools import (
     MARKET_DATA_TOOLS,
     get_stock_price,
+    resolve_asset_symbol,
     search_finance_news,
 )
+from finance_ai.tools.market_data_models import AssetSymbolMatch
+
+SYMBOL_SEARCH_PATH = "finance_ai.tools.symbol_search_service.search_asset_symbols"
 
 
 class TestMarketDataToolsList:
     """Tests for MARKET_DATA_TOOLS export."""
 
-    def test_contains_two_tools(self) -> None:
-        """Should export exactly 2 tools."""
-        assert len(MARKET_DATA_TOOLS) == 2
+    def test_contains_three_tools(self) -> None:
+        """Should export exactly 3 tools."""
+        assert len(MARKET_DATA_TOOLS) == 3
 
     def test_contains_expected_tools(self) -> None:
-        """Should contain get_stock_price and search_finance_news."""
+        """Should contain the price, news, and symbol search tools."""
         tool_names = [t.name for t in MARKET_DATA_TOOLS]
         assert "get_stock_price" in tool_names
         assert "search_finance_news" in tool_names
+        assert "resolve_asset_symbol" in tool_names
 
 
 class TestGetStockPriceTool:
@@ -98,3 +103,57 @@ class TestSearchFinanceNewsTool:
             result = search_finance_news.invoke({"symbol": "UNKNOWN"})
 
         assert result["has_news"] is False
+
+
+class TestResolveAssetSymbolTool:
+    """Tests for resolve_asset_symbol @tool wrapper."""
+
+    def test_returns_candidates_dict(self) -> None:
+        """Should map search matches into candidate dicts."""
+        matches = [
+            AssetSymbolMatch(
+                symbol="PTT.BK",
+                name="PTT Public Company Limited",
+                exchange="SET",
+                quote_type="EQUITY",
+            )
+        ]
+
+        with patch(SYMBOL_SEARCH_PATH, return_value=matches):
+            result = resolve_asset_symbol.invoke({"query": "หุ้นปตท"})
+
+        assert result["action"] == "resolve_symbol"
+        assert result["candidates"] == [
+            {
+                "symbol": "PTT.BK",
+                "name": "PTT Public Company Limited",
+                "exchange": "SET",
+                "type": "EQUITY",
+            }
+        ]
+
+    def test_limits_candidates_to_top_five(self) -> None:
+        """Should return at most 5 candidates to keep tool output small."""
+        matches = [
+            AssetSymbolMatch(
+                symbol=f"S{i}.BK",
+                name=f"Stock Number {i}",
+                exchange="SET",
+                quote_type="EQUITY",
+            )
+            for i in range(7)
+        ]
+
+        with patch(SYMBOL_SEARCH_PATH, return_value=matches):
+            result = resolve_asset_symbol.invoke({"query": "stock"})
+
+        assert len(result["candidates"]) == 5
+
+    def test_empty_candidates_case(self) -> None:
+        """Should return an empty candidates list when search finds nothing."""
+
+        with patch(SYMBOL_SEARCH_PATH, return_value=[]):
+            result = resolve_asset_symbol.invoke({"query": "zzzz"})
+
+        assert result["action"] == "resolve_symbol"
+        assert result["candidates"] == []

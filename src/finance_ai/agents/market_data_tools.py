@@ -1,7 +1,7 @@
-"""LangGraph tools for market data: stock prices and financial news.
+"""LangGraph tools for market data: symbol search, stock prices, news.
 
-These tools require no database access — they fetch external data
-from Bright Data Web Scraper API only.
+These tools require no database access — they fetch external data from
+free public sources (Yahoo Finance search, yfinance, Google News RSS).
 """
 
 from typing import Any
@@ -65,7 +65,43 @@ def search_finance_news(symbol: str) -> dict[str, Any]:
     }
 
 
+@tool
+def resolve_asset_symbol(query: str) -> dict[str, Any]:
+    """ค้นหาสัญลักษณ์สินทรัพย์จากข้อความอิสระ (free text).
+
+    ใช้เมื่อผู้ใช้พูดถึงสินทรัพย์ด้วยชื่อเรียกทั่วไป เช่น "หุ้นปตท", "Apple",
+    "ทองคำ", "BTC" — ระบบจะค้นหาและคืนรายการสัญลักษณ์ที่ตรงกันพร้อมชื่อและตลาด
+    หากผู้ใช้พิมพ์ภาษาไทย ให้แปลเป็นชื่อภาษาอังกฤษหรือตัวย่อก่อนเรียกใช้
+
+    Args:
+        query: ชื่อสินทรัพย์ที่ต้องการค้นหา
+
+    Returns:
+        Dict with "action": "resolve_symbol" and "candidates":
+        list of {"symbol", "name", "exchange", "type"} (top 5).
+
+    Example:
+        >>> resolve_asset_symbol("PTT")
+    """
+    from finance_ai.tools.symbol_search_service import (  # noqa: PLC0415
+        search_asset_symbols,
+    )
+
+    matches = search_asset_symbols(query)[:5]
+    candidates = [
+        {
+            "symbol": match.symbol,
+            "name": match.name,
+            "exchange": match.exchange,
+            "type": match.quote_type,
+        }
+        for match in matches
+    ]
+    return {"action": "resolve_symbol", "candidates": candidates}
+
+
 MARKET_DATA_TOOLS = [
     get_stock_price,
     search_finance_news,
+    resolve_asset_symbol,
 ]
