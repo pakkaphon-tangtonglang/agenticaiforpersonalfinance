@@ -8,7 +8,10 @@ from typing import Any, Optional
 
 import httpx
 
-from finance_ai.tools.symbol_search_service import search_asset_symbols
+from finance_ai.tools.symbol_search_service import (
+    search_asset_symbols,
+    translate_thai_query,
+)
 
 SERVICE_PATH = "finance_ai.tools.symbol_search_service"
 
@@ -83,6 +86,54 @@ def install_fake_get(
 
     monkeypatch.setattr(httpx.Client, "get", fake_get)
     return captured
+
+
+class TestThaiQueryTranslation:
+    """Tests for translating typed-Thai queries for Yahoo search.
+
+    Yahoo's search endpoint rejects Thai text (HTTP 400), so common
+    Thai asset names are translated before the request. The chat LLM
+    already translates, but the web search box sends raw user text.
+    """
+
+    def test_translates_common_thai_alias(self) -> None:
+        """Known Thai names map to their English search query."""
+        assert translate_thai_query("ปตท") == "PTT"
+
+    def test_translates_gold_variants(self) -> None:
+        """Both ทอง and ทองคำ resolve to the gold query."""
+        assert translate_thai_query("ทอง") == "gold"
+        assert translate_thai_query("ทองคำ") == "gold"
+
+    def test_strips_stock_prefix(self) -> None:
+        """'หุ้นปตท' resolves the same as 'ปตท'."""
+        assert translate_thai_query("หุ้นปตท") == "PTT"
+
+    def test_ignores_spacing_and_dots(self) -> None:
+        """'ป.ตท' and 'ป ต ท' still match the alias."""
+        assert translate_thai_query("ป.ตท") == "PTT"
+        assert translate_thai_query("ป ต ท") == "PTT"
+
+    def test_leaves_english_unchanged(self) -> None:
+        """English queries pass through untouched (case preserved)."""
+        assert translate_thai_query("Apple") == "Apple"
+        assert translate_thai_query("PTT.BK") == "PTT.BK"
+
+    def test_leaves_unknown_thai_unchanged(self) -> None:
+        """Unmapped Thai text passes through unchanged."""
+        assert translate_thai_query("หุ้นไม่มีจริง") == "หุ้นไม่มีจริง"
+
+    def test_empty_query_stays_empty(self) -> None:
+        """Empty/whitespace input is returned as-is."""
+        assert translate_thai_query("   ") == ""
+
+    def test_search_sends_translated_query(self, monkeypatch: Any) -> None:
+        """search_asset_symbols sends the translated query to Yahoo."""
+        captured = install_fake_get(monkeypatch, FakeResponse(json_data={"quotes": []}))
+
+        search_asset_symbols("ปตท")
+
+        assert captured["params"]["q"] == "PTT"
 
 
 class TestSearchAssetSymbols:

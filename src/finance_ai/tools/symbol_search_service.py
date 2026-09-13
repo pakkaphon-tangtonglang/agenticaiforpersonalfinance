@@ -26,12 +26,62 @@ _MAX_RESULTS = 8
 # Yahoo rejects bare HTTP clients without a User-Agent
 _HEADERS = {"User-Agent": "Mozilla/5.0"}
 
+# Common Thai asset names → English Yahoo search queries. Yahoo's search
+# endpoint rejects Thai text outright (HTTP 400), so typed-Thai queries
+# from the web search box are translated before the request. The chat
+# path already relies on the LLM to translate; this covers the rest.
+_THAI_ALIASES: dict[str, str] = {
+    "ปตท": "PTT",
+    "การบินไทย": "THAI",
+    "ทอง": "gold",
+    "ทองคำ": "gold",
+    "บิตคอยน์": "bitcoin",
+    "แอปเปิล": "apple",
+    "แอปเปิ้ล": "apple",
+    "เทสลา": "tesla",
+    "กูเกิล": "google",
+    "ไมโครซอฟท์": "microsoft",
+    "เอ็นวิเดีย": "nvidia",
+}
+
+
+def translate_thai_query(query: str) -> str:
+    """Translate a common Thai asset name for Yahoo search.
+
+    Normalizes the query (lowercase, spaces and dots removed, leading
+    "หุ้น" stock prefix stripped) and returns the English search term
+    when it matches a known alias; anything else passes through
+    unchanged (including unmapped Thai, empty input, English text).
+
+    Args:
+        query: Raw user query, e.g. "ปตท", "หุ้นปตท", "Apple".
+
+    Returns:
+        Yahoo-friendly query string.
+
+    Example:
+        >>> translate_thai_query("หุ้นปตท")
+        'PTT'
+    """
+    stripped = query.strip()
+    if not stripped:
+        return ""
+    lowered = stripped.lower()
+    if lowered.startswith("หุ้น"):
+        lowered = lowered[len("หุ้น") :].strip()
+    compact = lowered.replace(" ", "").replace(".", "")
+    for thai_name, english_query in _THAI_ALIASES.items():
+        if compact == thai_name.replace(" ", ""):
+            return english_query
+    return stripped
+
 
 def search_asset_symbols(query: str) -> list[AssetSymbolMatch]:
     """Search Yahoo Finance (free, no API key) for asset symbols matching free text.
 
     Works with English names, tickers, and transliterations (e.g. "PTT",
-    "Apple", "gold"). Thai names should be translated by the LLM first.
+    "Apple", "gold"). Common Thai names (e.g. "ปตท", "ทองคำ") are
+    translated automatically; the chat LLM translates anything else.
     Never raises — returns [] on any failure (LLM-facing tool boundary).
 
     Args:
@@ -45,7 +95,7 @@ def search_asset_symbols(query: str) -> list[AssetSymbolMatch]:
         >>> matches[0].symbol
         'PTT.BK'
     """
-    stripped_query = query.strip()
+    stripped_query = translate_thai_query(query.strip())
     if not stripped_query:
         return []
     try:
