@@ -17,6 +17,7 @@ from finance_ai.evaluation.datasets import (
     load_hallucination_dataset,
     load_quality_dataset,
     load_rag_dataset,
+    load_recommendation_safety_dataset,
     load_routing_dataset,
     load_tax_accuracy_dataset,
 )
@@ -29,12 +30,15 @@ from finance_ai.evaluation.models import (
     PerformanceAggregateResult,
     QualityAggregateResult,
     RAGAggregateResult,
+    RecommendationSafetyAggregateResult,
     RoutingAggregateResult,
 )
 from finance_ai.evaluation.performance_evaluator import evaluate_performance_dataset
 from finance_ai.evaluation.quality_evaluator import evaluate_quality_dataset
 from finance_ai.evaluation.rag_evaluator import evaluate_rag_dataset
+from finance_ai.evaluation.recommendation_safety_evaluator import evaluate_safety_dataset
 from finance_ai.evaluation.routing_evaluator import evaluate_routing_dataset
+from finance_ai.evaluation.safety_response_generator import generate_safety_responses
 from finance_ai.rag.vector_store import FinanceVectorStore
 from finance_ai.core.logging import get_logger
 
@@ -167,6 +171,26 @@ class EvaluationRunner:
         dataset = load_quality_dataset(f"{self._data_dir}/quality_dataset.yaml")
         return evaluate_quality_dataset(self._model, self._judge, dataset)
 
+    def run_recommendation_safety(self) -> RecommendationSafetyAggregateResult:
+        """Run recommendation safety compliance evaluation.
+
+        Generates Recommendation Agent answers on an isolated database
+        (users seeded at each case's risk level), then checks every
+        final answer against the deterministic guardrail.
+
+        Returns:
+            RecommendationSafetyAggregateResult with the compliance rate.
+        """
+        dataset = load_recommendation_safety_dataset(
+            f"{self._data_dir}/recommendation_safety_dataset.yaml",
+        )
+        responses, tool_flags = generate_safety_responses(
+            self._model,
+            dataset,
+            self._db_factory,
+        )
+        return evaluate_safety_dataset(dataset, responses, tool_flags=tool_flags)
+
     def run_performance(self) -> PerformanceAggregateResult:
         """Run performance (latency/cost) evaluation.
 
@@ -210,6 +234,8 @@ class EvaluationRunner:
             report.hallucination = _safe_run("hallucination", self.run_hallucination)
         if "quality" not in skip and self._judge is not None:
             report.quality = _safe_run("quality", self.run_quality)
+        if "safety" not in skip:
+            report.recommendation_safety = _safe_run("safety", self.run_recommendation_safety)
         if "performance" not in skip:
             report.performance = _safe_run("performance", self.run_performance)
         return report

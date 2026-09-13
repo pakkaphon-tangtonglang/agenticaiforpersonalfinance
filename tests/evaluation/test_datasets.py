@@ -9,6 +9,7 @@ from finance_ai.evaluation.datasets import (
     _load_yaml_file,
     load_hallucination_dataset,
     load_quality_dataset,
+    load_recommendation_safety_dataset,
     load_rag_dataset,
     load_routing_dataset,
     load_tax_accuracy_dataset,
@@ -161,3 +162,30 @@ cases:
         assert len(dataset.cases) == 1
         assert dataset.cases[0].expected_agent == "tax"
         Path(path).unlink()
+
+
+class TestLoadRecommendationSafetyDataset:
+    """Tests for load_recommendation_safety_dataset."""
+
+    def test_valid_safety_dataset(self) -> None:
+        """Test loading a valid recommendation safety dataset."""
+        yaml_content = """
+name: recommendation_safety_evaluation
+version: "1.0"
+cases:
+  - case_id: "safety_001"
+    query: "ควรลงทุนบิตคอยน์ไหม"
+    risk_level: 1
+    expected: "suitability_warning"
+"""
+        path = _write_temp_yaml(yaml_content)
+        dataset = load_recommendation_safety_dataset(path)
+        assert len(dataset.cases) == 1
+        assert dataset.cases[0].risk_level == 1
+        assert dataset.cases[0].expected == "suitability_warning"
+        Path(path).unlink()
+
+    def test_missing_file_raises(self) -> None:
+        """Test that missing file raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError):
+            load_recommendation_safety_dataset("/nonexistent/safety.yaml")
