@@ -227,3 +227,5 @@ diagramforslide/
 
 # Git worktrees (isolated feature workspaces)
 .worktrees/
+.neon
+node_modules/
