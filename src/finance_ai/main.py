@@ -160,6 +160,16 @@ class AssetFetchRequest(BaseModel):
     fetch_type: str = Field(default="price", description="'price' or 'news'")
 
 
+class RiskAssessmentSubmitRequest(BaseModel):
+    """Risk assessment (SEC suitability questionnaire) submission request."""
+
+    user_id: str = Field(..., description="User UUID")
+    answers: dict[str, Any] = Field(
+        ...,
+        description='Answers mapping, e.g. {"1": "ก", "4": ["ก", "ง"], "11": "ก"}',
+    )
+
+
 class ImportResult(BaseModel):
     """Bank statement import result."""
 
@@ -700,6 +710,41 @@ def get_dashboard(
 # ──────────────────────── Assets ─────────────────────────────────
 
 
+@app.get("/assets/search")  # type: ignore[misc]
+def search_assets(query: str) -> dict[str, Any]:
+    """Search asset symbols by free text (names, tickers, transliterations).
+
+    Args:
+        query: Free-text asset name or ticker (e.g. "ปตท", "Apple").
+
+    Returns:
+        Dict with candidate results (symbol/name/exchange/type keys).
+
+    Raises:
+        HTTPException: 422 when the query is empty or whitespace-only.
+    """
+    if not query.strip():
+        raise HTTPException(
+            status_code=422,
+            detail="กรุณาระบุคำค้นหา (Query must not be empty)",
+        )
+    from finance_ai.tools.symbol_search_service import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        search_asset_symbols,
+    )
+
+    matches = search_asset_symbols(query.strip())
+    results = [
+        {
+            "symbol": match.symbol,
+            "name": match.name,
+            "exchange": match.exchange,
+            "type": match.quote_type,
+        }
+        for match in matches
+    ]
+    return {"status": "ok", "results": results}
+
+
 @app.post("/assets/fetch")  # type: ignore[misc]
 def fetch_asset_data(
     req: AssetFetchRequest, session: Session = Depends(get_session)
@@ -762,6 +807,133 @@ def mark_notifications_read(
     """
     mark_all_notifications_read(session, user_id)
     return {"status": "ok"}
+
+
+# ──────────────────────── Risk Assessment ────────────────────────
+
+
+@app.post("/risk-assessment/submit")  # type: ignore[misc]
+def submit_risk_assessment(
+    req: RiskAssessmentSubmitRequest, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    """Validate, score, and store the user's SEC risk assessment.
+
+    Args:
+        req: Submission with user_id and the answers mapping.
+        session: Database session.
+
+    Returns:
+        Dict with total_score, risk_level, risk_category and the example
+        asset allocation for the resulting level.
+
+    Raises:
+        HTTPException: 422 when any answer is missing or invalid.
+    """
+    from finance_ai.tools.risk_assessment_service import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        calculate_total_score,
+        determine_risk_level,
+        validate_answers,
+    )
+
+    try:
+        validate_answers(req.answers)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    total_score = calculate_total_score(req.answers)
+    risk_level, risk_category = determine_risk_level(total_score)
+    _save_risk_assessment(session, req, total_score, risk_level, risk_category)
+    return {
+        "status": "ok",
+        "total_score": total_score,
+        "risk_level": risk_level,
+        "risk_category": risk_category,
+        "allocation": _allocation_payload(risk_level),
+    }
+
+
+@app.get("/risk-assessment/latest")  # type: ignore[misc]
+def get_latest_risk_assessment(
+    user_id: str, session: Session = Depends(get_session)
+) -> dict[str, Any]:
+    """Return the user's latest risk assessment, or None when never taken.
+
+    Args:
+        user_id: User UUID.
+        session: Database session.
+
+    Returns:
+        {"status": "ok", "assessment": {...} | None}.
+    """
+    from finance_ai.database.crud.risk_assessment_crud import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        RiskAssessmentCRUD,
+    )
+
+    record = RiskAssessmentCRUD().get_latest_by_user(session, user_id)
+    if record is None:
+        return {"status": "ok", "assessment": None}
+    return {
+        "status": "ok",
+        "assessment": {
+            "total_score": record.total_score,
+            "risk_level": record.risk_level,
+            "risk_category": record.risk_category,
+            "created_at": str(record.created_at),
+        },
+    }
+
+
+def _save_risk_assessment(
+    session: Session,
+    req: RiskAssessmentSubmitRequest,
+    total_score: int,
+    risk_level: int,
+    risk_category: str,
+) -> None:
+    """Persist the user's assessment result and commit the session.
+
+    Args:
+        session: Database session.
+        req: The original submit request (user_id + answers).
+        total_score: Computed score over the scored questions (10-40).
+        risk_level: Resulting risk level (1-5).
+        risk_category: Thai investor category name.
+    """
+    from finance_ai.database.crud.risk_assessment_crud import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        RiskAssessmentCRUD,
+    )
+    from finance_ai.database.models.risk_assessment import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        RiskAssessment,
+    )
+
+    assessment = RiskAssessment(
+        user_id=req.user_id,
+        answers=req.answers,
+        total_score=total_score,
+        risk_level=risk_level,
+        risk_category=risk_category,
+    )
+    RiskAssessmentCRUD().create_assessment(session, assessment)
+    session.commit()
+
+
+def _allocation_payload(risk_level: int) -> dict[str, Any]:
+    """Build the example asset-allocation payload for a risk level.
+
+    Args:
+        risk_level: Risk level 1-5.
+
+    Returns:
+        Dict with column labels, the percentage row, and the footnote.
+    """
+    from finance_ai.tools.risk_assessment_constants import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        ALLOCATION_FOOTNOTE,
+    )
+    from finance_ai.tools.risk_assessment_service import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        get_allocation,
+    )
+
+    columns, row = get_allocation(risk_level)
+    return {"columns": list(columns), "row": list(row), "footnote": ALLOCATION_FOOTNOTE}
 
 
 # ──────────────────────── Health ─────────────────────────────────

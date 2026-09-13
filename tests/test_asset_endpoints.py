@@ -17,6 +17,7 @@ from finance_ai.database.base import Base
 from finance_ai.database.models.asset_notification import AssetNotification
 from finance_ai.database.models.user import User
 from finance_ai.main import app
+from finance_ai.tools.market_data_models import AssetSymbolMatch
 
 
 @pytest.fixture
@@ -86,3 +87,64 @@ class TestAssetNotificationsField:
         assert len(body) == 1
         assert body[0]["symbol"] == "GC=F"
         assert body[0]["message"] == "ราคาทอง: 2,350 USD"
+
+
+class TestAssetSearchEndpoint:
+    """Tests for GET /assets/search (free-text symbol search)."""
+
+    def test_returns_mapped_results(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Search results are mapped to symbol/name/exchange/type dicts."""
+        matches = [
+            AssetSymbolMatch(
+                symbol="PTT.BK",
+                name="PTT Public Company Limited",
+                exchange="SET",
+                quote_type="EQUITY",
+            ),
+            AssetSymbolMatch(
+                symbol="AAPL",
+                name="Apple Inc.",
+                exchange="NASDAQ",
+                quote_type="EQUITY",
+            ),
+        ]
+
+        def fake_search(query: str) -> list[AssetSymbolMatch]:
+            """Return the canned matches after asserting the raw query."""
+            assert query == "PTT"
+            return matches
+
+        monkeypatch.setattr(
+            "finance_ai.tools.symbol_search_service.search_asset_symbols", fake_search
+        )
+
+        response = client.get("/assets/search", params={"query": "PTT"})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "ok"
+        assert body["results"] == [
+            {
+                "symbol": "PTT.BK",
+                "name": "PTT Public Company Limited",
+                "exchange": "SET",
+                "type": "EQUITY",
+            },
+            {
+                "symbol": "AAPL",
+                "name": "Apple Inc.",
+                "exchange": "NASDAQ",
+                "type": "EQUITY",
+            },
+        ]
+
+    def test_whitespace_query_returns_422(self, client: TestClient) -> None:
+        """Empty/whitespace-only queries are rejected with 422 and a clear message."""
+        response = client.get("/assets/search", params={"query": "   "})
+
+        assert response.status_code == 422
+        assert "คำค้นหา" in response.json()["detail"]
