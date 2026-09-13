@@ -333,3 +333,26 @@ class TestRecommendationDisclaimer:
         """styles.css defines the chat disclaimer style."""
         response = self.client.get("/static/styles.css")
         assert ".msg-disclaimer" in response.text
+
+
+class TestChatMessageFormatting:
+    """Tests for chat bubble markdown rendering (stray blank-line fix)."""
+
+    client: TestClient = TestClient(app)
+
+    def test_marked_breaks_disabled(self) -> None:
+        """Single newlines render as soft wraps (GPT/Claude behaviour).
+
+        `breaks: true` forces every \n into a hard <br>, which shows stray
+        blank lines wherever the model wraps a line oddly.
+        """
+        response = self.client.get("/static/app.js")
+        assert "breaks: false" in response.text
+        assert "breaks: true" not in response.text
+
+    def test_normalize_for_chat_defined_and_used(self) -> None:
+        """normalizeForChat trims edges and collapses blank-line runs."""
+        response = self.client.get("/static/app.js")
+        assert "function normalizeForChat" in response.text
+        assert "normalizeForChat(text)" in response.text
+        assert "\\n{3,}" in response.text
