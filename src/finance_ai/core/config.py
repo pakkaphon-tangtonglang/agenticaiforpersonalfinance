@@ -136,6 +136,12 @@ class Settings(BaseSettings):
     # General LLM Settings
     llm_max_tokens: int = Field(default=4000, ge=1, le=8000, description="Max tokens")
     llm_temperature: float = Field(default=0.7, ge=0.0, le=1.0, description="LLM temperature")
+    llm_recommendation_temperature: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Temperature for the Recommendation Agent (conservative advice).",
+    )
 
     # RAG Configuration
     rag_embedding_provider: Literal["google", "sentence_transformers"] = Field(

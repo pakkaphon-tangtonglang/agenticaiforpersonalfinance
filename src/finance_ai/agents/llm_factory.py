@@ -157,11 +157,16 @@ def create_openrouter_chat_model(settings: Settings) -> BaseChatModel:
     )
 
 
-def create_chat_model(settings: Settings | None = None) -> BaseChatModel:
+def create_chat_model(
+    settings: Settings | None = None,
+    temperature: float | None = None,
+) -> BaseChatModel:
     """Create a LangChain ChatModel based on the configured provider.
 
     Args:
         settings: Optional settings override. Uses get_settings() if None.
+        temperature: Optional per-agent temperature override. When set,
+            it replaces llm_temperature for this model only.
 
     Returns:
         A LangChain BaseChatModel instance (Google or OLLAMA).
@@ -170,10 +175,12 @@ def create_chat_model(settings: Settings | None = None) -> BaseChatModel:
         ValueError: If the provider is unsupported or config is missing.
 
     Example:
-        >>> model = create_chat_model()
+        >>> model = create_chat_model(temperature=0.3)
     """
     if settings is None:
         settings = get_settings()
+    if temperature is not None:
+        settings = settings.model_copy(update={"llm_temperature": temperature})
     if settings.llm_provider == "google":
         return create_google_chat_model(settings)
     if settings.llm_provider == "ollama":

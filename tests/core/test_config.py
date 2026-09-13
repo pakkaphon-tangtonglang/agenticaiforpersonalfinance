@@ -50,6 +50,14 @@ def test_settings_allows_missing_google_key() -> None:
     assert not settings.google_api_key  # None or empty string
 
 
+def test_settings_recommendation_temperature_default() -> None:
+    """Test recommendation agent uses its own conservative temperature."""
+    settings = Settings(_env_file=None, google_api_key="test-key")
+
+    assert settings.llm_recommendation_temperature == 0.3
+    assert settings.llm_temperature == 0.7
+
+
 def test_get_settings_returns_settings() -> None:
     """Test get_settings returns Settings instance."""
     settings = get_settings()
