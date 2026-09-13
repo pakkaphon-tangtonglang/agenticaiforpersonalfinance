@@ -9,7 +9,10 @@ from finance_ai.agents.market_data_tools import (
     resolve_asset_symbol,
     search_finance_news,
 )
-from finance_ai.tools.market_data_models import AssetSymbolMatch
+from finance_ai.tools.market_data_models import (
+    AssetSymbolMatch,
+    StockDashboardResult,
+)
 
 SYMBOL_SEARCH_PATH = "finance_ai.tools.symbol_search_service.search_asset_symbols"
 
@@ -48,6 +51,35 @@ class TestGetStockPriceTool:
 
         assert result["action"] == "stock_price"
         assert result["symbol"] == "AAPL"
+
+    def test_includes_price_display_with_baht_unit(self) -> None:
+        """Should include a formatted price with หน่วย for SET symbols."""
+        dashboard = StockDashboardResult(
+            name="PTT Public Company Limited",
+            current_price=Decimal("35.50"),
+            currency="THB",
+        )
+
+        with patch(
+            "finance_ai.tools.market_data_service.fetch_stock_dashboard",
+            return_value=dashboard,
+        ):
+            result = get_stock_price.invoke({"symbol": "PTT.BK"})
+
+        assert result["price_display"] == "35.50 บาท"
+        assert result["current_price"] == "35.50"
+
+    def test_omits_price_display_without_price(self) -> None:
+        """Should omit price_display when no price is available."""
+        dashboard = StockDashboardResult(name="PTT")
+
+        with patch(
+            "finance_ai.tools.market_data_service.fetch_stock_dashboard",
+            return_value=dashboard,
+        ):
+            result = get_stock_price.invoke({"symbol": "PTT.BK"})
+
+        assert "price_display" not in result
 
     def test_converts_values_to_strings(self) -> None:
         """Should convert non-None values to strings."""

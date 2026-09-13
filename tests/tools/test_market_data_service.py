@@ -1,6 +1,11 @@
-"""Tests for market data service functions (yfinance + Google News RSS)."""
+"""Tests for market data service functions (yfinance + Google News RSS).
+
+The price client's module-level cache and retry sleep are neutralized
+around every test so no real network calls or waits slip in.
+"""
 
 from decimal import Decimal
+from typing import Iterator
 from unittest.mock import MagicMock, patch
 
 import httpx
@@ -22,9 +27,21 @@ from finance_ai.tools.market_data_service import (
     fetch_finance_news,
     fetch_news_items,
     fetch_stock_dashboard,
+    format_price_with_unit,
 )
+from finance_ai.tools.price_client import _PRICE_CACHE
 
 SERVICE_PATH = "finance_ai.tools.market_data_service"
+
+
+@pytest.fixture(autouse=True)
+def isolate_price_client() -> Iterator[None]:
+    """Clear the price cache and neutralize retry sleeps for each test."""
+    _PRICE_CACHE.clear()
+    with patch("finance_ai.tools.price_client._retry_sleep"):
+        yield
+    _PRICE_CACHE.clear()
+
 
 RSS_FEED_TWO_ITEMS = """<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel>
@@ -115,6 +132,71 @@ class TestFetchStockDashboard:
         assert result.name is None
         assert result.current_price is None
         assert result.dividend_yield_percent == Decimal("0")
+
+    @patch(f"{SERVICE_PATH}.fetch_current_price")
+    @patch("yfinance.Ticker")
+    def test_empty_info_falls_back_to_cached_price(
+        self, mock_ticker_cls: MagicMock, mock_price: MagicMock
+    ) -> None:
+        """When yfinance info is blocked (Render), still return a price."""
+        ticker = MagicMock()
+        ticker.info = {}
+        mock_ticker_cls.return_value = ticker
+        mock_price.return_value = Decimal("42.00")
+
+        result = fetch_stock_dashboard("PTT.BK")
+
+        assert result.current_price == Decimal("42.00")
+        mock_price.assert_called_once_with("PTT.BK")
+
+    @patch(f"{SERVICE_PATH}.fetch_current_price")
+    @patch("yfinance.Ticker")
+    def test_info_without_price_falls_back_to_cached_price(
+        self, mock_ticker_cls: MagicMock, mock_price: MagicMock
+    ) -> None:
+        """A populated info dict without a price still gets a fallback price."""
+        ticker = MagicMock()
+        ticker.info = {"longName": "PTT Public Company Limited"}
+        mock_ticker_cls.return_value = ticker
+        mock_price.return_value = Decimal("42.00")
+
+        result = fetch_stock_dashboard("PTT.BK")
+
+        assert result.name == "PTT Public Company Limited"
+        assert result.current_price == Decimal("42.00")
+
+
+class TestFormatPriceWithUnit:
+    """Tests for format_price_with_unit (หน่วย after price)."""
+
+    def test_set_symbol_gets_baht_unit(self) -> None:
+        """SET (\".BK\") symbols show บาท without any network call."""
+        result = format_price_with_unit(Decimal("42.00"), "PTT.BK")
+
+        assert result == "42.00 บาท"
+
+    def test_set_symbol_case_insensitive(self) -> None:
+        """Lowercase .bk symbols also resolve to บาท."""
+        assert format_price_with_unit(Decimal("35.50"), "ptt.bk") == "35.50 บาท"
+
+    @patch(f"{SERVICE_PATH}.fetch_currency", return_value="USD")
+    def test_other_symbol_uses_currency_code(self, mock_currency: MagicMock) -> None:
+        """Non-SET symbols append the fetched currency code."""
+        result = format_price_with_unit(Decimal("190.50"), "AAPL")
+
+        assert result == "190.50 USD"
+        mock_currency.assert_called_once_with("AAPL")
+
+    @patch(f"{SERVICE_PATH}.fetch_currency", return_value=None)
+    def test_unknown_currency_returns_plain_number(self, mock_currency: MagicMock) -> None:
+        """When the currency cannot be resolved, show just the number."""
+        result = format_price_with_unit(Decimal("190.50"), "WEIRD")
+
+        assert result == "190.50"
+
+    def test_thousands_separator_and_two_decimals(self) -> None:
+        """Prices format with thousands separators, two decimals."""
+        assert format_price_with_unit(Decimal("2350"), "PTT.BK") == "2,350.00 บาท"
 
 
 # ---------------------------------------------------------------------------
@@ -210,10 +292,10 @@ class TestFetchExchangeRate:
 
     @patch("yfinance.Ticker")
     def test_raises_fetch_error_on_exception(self, mock_ticker_cls: MagicMock) -> None:
-        """Should raise Thai ValueError when yfinance fails."""
+        """Should raise Thai ValueError when yfinance fails entirely."""
         mock_ticker_cls.side_effect = RuntimeError("network down")
 
-        with pytest.raises(ValueError, match="ไม่สามารถดึงอัตราแลกเปลี่ยน USD/THB"):
+        with pytest.raises(ValueError, match="ไม่พบอัตราแลกเปลี่ยน"):
             _fetch_exchange_rate("USD", "THB")
 
     @patch("yfinance.Ticker")
