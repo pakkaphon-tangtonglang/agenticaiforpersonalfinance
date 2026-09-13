@@ -69,6 +69,7 @@
     streaming: false,
     charts: {},
     mode: "hero", // "hero" | "thread"
+    riskProfile: null, // latest risk assessment {risk_category, risk_level, total_score}
   };
 
   // ─── DOM helpers ───
@@ -182,7 +183,7 @@
   // ─── View switching ───
   const VIEW_TITLES = {
     chat: "แชท", dashboard: "แดชบอร์ด",
-    upload: "นำเข้าเอกสาร", assets: "สินทรัพย์", eval: "ประเมินผล",
+    upload: "นำเข้าเอกสาร", assets: "สินทรัพย์",
   };
   function switchView(name) {
     document.querySelectorAll(".view").forEach((v) => v.classList.remove("is-active"));
@@ -848,6 +849,10 @@
       e.preventDefault();
       fetchAsset();
     });
+    $("assetSearchForm").addEventListener("submit", (e) => {
+      e.preventDefault();
+      searchAssets();
+    });
     $("markNotifBtn").addEventListener("click", markNotificationsRead);
   }
 
@@ -900,27 +905,304 @@
     } catch (e) { toast("ไม่สำเร็จ", true); }
   }
 
-  // ─── Evaluation ───
-  function setupEval() {
-    $("runEvalBtn").addEventListener("click", runEvaluation);
-  }
-
-  async function runEvaluation() {
-    const btn = $("runEvalBtn");
+  // ─── Asset search (free text) ───
+  async function searchAssets() {
+    const query = $("assetSearchInput").value.trim();
+    if (!query) return;
+    const btn = $("assetSearchBtn");
     btn.classList.add("is-loading");
-    btn.textContent = "กำลังประเมิน… อาจใช้เวลาสักครู่";
+    btn.textContent = "กำลังค้นหา…";
     try {
-      const res = await api("POST", "/evaluation/run", {});
-      const box = $("evalResult");
-      box.hidden = false;
-      box.textContent = JSON.stringify(res.results, null, 2);
-      toast("ประเมินเสร็จแล้ว");
+      const res = await api("GET", "/assets/search", { params: { query } });
+      renderAssetSearchResults(res.results || []);
     } catch (e) {
-      toast("ประเมินไม่สำเร็จ: " + e.message, true);
+      toast("ค้นหาไม่สำเร็จ: " + e.message, true);
     } finally {
       btn.classList.remove("is-loading");
-      btn.textContent = "รันการประเมิน";
+      btn.textContent = "ค้นหา";
     }
+  }
+
+  function renderAssetSearchResults(results) {
+    const box = $("assetSearchResults");
+    box.innerHTML = "";
+    if (!results.length) {
+      box.append(el("p", { class: "asset-search-empty" }, "ไม่พบสินทรัพย์ที่ตรงกัน"));
+      box.hidden = false;
+      return;
+    }
+    for (const r of results) {
+      box.append(el("button", {
+        type: "button",
+        class: "asset-result-card",
+        dataset: { symbol: r.symbol },
+        onclick: () => selectAsset(r.symbol, r.name),
+      },
+        el("span", { class: "asset-result-name" }, r.name),
+        el("span", { class: "asset-result-meta" }, `${r.symbol} · ${r.exchange} · ${r.type}`),
+      ));
+    }
+    box.hidden = false;
+  }
+
+  function selectAsset(symbol, name) {
+    $("assetSymbol").value = symbol;
+    document.querySelectorAll(".asset-result-card").forEach((c) =>
+      c.classList.toggle("is-selected", c.dataset.symbol === symbol));
+    toast(`เลือก ${name} (${symbol})`);
+  }
+
+  // ─── Risk assessment (SEC suitability onboarding) ───
+  const RISK_QUESTIONS = [
+    { id: 1, text: "ปัจจุบันท่านอายุเท่าใด", multiSelect: false, scored: true,
+      options: [
+        { key: "ก", text: "มากกว่า 55 ปี" },
+        { key: "ข", text: "45 – 55 ปี" },
+        { key: "ค", text: "35 – 44 ปี" },
+        { key: "ง", text: "น้อยกว่า 35 ปี" },
+      ] },
+    { id: 2, text: "ปัจจุบันท่านมีภาระทางการเงินและค่าใช้จ่ายประจำ เช่น ค่าผ่อนบ้าน รถ ค่าใช้จ่ายส่วนตัว และค่าเลี้ยงดูครอบครัว เป็นสัดส่วนเท่าใด", multiSelect: false, scored: true,
+      options: [
+        { key: "ก", text: "มากกว่าร้อยละ 75 ของรายได้ทั้งหมด" },
+        { key: "ข", text: "ระหว่างร้อยละ 50 ถึงร้อยละ 75 ของรายได้ทั้งหมด" },
+        { key: "ค", text: "ระหว่างร้อยละ 25 ถึงร้อยละ 50 ของรายได้ทั้งหมด" },
+        { key: "ง", text: "น้อยกว่าร้อยละ 25 ของรายได้ทั้งหมด" },
+      ] },
+    { id: 3, text: "ท่านมีสถานภาพทางการเงินในปัจจุบันอย่างไร", multiSelect: false, scored: true,
+      options: [
+        { key: "ก", text: "มีทรัพย์สินน้อยกว่าหนี้สิน" },
+        { key: "ข", text: "มีทรัพย์สินเท่ากับหนี้สิน" },
+        { key: "ค", text: "มีทรัพย์สินมากกว่าหนี้สิน" },
+        { key: "ง", text: "มีความมั่นใจว่ามีเงินออมหรือเงินลงทุนเพียงพอสำหรับการใช้ชีวิตหลังเกษียณอายุแล้ว" },
+      ] },
+    { id: 4, text: "ท่านเคยมีประสบการณ์หรือมีความรู้ในการลงทุนในทรัพย์สินกลุ่มใดต่อไปนี้บ้าง (เลือกได้มากกว่า 1 ข้อ)", multiSelect: true, scored: true,
+      options: [
+        { key: "ก", text: "เงินฝากธนาคาร" },
+        { key: "ข", text: "พันธบัตรรัฐบาล หรือกองทุนรวมพันธบัตรรัฐบาล" },
+        { key: "ค", text: "หุ้นกู้ หรือกองทุนรวมตราสารหนี้" },
+        { key: "ง", text: "หุ้นสามัญ หรือกองทุนรวมหุ้น หรือสินทรัพย์อื่นที่มีความเสี่ยงสูง" },
+      ] },
+    { id: 5, text: "ระยะเวลาที่ท่านคาดว่าจะไม่มีความจำเป็นต้องใช้เงินลงทุนนี้", multiSelect: false, scored: true,
+      options: [
+        { key: "ก", text: "ไม่เกิน 1 ปี" },
+        { key: "ข", text: "1 ถึง 3 ปี" },
+        { key: "ค", text: "3 ถึง 5 ปี" },
+        { key: "ง", text: "มากกว่า 5 ปี" },
+      ] },
+    { id: 6, text: "วัตถุประสงค์หลักในการลงทุนของท่านคือ", multiSelect: false, scored: true,
+      options: [
+        { key: "ก", text: "เน้นเงินต้นต้องปลอดภัยและได้รับผลตอบแทนสม่ำเสมอแต่ต่ำ" },
+        { key: "ข", text: "เน้นโอกาสได้รับผลตอบแทนที่สม่ำเสมอ แต่อาจเสี่ยงที่จะสูญเสียเงินต้นได้บ้าง" },
+        { key: "ค", text: "เน้นโอกาสได้รับผลตอบแทนที่สูงขึ้น แต่อาจเสี่ยงที่จะสูญเสียเงินต้นได้มากขึ้น" },
+        { key: "ง", text: "เน้นผลตอบแทนสูงสุดในระยะยาว แต่อาจเสี่ยงที่จะสูญเงินต้นส่วนใหญ่ได้" },
+      ] },
+    { id: 7, text: "เมื่อพิจารณารูปแสดงตัวอย่างผลตอบแทนของกลุ่มการลงทุนที่อาจเกิดขึ้น ท่านเต็มใจที่จะลงทุนในกลุ่มการลงทุนใดมากที่สุด", multiSelect: false, scored: true,
+      options: [
+        { key: "ก", text: "กลุ่มการลงทุนที่ 1 มีโอกาสได้รับผลตอบแทน 2.5% โดยไม่ขาดทุนเลย" },
+        { key: "ข", text: "กลุ่มการลงทุนที่ 2 มีโอกาสได้รับผลตอบแทนสูงสุด 7% แต่อาจมีผลขาดทุนได้ถึง 1%" },
+        { key: "ค", text: "กลุ่มการลงทุนที่ 3 มีโอกาสได้รับผลตอบแทนสูงสุด 15% แต่อาจมีผลขาดทุนได้ถึง 5%" },
+        { key: "ง", text: "กลุ่มการลงทุนที่ 4 มีโอกาสได้รับผลตอบแทนสูงสุด 25% แต่อาจมีผลขาดทุนได้ถึง 15%" },
+      ] },
+    { id: 8, text: "ถ้าท่านเลือกลงทุนในทรัพย์สินที่มีโอกาสได้รับผลตอบแทนมาก แต่มีโอกาสขาดทุนสูงด้วยเช่นกัน ท่านจะรู้สึกอย่างไร", multiSelect: false, scored: true,
+      options: [
+        { key: "ก", text: "กังวลและตื่นตระหนกกลัวขาดทุน" },
+        { key: "ข", text: "ไม่สบายใจแต่พอเข้าใจได้บ้าง" },
+        { key: "ค", text: "เข้าใจและรับความผันผวนได้ในระดับหนึ่ง" },
+        { key: "ง", text: "ไม่กังวลกับโอกาสขาดทุนสูง และหวังกับผลตอบแทนที่อาจจะได้รับสูงขึ้น" },
+      ] },
+    { id: 9, text: "ท่านจะรู้สึกกังวลหรือรับไม่ได้ เมื่อมูลค่าเงินลงทุนของท่านมีการปรับตัวลดลงในสัดส่วนเท่าใด", multiSelect: false, scored: true,
+      options: [
+        { key: "ก", text: "5% หรือน้อยกว่า" },
+        { key: "ข", text: "มากกว่า 5% ถึง 10%" },
+        { key: "ค", text: "มากกว่า 10% ถึง 20%" },
+        { key: "ง", text: "มากกว่า 20% ขึ้นไป" },
+      ] },
+    { id: 10, text: "หากปีที่แล้วท่านลงทุนไป 100,000 บาท ปีนี้ท่านพบว่ามูลค่าเงินลงทุนลดลงเหลือ 85,000 บาท ท่านจะทำอย่างไร", multiSelect: false, scored: true,
+      options: [
+        { key: "ก", text: "ตกใจ และต้องการขายการลงทุนที่เหลือทิ้ง" },
+        { key: "ข", text: "กังวลใจ และจะปรับเปลี่ยนการลงทุนบางส่วนไปในทรัพย์สินที่เสี่ยงน้อยลง" },
+        { key: "ค", text: "อดทนถือต่อไปได้ และรอผลตอบแทนปรับตัวกลับมา" },
+        { key: "ง", text: "ยังมั่นใจ เพราะเข้าใจว่าต้องลงทุนระยะยาว และจะเพิ่มเงินลงทุนในแบบเดิมเพื่อเฉลี่ยต้นทุน" },
+      ] },
+    { id: 11, text: "หากการลงทุนในอนุพันธ์และหุ้นกู้อนุพันธ์ประสบความสำเร็จ ท่านจะได้รับผลตอบแทนในอัตราที่สูงมาก แต่หากการลงทุนล้มเหลว ท่านอาจจะสูญเงินลงทุนทั้งหมด และอาจต้องลงเงินชดเชยเพิ่มบางส่วน ท่านยอมรับได้เพียงใด", multiSelect: false, scored: false,
+      options: [
+        { key: "ก", text: "ไม่ได้" },
+        { key: "ข", text: "ได้บ้าง" },
+        { key: "ค", text: "ได้" },
+      ] },
+    { id: 12, text: "นอกเหนือจากความเสี่ยงในการลงทุนแล้ว ท่านสามารถรับความเสี่ยงด้านอัตราแลกเปลี่ยนได้เพียงใด", multiSelect: false, scored: false,
+      options: [
+        { key: "ก", text: "ไม่ได้" },
+        { key: "ข", text: "ได้บ้าง" },
+        { key: "ค", text: "ได้" },
+      ] },
+  ];
+  const RISK_SCORED_COUNT = 10; // Q1-Q10 one per step; Q11+Q12 share the last step
+  const riskState = { step: 0, answers: {} };
+
+  function setupRiskAssessment() {
+    $("riskBackBtn").addEventListener("click", backRiskStep);
+    $("riskNextBtn").addEventListener("click", nextRiskStep);
+    $("riskSkipLink").addEventListener("click", closeRiskModal);
+    $("riskRetakeBtn").addEventListener("click", openRiskModal);
+    $("riskQuestionBox").addEventListener("change", updateRiskNextState);
+  }
+
+  async function maybeShowRiskAssessment() {
+    try {
+      const res = await api("GET", "/risk-assessment/latest", {
+        params: { user_id: state.userId },
+      });
+      state.riskProfile = res.assessment;
+      renderRiskProfileCard();
+      if (!res.assessment) openRiskModal();
+    } catch (e) { /* silent — onboarding check must not block the app */ }
+  }
+
+  function openRiskModal() {
+    riskState.step = 0;
+    riskState.answers = {};
+    $("riskModalFoot").hidden = false;
+    $("riskSkipLink").hidden = false;
+    $("riskModal").hidden = false;
+    renderRiskStep();
+  }
+
+  function closeRiskModal() {
+    $("riskModal").hidden = true;
+  }
+
+  function currentRiskQuestions() {
+    if (riskState.step < RISK_SCORED_COUNT) return [RISK_QUESTIONS[riskState.step]];
+    return [RISK_QUESTIONS[10], RISK_QUESTIONS[11]];
+  }
+
+  function renderRiskStep() {
+    const questions = currentRiskQuestions();
+    $("riskStepLabel").textContent = `คำถาม ${riskState.step + 1}/${RISK_SCORED_COUNT + 1}`;
+    const box = $("riskQuestionBox");
+    box.innerHTML = "";
+    const isPair = questions.length > 1;
+    for (const q of questions) box.append(buildRiskQuestion(q, isPair));
+    updateRiskNextState();
+  }
+
+  function buildRiskQuestion(question, isPair) {
+    const wrap = el("div", { class: "risk-question" + (isPair ? " is-pair" : "") });
+    const optional = !question.scored ? " (ไม่บังคับ)" : "";
+    wrap.append(el("p", { class: "risk-question-text" }, `${question.id}. ${question.text}${optional}`));
+    const inputType = question.multiSelect ? "checkbox" : "radio";
+    for (const opt of question.options) {
+      const input = el("input", { type: inputType, name: `risk-q-${question.id}`, value: opt.key });
+      wrap.append(el("label", { class: "risk-option" },
+        input,
+        el("span", { class: "risk-option-text" }, opt.text),
+      ));
+    }
+    return wrap;
+  }
+
+  function riskCheckedValues(questionId) {
+    const name = `risk-q-${questionId}`;
+    return Array.from($("riskQuestionBox").querySelectorAll(`input[name="${name}"]:checked`))
+      .map((input) => input.value);
+  }
+
+  function updateRiskNextState() {
+    const box = $("riskQuestionBox");
+    box.querySelectorAll(".risk-option").forEach((option) => {
+      const input = option.querySelector("input");
+      option.classList.toggle("is-selected", input.checked);
+    });
+    const questions = currentRiskQuestions();
+    const answered = questions.every((q) => riskCheckedValues(q.id).length > 0);
+    const isOptionalStep = riskState.step >= RISK_SCORED_COUNT;
+    $("riskNextBtn").disabled = !isOptionalStep && !answered;
+    $("riskNextBtn").textContent = isOptionalStep ? "ส่งคำตอบ" : "ถัดไป";
+    $("riskBackBtn").disabled = riskState.step === 0;
+  }
+
+  function collectRiskStepAnswers() {
+    for (const q of currentRiskQuestions()) {
+      const checked = riskCheckedValues(q.id);
+      if (checked.length) riskState.answers[String(q.id)] = q.multiSelect ? checked : checked[0];
+      else delete riskState.answers[String(q.id)];
+    }
+  }
+
+  function nextRiskStep() {
+    collectRiskStepAnswers();
+    if (riskState.step >= RISK_SCORED_COUNT) {
+      submitRiskAssessment();
+      return;
+    }
+    riskState.step += 1;
+    renderRiskStep();
+  }
+
+  function backRiskStep() {
+    collectRiskStepAnswers();
+    if (riskState.step === 0) return;
+    riskState.step -= 1;
+    renderRiskStep();
+  }
+
+  async function submitRiskAssessment() {
+    const btn = $("riskNextBtn");
+    btn.disabled = true;
+    btn.textContent = "กำลังส่ง…";
+    try {
+      const res = await api("POST", "/risk-assessment/submit", {
+        json: { user_id: state.userId, answers: riskState.answers },
+      });
+      state.riskProfile = {
+        risk_category: res.risk_category,
+        risk_level: res.risk_level,
+        total_score: res.total_score,
+      };
+      renderRiskProfileCard();
+      renderRiskResult(res);
+    } catch (e) {
+      toast(e.message.replace(/^\d+:\s*/, ""), true);
+      updateRiskNextState();
+    }
+  }
+
+  function renderRiskResult(res) {
+    $("riskStepLabel").textContent = "ผลการประเมิน";
+    $("riskModalFoot").hidden = true;
+    $("riskSkipLink").hidden = true;
+    const box = $("riskQuestionBox");
+    box.innerHTML = "";
+    box.append(
+      el("div", { class: "risk-result-badge" }, res.risk_category),
+      el("p", { class: "risk-result-level" },
+        `ระดับ ${res.risk_level}/5 · คะแนนรวม ${res.total_score}`),
+      buildRiskAllocationTable(res.allocation),
+      el("p", { class: "risk-result-footnote" }, res.allocation.footnote),
+      el("p", { class: "risk-result-disclaimer" },
+        "เป็นการประเมินเบื้องต้น ไม่ใช่คำแนะนำการลงทุนอย่างเป็นทางการ"),
+      el("button", { class: "btn risk-start-btn", type: "button", onclick: closeRiskModal },
+        "เริ่มใช้งาน"),
+    );
+  }
+
+  function buildRiskAllocationTable(allocation) {
+    const head = el("tr", {}, ...allocation.columns.map((c) => el("th", {}, c)));
+    const body = el("tr", {}, ...allocation.row.map((v) => el("td", {}, v)));
+    return el("div", { class: "table-wrap" },
+      el("table", { class: "risk-allocation-table" }, el("thead", {}, head), el("tbody", {}, body)));
+  }
+
+  function renderRiskProfileCard() {
+    const card = $("riskProfileCard");
+    if (!state.riskProfile) {
+      card.hidden = true;
+      return;
+    }
+    $("riskProfileLevel").textContent =
+      `${state.riskProfile.risk_category} (ระดับ ${state.riskProfile.risk_level})`;
+    card.hidden = false;
   }
 
   // ─── Composer (hero search + thread composer) ───
@@ -973,7 +1255,8 @@
     setupCategoryNav();
     setupUpload();
     setupAssets();
-    setupEval();
+    setupRiskAssessment();
+    maybeShowRiskAssessment();
     renderSuggestions("all");
     await loadConversations();
     if (state.conversationId) selectConversation(state.conversationId, "");

@@ -40,9 +40,6 @@
       <button class="nav-item" data-view="assets" type="button">
         <span aria-hidden="true">📈</span><span>สินทรัพย์</span>
       </button>
-      <button class="nav-item" data-view="eval" type="button">
-        <span aria-hidden="true">🔬</span><span>ประเมินผล</span>
-      </button>
     </nav>
 
     <div class="conv-section">
@@ -180,6 +177,12 @@
             </div>
           </div>
 
+          <div class="risk-profile-card" id="riskProfileCard" hidden>
+            <h3 class="card-title">ผลประเมินความเสี่ยง</h3>
+            <p class="risk-profile-level" id="riskProfileLevel">—</p>
+            <button class="risk-retake-link" id="riskRetakeBtn" type="button">ทำแบบประเมินอีกครั้ง</button>
+          </div>
+
           <div class="table-card">
             <h3 class="card-title">รายการถือครอง <span class="badge-count" id="holdCount">0</span></h3>
             <div class="table-wrap">
@@ -264,6 +267,16 @@
           <p class="page-desc">ดึงราคาและข่าวสินทรัพย์ที่คุณสนใจ พร้อมการแจ้งเตือน</p>
         </div>
         <div class="panel">
+          <form class="asset-search" id="assetSearchForm">
+            <label class="field">
+              <span class="field-label">ค้นหาสินทรัพย์</span>
+              <input type="text" id="assetSearchInput" class="field-input"
+                placeholder="พิมพ์ชื่อสินทรัพย์ เช่น ปตท, Apple, ทองคำ" autocomplete="off" />
+            </label>
+            <button class="btn" id="assetSearchBtn" type="submit">ค้นหา</button>
+          </form>
+          <div class="asset-search-results" id="assetSearchResults" hidden></div>
+
           <form class="asset-form" id="assetForm">
             <label class="field">
               <span class="field-label">สัญลักษณ์</span>
@@ -292,23 +305,28 @@
         </div>
       </section>
 
-      <!-- ───────── Evaluation View ───────── -->
-      <section class="view view-eval" id="view-eval" aria-label="ประเมินผลระบบ">
-        <div class="page-head">
-          <h1 class="page-title">ประเมินผลระบบ</h1>
-          <p class="page-desc">รันกรอบการประเมินเพื่อวัดคุณภาพการตอบของระบบ AI ในหลายมิติ</p>
-        </div>
-        <div class="panel">
-          <button class="btn" id="runEvalBtn" type="button">รันการประเมิน</button>
-          <div class="eval-result" id="evalResult" hidden></div>
-        </div>
-      </section>
     </div>
   </main>
 </div>
 
 <!-- Toast -->
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<!-- Risk assessment onboarding modal -->
+<div class="modal-overlay" id="riskModal" hidden>
+  <div class="modal risk-modal" role="dialog" aria-modal="true" aria-labelledby="riskModalTitle">
+    <header class="modal-head">
+      <h2 class="modal-title" id="riskModalTitle">แบบประเมินความเหมาะสมในการลงทุน</h2>
+      <span class="risk-step-label" id="riskStepLabel"></span>
+    </header>
+    <div class="modal-body" id="riskQuestionBox"></div>
+    <footer class="modal-foot" id="riskModalFoot">
+      <button class="btn btn-ghost" id="riskBackBtn" type="button" disabled>ย้อนกลับ</button>
+      <button class="btn" id="riskNextBtn" type="button" disabled>ถัดไป</button>
+    </footer>
+    <button class="risk-skip-link" id="riskSkipLink" type="button">ข้ามก่อน</button>
+  </div>
+</div>
 
 </body>
 </html>
