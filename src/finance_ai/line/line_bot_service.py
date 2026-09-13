@@ -14,6 +14,7 @@ from finance_ai.line.link_command import (
     unlink_line_user,
 )
 from finance_ai.line.mapping_service import get_or_create_line_mapping
+from finance_ai.line.markdown_to_text import markdown_to_line_text
 from finance_ai.line.messaging_client import send_line_push
 from finance_ai.tools.conversation_service import (
     get_recent_history_as_tuples,
@@ -95,6 +96,8 @@ def handle_line_event(
 
     Designed to run as a FastAPI background task so the webhook returns
     200 within LINE's ~1s window while the agent (10-30s) runs after.
+    The reply is converted from markdown to LINE-friendly plain text
+    before pushing (LINE bubbles render markdown literally).
 
     Args:
         line_user_id: LINE platform userId of the sender.
@@ -110,4 +113,4 @@ def handle_line_event(
         reply = process_line_message(session_factory, chat_model_provider, line_user_id, text)
     except Exception as exc:  # pylint: disable=broad-exception-caught
         reply = f"ขออภัยครับ เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง ({exc})"
-    send_line_push(access_token, line_user_id, reply)
+    send_line_push(access_token, line_user_id, markdown_to_line_text(reply))

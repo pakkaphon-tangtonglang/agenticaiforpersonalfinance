@@ -1,7 +1,7 @@
 """Tests for the LINE bot service (event -> agent -> reply flow)."""
 
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from sqlalchemy.orm import Session, sessionmaker
 
@@ -95,3 +95,55 @@ class TestProcessLineMessage:
         factory = sessionmaker(bind=test_session.get_bind())
         reply = process_line_message(factory, None, LINE_USER_ID, "ยกเลิกเชื่อมต่อ")
         assert "ยกเลิกการเชื่อมต่อเรียบร้อย" in reply
+
+
+class TestHandleLineEvent:
+    """Tests for the webhook background task (agent reply -> LINE push)."""
+
+    def test_pushes_markdown_converted_to_plain_text(self) -> None:
+        """Agent markdown is converted before the LINE push."""
+        from finance_ai.line.line_bot_service import handle_line_event  # noqa: PLC0415
+
+        markdown_reply = "## ราคาหุ้น PTT\n\n" "| **ราคาปัจจุบัน** | 42.00 บาท |\n\n" "- **ชื่อ**: PTT\n"
+        with (
+            patch(
+                "finance_ai.line.line_bot_service.process_line_message",
+                return_value=markdown_reply,
+            ),
+            patch("finance_ai.line.line_bot_service.send_line_push") as mock_push,
+        ):
+            handle_line_event(
+                line_user_id=LINE_USER_ID,
+                text="ราคา PTT",
+                session_factory=MagicMock(),
+                chat_model_provider=None,
+                access_token="token-123",
+            )
+
+        pushed_text = mock_push.call_args[0][2]
+        assert pushed_text == ("ราคาหุ้น PTT\n\nราคาปัจจุบัน | 42.00 บาท\n\n• ชื่อ: PTT")
+        assert "##" not in pushed_text
+        assert "**" not in pushed_text
+
+    def test_pushes_error_reply_on_agent_failure(self) -> None:
+        """An agent exception still pushes a friendly Thai error."""
+        from finance_ai.line.line_bot_service import handle_line_event  # noqa: PLC0415
+
+        with (
+            patch(
+                "finance_ai.line.line_bot_service.process_line_message",
+                side_effect=RuntimeError("boom"),
+            ),
+            patch("finance_ai.line.line_bot_service.send_line_push") as mock_push,
+        ):
+            handle_line_event(
+                line_user_id=LINE_USER_ID,
+                text="ราคา PTT",
+                session_factory=MagicMock(),
+                chat_model_provider=None,
+                access_token="token-123",
+            )
+
+        pushed_text = mock_push.call_args[0][2]
+        assert "ขออภัย" in pushed_text
+        assert "boom" in pushed_text
