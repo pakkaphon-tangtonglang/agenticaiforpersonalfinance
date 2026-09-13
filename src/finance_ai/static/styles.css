@@ -207,6 +207,26 @@ a:hover { text-decoration: underline; }
 }
 .user-reset:hover { background: var(--color-parchment); color: var(--color-ink); }
 
+/* Connect LINE sidebar card */
+.line-connect-card { flex-shrink: 0; }
+.line-connect-btn {
+  width: 100%; display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-md);
+  border: 1px solid #06C755; background: #06C755; cursor: pointer;
+  transition: filter 0.15s ease, transform 0.1s ease;
+}
+.line-connect-btn:hover { filter: brightness(1.06); }
+.line-connect-btn:active { transform: scale(0.98); }
+.line-connect-icon {
+  flex-shrink: 0; width: 34px; height: 34px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #fff; color: #06C755; font-weight: var(--fw-bold);
+  font-size: 11px; letter-spacing: 0.02em;
+}
+.line-connect-text { display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
+.line-connect-text strong { color: #fff; font-size: var(--text-body); }
+.line-connect-text small { color: rgba(255, 255, 255, 0.85); font-size: var(--text-caption); }
+
 /* Connect LINE modal */
 .line-modal-text { margin: 0; font-size: var(--text-body); color: var(--color-graphite); }
 .line-modal-steps {
