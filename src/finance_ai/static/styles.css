@@ -586,10 +586,39 @@ a:hover { text-decoration: underline; }
 
 /* Asset form */
 .asset-form { display: flex; gap: var(--sp-3); align-items: flex-end; flex-wrap: wrap; }
+.selected-asset {
+  align-self: flex-start;
+  padding: 2px var(--sp-3); border-radius: var(--radius-full);
+  background: var(--color-accent-tint); color: var(--color-accent);
+  font-size: var(--text-body-sm); font-weight: var(--fw-medium);
+}
 .asset-result {
+  display: flex; flex-direction: column; gap: var(--sp-2);
   padding: var(--sp-4); border-radius: var(--radius-md);
   background: var(--color-soft-paper); border: 1px solid var(--color-warm-mist-soft);
-  white-space: pre-wrap; line-height: var(--leading-relaxed);
+  line-height: var(--leading-relaxed);
+}
+.asset-result-symbol {
+  font-size: var(--text-caption); font-weight: var(--fw-medium);
+  color: var(--color-graphite); letter-spacing: 0.04em; text-transform: uppercase;
+}
+.asset-price-line {
+  font-size: var(--text-body-lg); font-weight: var(--fw-display);
+  color: var(--color-ink); font-variant-numeric: tabular-nums;
+}
+.asset-result-error { font-size: var(--text-body-sm); color: var(--color-negative); }
+.asset-news-heading { font-weight: var(--fw-medium); color: var(--color-ink); }
+.asset-news-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.asset-news-card {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-md);
+  background: var(--color-parchment); border: 1px solid var(--color-warm-mist-soft);
+}
+.asset-news-title { font-weight: var(--fw-medium); color: var(--color-ink); }
+.asset-news-meta { font-size: var(--text-caption); color: var(--color-graphite); }
+.asset-news-link {
+  align-self: flex-start;
+  font-size: var(--text-body-sm); overflow-wrap: anywhere;
 }
 .notif-section { margin-top: var(--sp-5); }
 .notif-head {
@@ -607,6 +636,24 @@ a:hover { text-decoration: underline; }
 .notif-time { font-size: var(--text-caption); color: var(--color-ash); }
 .notif-empty { color: var(--color-graphite); text-align: center; padding: var(--sp-4); }
 
+/* Watchlist (tracked assets) */
+.watchlist-section { margin-top: var(--sp-5); }
+.watchlist-list { display: flex; flex-direction: column; gap: var(--sp-2); }
+.watchlist-item {
+  display: flex; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-md);
+  background: var(--color-soft-paper); border: 1px solid var(--color-warm-mist-soft);
+}
+.watchlist-symbol { font-weight: var(--fw-medium); color: var(--color-accent); }
+.watchlist-name { flex: 1; color: var(--color-graphite); }
+.watchlist-remove {
+  padding: 2px var(--sp-3); border-radius: var(--radius-sm);
+  border: 1px solid var(--color-warm-mist); color: var(--color-graphite);
+  font-size: var(--text-body-sm);
+  transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
+}
+.watchlist-remove:hover { border-color: var(--color-negative); color: var(--color-negative); }
+
 /* Asset search (free text) */
 .asset-search { display: flex; gap: var(--sp-3); align-items: flex-end; flex-wrap: wrap; }
 .asset-search .field { flex: 1; min-width: 220px; }
@@ -616,12 +663,22 @@ a:hover { text-decoration: underline; }
 }
 .asset-search-empty { color: var(--color-graphite); text-align: center; padding: var(--sp-4); }
 .asset-result-card {
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: column; gap: var(--sp-2);
   padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-md);
   background: var(--color-soft-paper); border: 1px solid var(--color-warm-mist-soft);
-  text-align: left;
   transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
 }
+.asset-result-main {
+  display: flex; flex-direction: column; gap: 2px; text-align: left;
+}
+.asset-track-btn {
+  align-self: flex-start;
+  padding: 2px var(--sp-3); border-radius: var(--radius-full);
+  border: 1px solid var(--color-accent); color: var(--color-accent);
+  font-size: var(--text-body-sm); font-weight: var(--fw-medium);
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+.asset-track-btn:hover { background: var(--color-accent); color: var(--color-soft-paper); }
 .asset-result-card:hover,
 .asset-result-card.is-selected {
   border-color: var(--color-accent); background: var(--color-accent-tint);
@@ -809,6 +866,7 @@ a:hover { text-decoration: underline; }
   .asset-form .btn { width: 100%; }
   .asset-search { flex-direction: column; align-items: stretch; }
   .asset-search-results { grid-template-columns: 1fr; }
+  .watchlist-item { flex-wrap: wrap; }
 }
 
 /* ─── Reduced motion ─── */

@@ -140,6 +140,88 @@ class TestAssetSearchAndRiskOnboarding:
         assert ".eval-result" not in styles
 
 
+class TestAssetFetchCardsAndWatchlist:
+    """Tests for asset fetch result cards, selected-asset display,
+    and the watchlist section (task-2 asset page bugfix)."""
+
+    client: TestClient = TestClient(app)
+
+    def test_index_bumps_static_versions_to_v4(self) -> None:
+        """Every static reference in index.html is cache-busted to v=4."""
+        response = self.client.get("/")
+        assert 'href="styles.css?v=4"' in response.text
+        assert 'src="config.js?v=4"' in response.text
+        assert 'src="app.js?v=4"' in response.text
+        assert "?v=3" not in response.text
+
+    def test_asset_form_asks_for_desired_data_with_all_option(self) -> None:
+        """The fetch form relabels ประเภท to ข้อมูลที่ต้องการ and offers ทั้งหมด."""
+        response = self.client.get("/")
+        assert "ข้อมูลที่ต้องการ" in response.text
+        assert '<option value="all">ทั้งหมด</option>' in response.text
+        assert '<option value="price">ราคา</option>' in response.text
+        assert '<option value="news">ข่าว</option>' in response.text
+
+    def test_selected_asset_display_exists(self) -> None:
+        """A selected-asset display sits next to the fetch form."""
+        response = self.client.get("/")
+        assert 'id="selectedAsset"' in response.text
+        assert 'class="selected-asset"' in response.text
+
+    def test_watchlist_section_markup_exists(self) -> None:
+        """The watchlist section lists tracked assets with an empty state."""
+        response = self.client.get("/")
+        assert 'id="watchlistSection"' in response.text
+        assert 'id="watchlistList"' in response.text
+        assert "สินทรัพย์ที่ติดตาม" in response.text
+        assert "ยังไม่มีสินทรัพย์ที่ติดตาม" in response.text
+
+    def test_app_js_wires_watchlist_endpoints(self) -> None:
+        """app.js loads, adds to, and removes watchlist entries."""
+        response = self.client.get("/static/app.js")
+        assert '"/assets/watchlist"' in response.text
+        assert "function loadWatchlist" in response.text
+        assert "function renderWatchlist" in response.text
+        assert "function addToWatchlist" in response.text
+        assert "function removeWatchlistAsset" in response.text
+
+    def test_app_js_renders_fetch_results_as_cards(self) -> None:
+        """app.js renders fetch results as cards and sends fetch_type fallback."""
+        response = self.client.get("/static/app.js")
+        assert "function renderAssetFetchResult" in response.text
+        assert 'fetch_type: type || "all"' in response.text
+        assert "JSON.stringify(res.result" not in response.text
+
+    def test_app_js_formats_thai_dates_and_strips_markdown(self) -> None:
+        """app.js formats timestamps with th-TH locale and strips markdown bold."""
+        response = self.client.get("/static/app.js")
+        assert "function formatThaiDateTime" in response.text
+        assert '"th-TH"' in response.text
+        assert "function stripMarkdownEmphasis" in response.text
+
+    def test_app_js_renders_news_links_safely(self) -> None:
+        """News links are anchors with hostname text, _blank, and noopener."""
+        response = self.client.get("/static/app.js")
+        assert 'target: "_blank"' in response.text
+        assert 'rel: "noopener"' in response.text
+        assert "function linkHostname" in response.text
+
+    def test_app_js_loads_watchlist_on_assets_view(self) -> None:
+        """Switching to the assets view loads notifications and the watchlist."""
+        response = self.client.get("/static/app.js")
+        assert 'if (name === "assets") { loadNotifications(); loadWatchlist(); }' in response.text
+
+    def test_styles_define_fetch_cards_and_watchlist(self) -> None:
+        """styles.css styles fetch result cards and watchlist rows."""
+        response = self.client.get("/static/styles.css")
+        assert ".asset-price-line" in response.text
+        assert ".asset-news-card" in response.text
+        assert ".asset-news-link" in response.text
+        assert ".selected-asset" in response.text
+        assert ".watchlist-item" in response.text
+        assert ".watchlist-remove" in response.text
+
+
 class TestDashboardWiring:
     """Regression tests for the dashboard auto-load fix.
 
