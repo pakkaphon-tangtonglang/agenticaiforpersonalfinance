@@ -525,7 +525,7 @@ a:hover { text-decoration: underline; }
 .highlight-title { font-weight: var(--fw-medium); font-size: var(--text-body); color: var(--color-ink); }
 .highlight-desc { font-size: var(--text-body); color: var(--color-graphite); margin-top: var(--sp-1); }
 
-/* ─── Panels (upload/assets/eval) ─── */
+/* ─── Panels (upload/assets) ─── */
 .panel {
   max-width: var(--content-max-width); width: 100%; margin: 0 auto;
   display: flex; flex-direction: column; gap: var(--sp-4);
@@ -607,12 +607,112 @@ a:hover { text-decoration: underline; }
 .notif-time { font-size: var(--text-caption); color: var(--color-ash); }
 .notif-empty { color: var(--color-graphite); text-align: center; padding: var(--sp-4); }
 
-/* Eval */
-.eval-result {
-  padding: var(--sp-5); border-radius: var(--radius-md);
+/* Asset search (free text) */
+.asset-search { display: flex; gap: var(--sp-3); align-items: flex-end; flex-wrap: wrap; }
+.asset-search .field { flex: 1; min-width: 220px; }
+.asset-search-results {
+  margin-top: var(--sp-3); display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: var(--sp-2);
+}
+.asset-search-empty { color: var(--color-graphite); text-align: center; padding: var(--sp-4); }
+.asset-result-card {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-md);
   background: var(--color-soft-paper); border: 1px solid var(--color-warm-mist-soft);
-  white-space: pre-wrap; line-height: var(--leading-relaxed);
-  font-size: var(--text-body); overflow-x: auto;
+  text-align: left;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.asset-result-card:hover,
+.asset-result-card.is-selected {
+  border-color: var(--color-accent); background: var(--color-accent-tint);
+}
+.asset-result-name { font-weight: var(--fw-medium); color: var(--color-ink); }
+.asset-result-meta { font-size: var(--text-caption); color: var(--color-graphite); }
+
+/* Risk assessment onboarding modal */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(39, 37, 30, 0.5);
+  display: flex; align-items: center; justify-content: center;
+  padding: var(--sp-4);
+}
+.modal {
+  position: relative; width: 100%; max-width: 560px;
+  max-height: 90vh; overflow-y: auto;
+  display: flex; flex-direction: column; gap: var(--sp-4);
+  padding: var(--sp-5); border-radius: var(--radius-lg);
+  background: var(--color-soft-paper); border: 1px solid var(--color-warm-mist-soft);
+  box-shadow: rgba(0, 0, 0, 0.18) 0 8px 30px;
+}
+.modal-head { display: flex; flex-direction: column; gap: var(--sp-1); padding-right: var(--sp-8); }
+.modal-title {
+  font-family: var(--font-display); font-weight: var(--fw-display);
+  font-size: var(--text-body-lg); color: var(--color-ink);
+}
+.risk-step-label { font-size: var(--text-caption); color: var(--color-ash); }
+.modal-body { display: flex; flex-direction: column; gap: var(--sp-4); }
+.risk-question { display: flex; flex-direction: column; gap: var(--sp-2); }
+.risk-question.is-pair {
+  padding: var(--sp-3); border-radius: var(--radius-md);
+  border: 1px solid var(--color-warm-mist-soft);
+}
+.risk-question-text {
+  font-size: var(--text-body); font-weight: var(--fw-medium); color: var(--color-ink);
+}
+.risk-option {
+  display: flex; align-items: flex-start; gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-md);
+  border: 1px solid var(--color-warm-mist);
+  cursor: pointer; font-size: var(--text-body); color: var(--color-graphite);
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.risk-option:hover,
+.risk-option.is-selected {
+  border-color: var(--color-accent); background: var(--color-accent-tint); color: var(--color-ink);
+}
+.risk-option input { margin-top: 3px; accent-color: var(--color-accent); }
+.modal-foot { display: flex; justify-content: space-between; gap: var(--sp-3); }
+.risk-skip-link {
+  position: absolute; top: var(--sp-3); right: var(--sp-4);
+  padding: var(--sp-1) var(--sp-2); border-radius: var(--radius-sm);
+  font-size: var(--text-caption); color: var(--color-ash);
+}
+.risk-skip-link:hover { color: var(--color-ink); background: var(--color-parchment); }
+.risk-result-badge {
+  align-self: center; padding: var(--sp-2) var(--sp-5);
+  border-radius: var(--radius-full); background: var(--color-accent); color: var(--color-parchment);
+  font-family: var(--font-display); font-weight: var(--fw-display);
+  font-size: var(--text-body-lg); text-align: center;
+}
+.risk-result-level { text-align: center; font-size: var(--text-body); color: var(--color-graphite); }
+.risk-allocation-table { width: 100%; border-collapse: collapse; font-size: var(--text-body-sm); }
+.risk-allocation-table th,
+.risk-allocation-table td {
+  border: 1px solid var(--color-warm-mist); padding: var(--sp-2) var(--sp-3);
+  text-align: center; vertical-align: middle;
+}
+.risk-allocation-table th {
+  background: var(--color-parchment-2); color: var(--color-graphite); font-weight: var(--fw-medium);
+}
+.risk-result-footnote { text-align: center; font-size: var(--text-caption); color: var(--color-ash); }
+.risk-result-disclaimer {
+  text-align: center; font-style: italic;
+  font-size: var(--text-caption); color: var(--color-graphite);
+}
+.risk-start-btn { align-self: center; }
+
+/* Risk profile card (dashboard) */
+.risk-profile-card {
+  display: flex; flex-direction: column; gap: var(--sp-2);
+  padding: var(--sp-4); border-radius: var(--radius-lg);
+  background: var(--color-soft-paper); border: 1px solid var(--color-warm-mist-soft);
+}
+.risk-profile-level {
+  font-size: var(--text-body-lg); font-weight: var(--fw-medium); color: var(--color-ink);
+}
+.risk-retake-link {
+  align-self: flex-start; padding: 0;
+  font-size: var(--text-body-sm); color: var(--color-accent); text-decoration: underline;
 }
 
 /* ─── Form controls ─── */
@@ -707,6 +807,8 @@ a:hover { text-decoration: underline; }
   .overview-grid { grid-template-columns: 1fr; }
   .asset-form { flex-direction: column; align-items: stretch; }
   .asset-form .btn { width: 100%; }
+  .asset-search { flex-direction: column; align-items: stretch; }
+  .asset-search-results { grid-template-columns: 1fr; }
 }
 
 /* ─── Reduced motion ─── */

@@ -710,7 +710,7 @@ def get_dashboard(
 # ──────────────────────── Assets ─────────────────────────────────
 
 
-@app.get("/assets/search")  # type: ignore[misc]
+@app.get("/assets/search")
 def search_assets(query: str) -> dict[str, Any]:
     """Search asset symbols by free text (names, tickers, transliterations).
 
@@ -812,7 +812,7 @@ def mark_notifications_read(
 # ──────────────────────── Risk Assessment ────────────────────────
 
 
-@app.post("/risk-assessment/submit")  # type: ignore[misc]
+@app.post("/risk-assessment/submit")
 def submit_risk_assessment(
     req: RiskAssessmentSubmitRequest, session: Session = Depends(get_session)
 ) -> dict[str, Any]:
@@ -851,7 +851,7 @@ def submit_risk_assessment(
     }
 
 
-@app.get("/risk-assessment/latest")  # type: ignore[misc]
+@app.get("/risk-assessment/latest")
 def get_latest_risk_assessment(
     user_id: str, session: Session = Depends(get_session)
 ) -> dict[str, Any]:

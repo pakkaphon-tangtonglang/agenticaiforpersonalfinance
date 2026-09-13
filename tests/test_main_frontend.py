@@ -72,6 +72,74 @@ class TestUploadRecheckMarkup:
         assert ".upload-tab" in response.text
 
 
+class TestAssetSearchAndRiskOnboarding:
+    """Tests for asset search UI + risk onboarding modal markup."""
+
+    client: TestClient = TestClient(app)
+
+    def test_assets_view_has_search_controls(self) -> None:
+        """The assets view exposes the free-text search input, button, and results."""
+        response = self.client.get("/")
+        assert 'id="assetSearchInput"' in response.text
+        assert 'id="assetSearchBtn"' in response.text
+        assert 'id="assetSearchResults"' in response.text
+        assert "พิมพ์ชื่อสินทรัพย์" in response.text
+
+    def test_app_js_wires_asset_search(self) -> None:
+        """app.js calls /assets/search and renders/selects candidates."""
+        response = self.client.get("/static/app.js")
+        assert '"/assets/search"' in response.text
+        assert "function searchAssets" in response.text
+        assert "function renderAssetSearchResults" in response.text
+        assert "function selectAsset" in response.text
+
+    def test_styles_define_asset_search(self) -> None:
+        """styles.css defines the asset search card styles."""
+        response = self.client.get("/static/styles.css")
+        assert ".asset-result-card" in response.text
+        assert ".asset-search-results" in response.text
+
+    def test_risk_onboarding_modal_markup_exists(self) -> None:
+        """The risk modal overlay, question box, and nav buttons exist."""
+        response = self.client.get("/")
+        assert 'id="riskModal"' in response.text
+        assert 'id="riskQuestionBox"' in response.text
+        assert 'id="riskBackBtn"' in response.text
+        assert 'id="riskNextBtn"' in response.text
+        assert 'id="riskStepLabel"' in response.text
+        assert 'id="riskSkipLink"' in response.text
+
+    def test_dashboard_has_risk_profile_card(self) -> None:
+        """The dashboard shows the risk profile card and retake link."""
+        response = self.client.get("/")
+        assert 'id="riskProfileCard"' in response.text
+        assert 'id="riskProfileLevel"' in response.text
+        assert 'id="riskRetakeBtn"' in response.text
+        assert "ทำแบบประเมินอีกครั้ง" in response.text
+
+    def test_app_js_embeds_all_12_risk_questions(self) -> None:
+        """app.js embeds the 12 SEC questions and wires both risk endpoints."""
+        response = self.client.get("/static/app.js")
+        assert '"/risk-assessment/latest"' in response.text
+        assert '"/risk-assessment/submit"' in response.text
+        assert "function maybeShowRiskAssessment" in response.text
+        assert "function submitRiskAssessment" in response.text
+        for question_id in range(1, 13):
+            assert f"{{ id: {question_id}," in response.text
+
+    def test_eval_tab_removed(self) -> None:
+        """The ประเมินผล tab, view, and JS wiring are fully removed."""
+        page = self.client.get("/")
+        assert 'data-view="eval"' not in page.text
+        assert 'id="view-eval"' not in page.text
+        js = self.client.get("/static/app.js").text
+        assert "setupEval" not in js
+        assert "runEvaluation" not in js
+        assert '"/evaluation/run"' not in js
+        styles = self.client.get("/static/styles.css").text
+        assert ".eval-result" not in styles
+
+
 class TestDashboardWiring:
     """Regression tests for the dashboard auto-load fix.
 
