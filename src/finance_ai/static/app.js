@@ -214,14 +214,27 @@
     catch (_) { return String(link).slice(0, 60); }
   }
 
+  // Normalize model output before markdown parsing so chat bubbles never
+  // show stray blank space: collapse runs of 3+ newlines to one paragraph
+  // break, normalize CRLF, and trim the edges. Matches how GPT/Claude
+  // render — a single newline is a soft wrap, not a hard break.
+  function normalizeForChat(text) {
+    return String(text == null ? "" : text)
+      .replace(/\r\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
   // Render model output as markdown → Excel-style HTML tables, sanitized.
   // Falls back to escaped text + <br> if the libs are not yet loaded.
   function renderMarkdown(text) {
-    const str = String(text == null ? "" : text);
+    const str = normalizeForChat(text);
     if (typeof marked === "undefined" || typeof DOMPurify === "undefined") {
       return esc(str).replace(/\n/g, "<br>");
     }
-    marked.setOptions({ gfm: true, breaks: true });
+    // breaks: false — single newlines wrap softly (like GPT/Claude);
+    // hard-break mode turned every wrapped line into a visible blank line.
+    marked.setOptions({ gfm: true, breaks: false });
     const html = marked.parse(str);
     // Wrap tables so they can scroll on small screens and pick up grid styling.
     return DOMPurify.sanitize(
