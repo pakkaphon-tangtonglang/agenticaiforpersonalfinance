@@ -29,11 +29,11 @@ def test_settings_google_provider() -> None:
 
 def test_settings_ollama_provider() -> None:
     """Test Settings validates OLLAMA provider configuration."""
-    settings = Settings(_env_file=None, llm_provider="ollama", ollama_model="THALLE")
+    settings = Settings(_env_file=None, llm_provider="ollama", ollama_model="minimax-m3")
 
     assert settings.llm_provider == "ollama"
     assert settings.ollama_base_url == "http://localhost:11434"
-    assert settings.ollama_model == "THALLE"
+    assert settings.ollama_model == "minimax-m3"
 
 
 def test_settings_invalid_provider() -> None:

@@ -53,13 +53,13 @@ class TestCreateOllamaChatModel:
         mock_import.return_value = mock_chat_ollama_cls
         settings = Settings(
             _env_file=None,
-            ollama_model="THALLE",
+            ollama_model="minimax-m3",
             ollama_base_url="http://localhost:11434",
             llm_temperature=0.7,
         )
         create_ollama_chat_model(settings)
         mock_chat_ollama_cls.assert_called_once_with(
-            model="THALLE",
+            model="minimax-m3",
             base_url="http://localhost:11434",
             temperature=0.7,
         )

@@ -1,7 +1,7 @@
 """
 Factory pattern for LLM provider selection.
 
-Creates the appropriate LLM client (Google Gemini or OLLAMA/THALLE).
+Creates the appropriate LLM client (Google Gemini or OLLAMA).
 """
 
 from typing import TYPE_CHECKING

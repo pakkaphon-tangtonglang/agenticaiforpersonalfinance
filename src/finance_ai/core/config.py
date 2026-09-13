@@ -42,9 +42,9 @@ class Settings(BaseSettings):
     google_api_key: Optional[str] = Field(default=None, description="Google API key")
     google_model: str = Field(default="gemini-2.5-flash", description="Google model name")
 
-    # OLLAMA Configuration (for THALLE and other local models)
+    # OLLAMA Configuration (for local or cloud-hosted Ollama models)
     ollama_base_url: str = Field(default="http://localhost:11434", description="OLLAMA base URL")
-    ollama_model: str = Field(default="THALLE", description="OLLAMA model name")
+    ollama_model: str = Field(default="minimax-m3", description="OLLAMA model name")
     ollama_api_key: Optional[str] = Field(
         default=None,
         description="Ollama Cloud API key (https://ollama.com/settings/keys)",
