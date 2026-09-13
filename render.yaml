@@ -29,9 +29,10 @@ services:
         value: "false"
       - key: LOG_LEVEL
         value: WARNING
-      # SQLite on the ephemeral instance disk (resets on each deploy)
+      # Neon Postgres (pooled connection string) — set as a secret in the
+      # dashboard; a local SQLite fallback would be wiped on every deploy
       - key: DB_URL
-        value: sqlite:///./finance_ai.db
+        sync: false
       - key: RAG_KNOWLEDGE_BASE_DIRECTORY
         value: docs/knowledge_base
       # LLM via Ollama Cloud (non-secret settings inlined from .env)
