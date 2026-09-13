@@ -6,6 +6,8 @@ from typing import Any
 from sqlalchemy.orm import Session, sessionmaker
 
 from finance_ai.agents.router_agent import orchestrate_query
+from finance_ai.database.models.line_user_mapping import LineUserMapping
+from finance_ai.line.link_command import link_line_user, parse_link_command
 from finance_ai.line.mapping_service import get_or_create_line_mapping
 from finance_ai.line.messaging_client import send_line_push
 from finance_ai.tools.conversation_service import (
@@ -44,6 +46,9 @@ def process_line_message(
     """
     with session_factory() as session:
         mapping = get_or_create_line_mapping(session, line_user_id)
+        link_reply = _maybe_handle_link_command(session, mapping, text)
+        if link_reply is not None:
+            return link_reply
         history = get_recent_history_as_tuples(session, mapping.conversation_id)
         save_user_message(session, mapping.conversation_id, text)
         chat_model = chat_model_provider() if chat_model_provider is not None else None
@@ -58,6 +63,17 @@ def process_line_message(
             session, mapping.conversation_id, result["response"], result["intent"]
         )
         return str(result["response"])
+
+
+def _maybe_handle_link_command(session: Session, mapping: LineUserMapping, text: str) -> str | None:
+    """Handle a 'เชื่อมต่อ <user-id>' command, or return None to run the agent."""
+    target_user_id = parse_link_command(text)
+    if target_user_id is None:
+        return None
+    success, reply = link_line_user(session, mapping.line_user_id, target_user_id)
+    intent = "link_success" if success else "link_failed"
+    save_assistant_message(session, mapping.conversation_id, reply, intent)
+    return reply
 
 
 def handle_line_event(

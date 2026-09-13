@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 
 from sqlalchemy.orm import Session, sessionmaker
 
+from finance_ai.database.models.user import User
 from finance_ai.line.line_bot_service import process_line_message
 from finance_ai.line.mapping_service import get_or_create_line_mapping
 
@@ -52,3 +53,29 @@ class TestProcessLineMessage:
         factory = sessionmaker(bind=test_session.get_bind())
         process_line_message(factory, provider, LINE_USER_ID, "สวัสดี")
         provider.assert_called_once()
+
+    def test_link_command_short_circuits_agent(
+        self,
+        test_session: Session,
+        monkeypatch: Any,
+    ) -> None:
+        """A link command replies directly without invoking any agent."""
+        get_or_create_line_mapping(test_session, LINE_USER_ID)
+        target_user_id = "00000000-de20-4000-8000-000000000001"
+        test_session.add(
+            User(
+                id=target_user_id,
+                email="web@finance-ai.local",
+                hashed_password="not-a-login",
+                full_name="ผู้ใช้เว็บ",
+            )
+        )
+        test_session.commit()
+
+        def fail_orchestrate(**kwargs: Any) -> dict[str, str]:
+            raise AssertionError("agent must not run for link commands")
+
+        monkeypatch.setattr("finance_ai.line.line_bot_service.orchestrate_query", fail_orchestrate)
+        factory = sessionmaker(bind=test_session.get_bind())
+        reply = process_line_message(factory, None, LINE_USER_ID, f"เชื่อมต่อ {target_user_id}")
+        assert "เชื่อมต่อบัญชีเรียบร้อย" in reply
