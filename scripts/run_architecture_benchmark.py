@@ -32,15 +32,21 @@ def main() -> None:
     result = run_architecture_benchmark()
 
     print("\n✅ ผลลัพธ์:")
-    print(f"  Hub-and-Spoke : {result.hub_spoke.mean_latency_ms:.0f} ms, "
-          f"{result.hub_spoke.routing_llm_calls_per_query:.1f} routing calls, "
-          f"{result.hub_spoke.coupling_score} connections")
-    print(f"  P2P           : {result.p2p.mean_latency_ms:.0f} ms, "
-          f"{result.p2p.routing_llm_calls_per_query:.1f} routing calls, "
-          f"{result.p2p.coupling_score} connections")
-    print(f"  Hierarchical  : {result.hierarchical.mean_latency_ms:.0f} ms, "
-          f"{result.hierarchical.routing_llm_calls_per_query:.1f} routing calls, "
-          f"{result.hierarchical.coupling_score} connections")
+    print(
+        f"  Hub-and-Spoke : {result.hub_spoke.mean_latency_ms:.0f} ms, "
+        f"{result.hub_spoke.routing_llm_calls_per_query:.1f} routing calls, "
+        f"{result.hub_spoke.coupling_score} connections"
+    )
+    print(
+        f"  P2P           : {result.p2p.mean_latency_ms:.0f} ms, "
+        f"{result.p2p.routing_llm_calls_per_query:.1f} routing calls, "
+        f"{result.p2p.coupling_score} connections"
+    )
+    print(
+        f"  Hierarchical  : {result.hierarchical.mean_latency_ms:.0f} ms, "
+        f"{result.hierarchical.routing_llm_calls_per_query:.1f} routing calls, "
+        f"{result.hierarchical.coupling_score} connections"
+    )
 
     output_path = "data/evaluation/results/architecture_comparison.md"
     path = save_architecture_report(result, output_path)

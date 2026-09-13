@@ -39,7 +39,7 @@ def test_settings_ollama_provider() -> None:
 def test_settings_invalid_provider() -> None:
     """Test Settings rejects invalid provider."""
     with pytest.raises(ValidationError):
-        Settings(llm_provider="invalid")  # type: ignore
+        Settings(llm_provider="invalid")  # type: ignore[arg-type]
 
 
 def test_settings_allows_missing_google_key() -> None:

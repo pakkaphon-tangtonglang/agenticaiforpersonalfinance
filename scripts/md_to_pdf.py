@@ -24,25 +24,26 @@ OUTPUT_PDF = "data/evaluation/results/architecture_comparison.pdf"
 THAI_FONT_PATH = "C:/Windows/Fonts/cordia.ttc"
 
 # Colors
-COLOR_HEADER_BG = (41, 128, 185)      # blue
-COLOR_HEADER_TEXT = (255, 255, 255)   # white
-COLOR_ROW_ALT = (236, 240, 241)       # light gray
-COLOR_ROW_NORMAL = (255, 255, 255)    # white
-COLOR_H1 = (44, 62, 80)              # dark navy
-COLOR_H2 = (41, 128, 185)            # blue
-COLOR_GRID = (189, 195, 199)          # light gray border
-COLOR_SUCCESS_BG = (212, 239, 223)    # light green
-COLOR_SUCCESS_TEXT = (30, 100, 60)    # dark green
+COLOR_HEADER_BG = (41, 128, 185)  # blue
+COLOR_HEADER_TEXT = (255, 255, 255)  # white
+COLOR_ROW_ALT = (236, 240, 241)  # light gray
+COLOR_ROW_NORMAL = (255, 255, 255)  # white
+COLOR_H1 = (44, 62, 80)  # dark navy
+COLOR_H2 = (41, 128, 185)  # blue
+COLOR_GRID = (189, 195, 199)  # light gray border
+COLOR_SUCCESS_BG = (212, 239, 223)  # light green
+COLOR_SUCCESS_TEXT = (30, 100, 60)  # dark green
 
 # Sizes
-PAGE_W = 297   # A4 landscape
+PAGE_W = 297  # A4 landscape
 PAGE_H = 210
 MARGIN = 12
 
 
 # ──────────────────────── PDF class ────────────────────────
 
-class ArchitecturePDF(FPDF):
+
+class ArchitecturePDF(FPDF):  # type: ignore[misc]
     """Custom PDF renderer with Thai font and styled components."""
 
     def __init__(self) -> None:
@@ -156,6 +157,7 @@ class ArchitecturePDF(FPDF):
 
 # ──────────────────────── Markdown Parser ────────────────────────
 
+
 def _break_long_words(text: str, max_chars: int = 30) -> str:
     """Insert spaces into unbreakable words longer than max_chars.
 
@@ -170,12 +172,13 @@ def _break_long_words(text: str, max_chars: int = 30) -> str:
         Text with long tokens split.
     """
     import re as _re
+
     tokens = _re.split(r"(\s+)", text)
     result = []
     for token in tokens:
         if len(token) > max_chars and " " not in token:
             # Insert a space every max_chars characters
-            parts = [token[i:i + max_chars] for i in range(0, len(token), max_chars)]
+            parts = [token[i : i + max_chars] for i in range(0, len(token), max_chars)]
             result.append(" ".join(parts))
         else:
             result.append(token)
@@ -269,7 +272,7 @@ def _parse_table(lines: list[str]) -> tuple[list[str], list[list[str]]]:
 
     headers = split_row(lines[0])
     rows = []
-    for line in lines[2:]:   # skip separator
+    for line in lines[2:]:  # skip separator
         if line.strip().startswith("|"):
             rows.append(split_row(line))
 
@@ -277,6 +280,7 @@ def _parse_table(lines: list[str]) -> tuple[list[str], list[list[str]]]:
 
 
 # ──────────────────────── Main Renderer ────────────────────────
+
 
 def render_markdown_to_pdf(md_path: str, pdf_path: str) -> None:
     """Read a markdown file and render it as a styled PDF.
@@ -329,9 +333,7 @@ def render_markdown_to_pdf(md_path: str, pdf_path: str) -> None:
 
         # Numbered/bullet list item (handles optional indentation like "   - ")
         elif re.match(r"^\s*\d+\.", line) or re.match(r"^\s*-\s", line):
-            clean = _strip_markdown_formatting(
-                re.sub(r"^\s*\d+\.\s*|\s*-\s", "", line, count=1)
-            )
+            clean = _strip_markdown_formatting(re.sub(r"^\s*\d+\.\s*|\s*-\s", "", line, count=1))
             if clean.strip():
                 pdf.set_font("Thai", size=10)
                 pdf.set_text_color(50, 50, 50)

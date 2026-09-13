@@ -25,6 +25,7 @@ OUTPUT_PATH = "data/evaluation/results/deepseek_bypass_report.pdf"
 # EvalPDF (same class as generate_eval_pdf.py)
 # ---------------------------------------------------------------------------
 
+
 class EvalPDF(FPDF):
     def __init__(self):
         super().__init__()
@@ -35,9 +36,12 @@ class EvalPDF(FPDF):
     def header(self):
         self.set_font("Cordia", "B", 12)
         self.cell(
-            0, 8,
+            0,
+            8,
             "Personal Finance AI - DeepSeek Bypass Evaluation",
-            align="C", new_x="LMARGIN", new_y="NEXT",
+            align="C",
+            new_x="LMARGIN",
+            new_y="NEXT",
         )
         self.line(10, self.get_y(), 200, self.get_y())
         self.ln(3)
@@ -77,7 +81,11 @@ class EvalPDF(FPDF):
         self.set_text_color(0, 0, 0)
         self.set_font("Cordia", "", 12)
         for ri, row in enumerate(rows):
-            self.set_fill_color(236, 240, 241) if ri % 2 == 0 else self.set_fill_color(255, 255, 255)
+            (
+                self.set_fill_color(236, 240, 241)
+                if ri % 2 == 0
+                else self.set_fill_color(255, 255, 255)
+            )
             for i, val in enumerate(row):
                 align = "L" if i == 0 else "C"
                 self.cell(col_widths[i], 7, str(val), border=1, fill=True, align=align)
@@ -100,6 +108,7 @@ class EvalPDF(FPDF):
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _fmt_pct(value: float) -> str:
     return f"{value:.2f}%"
 
@@ -111,6 +120,7 @@ def _trunc(text: str, n: int = 60) -> str:
 # ---------------------------------------------------------------------------
 # Page builders
 # ---------------------------------------------------------------------------
+
 
 def _build_title_page(pdf: EvalPDF, model_name: str, timestamp: str) -> None:
     pdf.add_page()
@@ -124,9 +134,12 @@ def _build_title_page(pdf: EvalPDF, model_name: str, timestamp: str) -> None:
     pdf.cell(0, 10, f"Model: {model_name}", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(5)
     pdf.cell(
-        0, 10,
+        0,
+        10,
         "2 Tests: Hallucination (No RAG) + Tax Accuracy (No Tool)",
-        align="C", new_x="LMARGIN", new_y="NEXT",
+        align="C",
+        new_x="LMARGIN",
+        new_y="NEXT",
     )
     pdf.ln(20)
     pdf.set_font("Cordia", "", 14)
@@ -165,11 +178,7 @@ def _build_hallucination_page(
         viols_text = ""
         if r.violations_found:
             viols_text = "\nViolations: " + "; ".join(r.violations_found)
-        body = (
-            f"Query: {r.query}\n"
-            f"Full Response:\n{r.agent_response}"
-            f"{viols_text}"
-        )
+        body = f"Query: {r.query}\n" f"Full Response:\n{r.agent_response}" f"{viols_text}"
         if r.is_compliant:
             pdf.sub_title(f"  {r.case_id} [{status}]")
             pdf.body_text(body)
@@ -201,7 +210,9 @@ def _build_tax_bypass_page(
     rows = []
     for c in result.cases:
         expected = f"{int(c.expected_tax):,}"
-        llm_ans = f"{int(c.notool_extracted_tax):,}" if c.notool_extracted_tax is not None else "N/A"
+        llm_ans = (
+            f"{int(c.notool_extracted_tax):,}" if c.notool_extracted_tax is not None else "N/A"
+        )
         if c.notool_extracted_tax is not None:
             err = f"{int(abs(c.notool_extracted_tax - c.expected_tax)):,}"
         else:
@@ -257,13 +268,21 @@ def _build_summary_page(
     headers = ["Dimension", "DeepSeek (No RAG/Tool)", "Python Tool"]
     col_w = [70, 65, 50]
     rows = [
-        ["Hallucination Compliance",
-         f"{_fmt_pct(float(hal.compliance_rate) * 100)} ({hal_ok}/{hal.total_cases})", "N/A"],
-        ["Tax Accuracy",
-         f"{_fmt_pct(tax.notool_accuracy_pct)} ({tax_ok}/{len(tax.cases)})",
-         f"{_fmt_pct(tax.tool_accuracy_pct)} ({tax_tool_ok}/{len(tax.cases)})"],
-        ["Tax Accuracy Gap",
-         f"{tax.tool_accuracy_pct - tax.notool_accuracy_pct:+.1f}% vs tool", "Baseline"],
+        [
+            "Hallucination Compliance",
+            f"{_fmt_pct(float(hal.compliance_rate) * 100)} ({hal_ok}/{hal.total_cases})",
+            "N/A",
+        ],
+        [
+            "Tax Accuracy",
+            f"{_fmt_pct(tax.notool_accuracy_pct)} ({tax_ok}/{len(tax.cases)})",
+            f"{_fmt_pct(tax.tool_accuracy_pct)} ({tax_tool_ok}/{len(tax.cases)})",
+        ],
+        [
+            "Tax Accuracy Gap",
+            f"{tax.tool_accuracy_pct - tax.notool_accuracy_pct:+.1f}% vs tool",
+            "Baseline",
+        ],
     ]
     pdf.add_table(headers, rows, col_w)
 
@@ -289,6 +308,7 @@ def _build_summary_page(
 # ---------------------------------------------------------------------------
 # Main entry point
 # ---------------------------------------------------------------------------
+
 
 def generate_bypass_pdf(
     hal_result: "HallucinationAggregateResult",

@@ -16,10 +16,16 @@ from __future__ import annotations
 import sys
 import os
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from dotenv import load_dotenv
+from langchain_core.language_models import BaseChatModel
+
+if TYPE_CHECKING:
+    from finance_ai.evaluation.models import HallucinationAggregateResult
+    from finance_ai.evaluation.tool_bypass_benchmark import ToolBypassBenchmarkResult
 
 load_dotenv()
 
@@ -27,7 +33,7 @@ MODEL_NAME = "deepseek/deepseek-chat"
 OUTPUT_PDF = "data/evaluation/results/deepseek_bypass_report.pdf"
 
 
-def _create_model():
+def _create_model() -> BaseChatModel:
     from finance_ai.core.config import get_settings
     from finance_ai.agents.llm_factory import create_chat_model
 
@@ -37,7 +43,7 @@ def _create_model():
     return create_chat_model(settings=settings)
 
 
-def _run_hallucination(model) -> object:
+def _run_hallucination(model: BaseChatModel) -> HallucinationAggregateResult:
     """Run hallucination evaluation: DeepSeek answers directly, no RAG."""
     from langchain_core.messages import HumanMessage, SystemMessage
     from finance_ai.evaluation.datasets import load_hallucination_dataset
@@ -46,17 +52,13 @@ def _run_hallucination(model) -> object:
     print("  Loading hallucination dataset...")
     dataset = load_hallucination_dataset("data/evaluation/hallucination_dataset.yaml")
 
-    SYSTEM = (
-        "คุณเป็นผู้เชี่ยวชาญด้านภาษีไทย ตอบคำถามเกี่ยวกับกฎหมายและข้อบังคับภาษีเงินได้บุคคลธรรมดา"
-    )
+    SYSTEM = "คุณเป็นผู้เชี่ยวชาญด้านภาษีไทย ตอบคำถามเกี่ยวกับกฎหมายและข้อบังคับภาษีเงินได้บุคคลธรรมดา"
 
     print(f"  Asking DeepSeek {len(dataset.cases)} questions directly (no RAG)...")
     responses: dict[str, str] = {}
     for case in dataset.cases:
         try:
-            resp = model.invoke(
-                [SystemMessage(content=SYSTEM), HumanMessage(content=case.query)]
-            )
+            resp = model.invoke([SystemMessage(content=SYSTEM), HumanMessage(content=case.query)])
             responses[case.case_id] = str(resp.content)
             print(f"    [{case.case_id}] done")
         except Exception as exc:  # noqa: BLE001
@@ -66,7 +68,7 @@ def _run_hallucination(model) -> object:
     return evaluate_hallucination_dataset(dataset, agent_responses=responses)
 
 
-def _run_tax_bypass(model) -> object:
+def _run_tax_bypass(model: BaseChatModel) -> ToolBypassBenchmarkResult:
     """Run tax self-calculation benchmark (no tools)."""
     from finance_ai.evaluation.tool_bypass_benchmark import run_tool_bypass_benchmark
 
@@ -96,6 +98,7 @@ def main() -> None:
     print("\nGenerating PDF...")
     script_path = os.path.join(os.path.dirname(__file__), "deepseek_bypass_pdf.py")
     spec = importlib.util.spec_from_file_location("deepseek_bypass_pdf", script_path)
+    assert spec is not None and spec.loader is not None, f"Cannot load {script_path}"
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
 

@@ -272,7 +272,7 @@ class ConfirmTransactionRequest(BaseModel):
 # ──────────────────────────── Chat ────────────────────────────────
 
 
-@app.post("/chat", response_model=ChatResponse)  # type: ignore[misc]
+@app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest, session: Session = Depends(get_session)) -> ChatResponse:
     """Process a chat query (non-streaming).
 
@@ -298,7 +298,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_session)) -> ChatRespo
     return ChatResponse(intent=result["intent"], response=result["response"])
 
 
-@app.get("/chat/stream")  # type: ignore[misc]
+@app.get("/chat/stream")
 def chat_stream(
     query: str,
     user_id: str,
@@ -405,7 +405,7 @@ def _load_history(
 # ──────────────────────── Conversations ──────────────────────────
 
 
-@app.get("/conversations", response_model=list[ConversationSummary])  # type: ignore[misc]
+@app.get("/conversations", response_model=list[ConversationSummary])
 def list_conversations(
     user_id: str, session: Session = Depends(get_session)
 ) -> list[ConversationSummary]:
@@ -422,7 +422,7 @@ def list_conversations(
     return [ConversationSummary(id=str(conv.id), title=conv.title or "แชทใหม่") for conv in convs]
 
 
-@app.post("/conversations", response_model=ConversationSummary)  # type: ignore[misc]
+@app.post("/conversations", response_model=ConversationSummary)
 def create_new_conv(
     req: CreateConversationRequest, session: Session = Depends(get_session)
 ) -> ConversationSummary:
@@ -439,7 +439,7 @@ def create_new_conv(
     return ConversationSummary(id=str(conv.id), title=conv.title or "แชทใหม่")
 
 
-@app.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])  # type: ignore[misc]
+@app.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])
 def get_messages(conversation_id: str, session: Session = Depends(get_session)) -> list[MessageOut]:
     """Get all messages in a conversation.
 
@@ -464,7 +464,7 @@ def get_messages(conversation_id: str, session: Session = Depends(get_session)) 
 # ──────────────────────── Upload ─────────────────────────────────
 
 
-@app.post("/upload/bank-statement", response_model=ImportResult)  # type: ignore[misc]
+@app.post("/upload/bank-statement", response_model=ImportResult)
 async def upload_bank_statement(
     user_id: str,
     file: UploadFile = File(...),
@@ -572,7 +572,7 @@ def _draft_to_out(draft: ReceiptOcrResult) -> ReceiptDraftOut:
     )
 
 
-@app.post("/upload/receipt", response_model=ReceiptScanResponse)  # type: ignore[misc]
+@app.post("/upload/receipt", response_model=ReceiptScanResponse)
 async def upload_receipt(
     user_id: str,
     file: UploadFile = File(...),
@@ -692,7 +692,7 @@ def _input_to_draft(
     )
 
 
-@app.post("/transactions/confirm", response_model=ImportResult)  # type: ignore[misc]
+@app.post("/transactions/confirm", response_model=ImportResult)
 def confirm_transactions(req: ConfirmTransactionRequest) -> ImportResult:
     """Persist user-confirmed transaction drafts to the database.
 
@@ -710,7 +710,7 @@ def confirm_transactions(req: ConfirmTransactionRequest) -> ImportResult:
 # ──────────────────────── Dashboard ──────────────────────────────
 
 
-@app.get("/dashboard")  # type: ignore[misc]
+@app.get("/dashboard")
 def get_dashboard(
     user_id: str,
     year: int | None = None,
@@ -776,7 +776,7 @@ def search_assets(query: str) -> dict[str, Any]:
     return {"status": "ok", "results": results}
 
 
-@app.post("/assets/fetch", response_model=AssetFetchResponse)  # type: ignore[misc]
+@app.post("/assets/fetch", response_model=AssetFetchResponse)
 def fetch_asset_data(req: AssetFetchRequest) -> AssetFetchResponse:
     """Fetch immediate asset data (price/news) without creating a notification.
 
@@ -793,7 +793,7 @@ def fetch_asset_data(req: AssetFetchRequest) -> AssetFetchResponse:
     return AssetFetchResponse(status="ok", result=result)
 
 
-@app.get("/assets/notifications")  # type: ignore[misc]
+@app.get("/assets/notifications")
 def get_asset_notifications(
     user_id: str, session: Session = Depends(get_session)
 ) -> list[dict[str, Any]]:
@@ -818,7 +818,7 @@ def get_asset_notifications(
     ]
 
 
-@app.post("/assets/notifications/read")  # type: ignore[misc]
+@app.post("/assets/notifications/read")
 def mark_notifications_read(
     user_id: str, session: Session = Depends(get_session)
 ) -> dict[str, str]:
@@ -872,7 +872,7 @@ def _format_thai_datetime(value: datetime) -> str:
     return f"{value.day} {month} {value.year}, {value.hour:02d}:{value.minute:02d}"
 
 
-@app.get("/assets/watchlist", response_model=list[WatchlistItemOut])  # type: ignore[misc]
+@app.get("/assets/watchlist", response_model=list[WatchlistItemOut])
 def get_watchlist(user_id: str, session: Session = Depends(get_session)) -> list[WatchlistItemOut]:
     """List the user's watched assets (canonical symbol + display name).
 
@@ -889,7 +889,7 @@ def get_watchlist(user_id: str, session: Session = Depends(get_session)) -> list
     ]
 
 
-@app.post("/assets/watchlist")  # type: ignore[misc]
+@app.post("/assets/watchlist")
 def add_watchlist_asset(
     req: WatchlistAddRequest, session: Session = Depends(get_session)
 ) -> dict[str, str]:
@@ -919,7 +919,7 @@ def add_watchlist_asset(
     return {"status": status, "symbol": canonical_symbol, "name": req.name}
 
 
-@app.delete("/assets/watchlist/{asset_id}")  # type: ignore[misc]
+@app.delete("/assets/watchlist/{asset_id}")
 def delete_watchlist_asset(
     asset_id: str, user_id: str, session: Session = Depends(get_session)
 ) -> dict[str, str]:
@@ -1098,7 +1098,7 @@ def _allocation_payload(risk_level: int) -> dict[str, Any]:
 # ──────────────────────── Health ─────────────────────────────────
 
 
-@app.get("/health")  # type: ignore[misc]
+@app.get("/health")
 def health_check() -> dict[str, str]:
     """Health check endpoint.
 

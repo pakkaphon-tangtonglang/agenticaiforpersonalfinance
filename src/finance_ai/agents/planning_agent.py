@@ -76,7 +76,7 @@ def create_llm_node(
 
 def build_planning_agent_graph(
     chat_model: BaseChatModel | None = None,
-) -> CompiledStateGraph[PlanningAgentState, Any]:
+) -> CompiledStateGraph[PlanningAgentState, None, Any, Any]:
     """Build the LangGraph StateGraph for the Planning Agent.
 
     Creates a ReAct-style graph: agent -> (tool_calls?) -> tools -> agent -> END.
