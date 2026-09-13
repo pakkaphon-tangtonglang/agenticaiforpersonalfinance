@@ -4,6 +4,7 @@ These tools require no database access — they fetch external data from
 free public sources (Yahoo Finance search, yfinance, Google News RSS).
 """
 
+from decimal import Decimal
 from typing import Any
 
 from langchain_core.tools import tool
@@ -13,8 +14,9 @@ from langchain_core.tools import tool
 def get_stock_price(symbol: str) -> dict[str, Any]:
     """ดึงข้อมูลราคาและสถิติสินทรัพย์ทางการเงิน.
 
-    ข้อมูลที่ได้: ชื่อ, ราคาปัจจุบัน, P/E, Market Cap, 52-Week Range,
-    Dividend Yield, เป้าหมายนักวิเคราะห์, คำแนะนำ
+    ข้อมูลที่ได้: ชื่อ, ราคาปัจจุบัน (พร้อมหน่วย เช่น บาท/USD), P/E, Market Cap,
+    52-Week Range, Dividend Yield, เป้าหมายนักวิเคราะห์, คำแนะนำ
+    แสดงราคาด้วยช่อง price_display เสมอ (เช่น "35.50 บาท") เพื่อให้เห็นหน่วยชัดเจน
 
     Args:
         symbol: สัญลักษณ์สินทรัพย์ เช่น 'PTT.BK', 'AAPL', 'BTC-USD', 'GC=F'
@@ -27,6 +29,7 @@ def get_stock_price(symbol: str) -> dict[str, Any]:
     """
     from finance_ai.tools.market_data_service import (  # noqa: PLC0415
         fetch_stock_dashboard,
+        format_price_with_unit,
     )
 
     result = fetch_stock_dashboard(symbol)
@@ -34,6 +37,8 @@ def get_stock_price(symbol: str) -> dict[str, Any]:
     output: dict[str, Any] = {"action": "stock_price", "symbol": symbol}
     for key, value in data.items():
         output[key] = str(value) if value is not None else None
+    if isinstance(result.current_price, Decimal):
+        output["price_display"] = format_price_with_unit(result.current_price, symbol)
     return output
 
 

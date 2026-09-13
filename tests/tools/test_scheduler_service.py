@@ -135,17 +135,20 @@ class TestDeactivateSchedule:
 class TestExecuteScheduledFetch:
     """Tests for execute_scheduled_fetch."""
 
+    @patch("finance_ai.tools.market_data_service.fetch_currency")
     @patch("finance_ai.tools.market_data_service.fetch_finance_news")
     @patch("finance_ai.tools.price_client.fetch_current_price")
     def test_fetch_success(
         self,
         mock_price: MagicMock,
         mock_news: MagicMock,
+        mock_currency: MagicMock,
         session: Session,
         user: User,
     ) -> None:
-        """Successful fetch creates notification with price and news."""
+        """Successful fetch creates notification with price (with unit) and news."""
         mock_price.return_value = Decimal("2350.00")
+        mock_currency.return_value = "USD"
         mock_news_result = MagicMock()
         mock_news_result.has_news = True
         mock_news_result.news_content = "Gold prices rise"
@@ -160,7 +163,7 @@ class TestExecuteScheduledFetch:
 
         notification = execute_scheduled_fetch(session, schedule)
         assert notification.symbol == "GC=F"
-        assert "2,350.00" in notification.content
+        assert "2,350.00 USD" in notification.content
         assert "Gold prices rise" in notification.content
         assert notification.schedule_id == schedule.id
         assert notification.is_read is False
