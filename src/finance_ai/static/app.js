@@ -107,6 +107,8 @@
   function openLineModal() {
     $("lineCommandText").textContent = "เชื่อมต่อ " + state.userId;
     $("copyLineCmdBtn").textContent = "คัดลอกคำสั่ง";
+    $("lineModalNote").hidden = true;
+    $("unlinkLineBtn").disabled = false;
     $("lineModal").hidden = false;
   }
 
@@ -122,6 +124,27 @@
     } catch (_err) {
       window.prompt("คัดลอกคำสั่ง:", command);
     }
+  }
+
+  async function unlinkLineFromWeb() {
+    const btn = $("unlinkLineBtn");
+    btn.disabled = true;
+    try {
+      const result = await api("POST", "/line/unlink", { json: { user_id: state.userId } });
+      const count = result.unlinked.length;
+      showLineModalNote(count > 0
+        ? `ยกเลิกการเชื่อมต่อแล้ว (${count} แชท) — แชท LINE จะกลับไปใช้บัญชีเดิมตั้งแต่ข้อความถัดไป`
+        : "ไม่พบแชท LINE ที่เชื่อมต่อกับบัญชีนี้อยู่");
+    } catch (_err) {
+      showLineModalNote("เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง");
+      btn.disabled = false;
+    }
+  }
+
+  function showLineModalNote(text) {
+    const note = $("lineModalNote");
+    note.textContent = text;
+    note.hidden = false;
   }
 
   function resetUser() {
@@ -1403,6 +1426,7 @@
     $("connectLineBtn").addEventListener("click", openLineModal);
     $("closeLineModalBtn").addEventListener("click", closeLineModal);
     $("copyLineCmdBtn").addEventListener("click", copyLineCommand);
+    $("unlinkLineBtn").addEventListener("click", unlinkLineFromWeb);
     $("healthChip").addEventListener("click", () => switchView("dashboard"));
     $("menuToggle").addEventListener("click", () => $("sidebar").classList.toggle("open"));
   }

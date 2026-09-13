@@ -107,6 +107,33 @@ def unlink_line_user(session: Session, line_user_id: str) -> tuple[bool, str]:
     return True, "ยกเลิกการเชื่อมต่อเรียบร้อยครับ กลับไปใช้บัญชีเดิมของแชท LINE นี้แล้ว"
 
 
+def unlink_web_user(session: Session, user_id: str) -> list[str]:
+    """Disconnect every LINE chat linked to a web-app user.
+
+    Args:
+        session: Database session.
+        user_id: Web-app user id whose LINE links should be removed.
+
+    Returns:
+        The line_user_ids that were unlinked (possibly empty).
+
+    Example:
+        >>> unlink_web_user(session, user_id)
+        ['U4af...']
+    """
+    mappings = session.scalars(
+        select(LineUserMapping).where(LineUserMapping.user_id == user_id)
+    ).all()
+    unlinked = []
+    for mapping in mappings:
+        line_only_user = _get_or_create_line_only_user(session, mapping.line_user_id)
+        mapping.user_id = line_only_user.id
+        unlinked.append(mapping.line_user_id)
+    if unlinked:
+        session.commit()
+    return unlinked
+
+
 def _get_or_create_line_only_user(session: Session, line_user_id: str) -> User:
     """Return the auto-created user for a LINE account, recreating if needed."""
     line_email = f"line-{line_user_id}@{LINE_EMAIL_DOMAIN}"
