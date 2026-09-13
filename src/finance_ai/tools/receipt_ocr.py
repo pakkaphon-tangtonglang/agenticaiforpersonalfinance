@@ -176,13 +176,14 @@ def _preprocess_image(
     mime_type: str,
     max_edge: int,
 ) -> tuple[bytes, str]:
-    """Downscale and re-encode an image to speed up the vision model.
+    """Prepare document bytes for the vision model.
 
-    PDFs are returned unchanged. HEIC/HEIF files go through Pillow but
-    fall back to the original bytes when the optional decoder is missing.
-    If Pillow cannot decode the bytes, the original is returned so
-    callers still get *some* input to the model rather than a hard
-    failure.
+    PDFs are rendered to JPEG first: several OCR providers (notably
+    Ollama vision) reject application/pdf inputs outright. HEIC/HEIF
+    files go through Pillow but fall back to the original bytes when
+    the optional decoder is missing. If Pillow cannot decode the
+    bytes, the original is returned so callers still get *some* input
+    to the model rather than a hard failure.
 
     Args:
         image_bytes: Raw uploaded image/PDF bytes.
@@ -192,9 +193,60 @@ def _preprocess_image(
     Returns:
         Tuple of (processed_bytes, processed_mime_type).
     """
+    if mime_type.lower() == "application/pdf":
+        image_bytes, mime_type = _render_pdf_first_page(image_bytes, max_edge)
     if mime_type.lower() not in _IMAGE_MIME_TYPES:
         return image_bytes, mime_type
     return _shrink_image_bytes(image_bytes, mime_type, max_edge)
+
+
+def _render_pdf_first_page(
+    pdf_bytes: bytes,
+    max_edge: int,
+) -> tuple[bytes, str]:
+    """Render the first page of a PDF to a downscaled JPEG.
+
+    Falls back to the original bytes on any failure (pypdfium2 not
+    installed, corrupt PDF, empty document) — providers that accept
+    PDFs natively (e.g. Gemini) still work that way.
+
+    Args:
+        pdf_bytes: Raw PDF bytes.
+        max_edge: Maximum edge length in pixels for the rendered page.
+
+    Returns:
+        Tuple of (jpeg_bytes, "image/jpeg") or the original on failure.
+    """
+    try:
+        import pypdfium2 as pdfium
+    except ImportError:
+        return pdf_bytes, "application/pdf"
+    try:
+        with pdfium.PdfDocument(pdf_bytes) as document:
+            bitmap = document[0].render(scale=2.0)
+            return _pil_image_to_jpeg_bytes(bitmap.to_pil(), max_edge)
+    except (AttributeError, IndexError, OSError, ValueError, pdfium.PdfiumError):
+        return pdf_bytes, "application/pdf"
+
+
+def _pil_image_to_jpeg_bytes(
+    image: Any,
+    max_edge: int,
+) -> tuple[bytes, str]:
+    """Convert a PIL image to downscaled JPEG bytes.
+
+    Args:
+        image: PIL Image (already loaded).
+        max_edge: Maximum edge length in pixels; larger images are shrunk.
+
+    Returns:
+        Tuple of (jpeg_bytes, "image/jpeg").
+    """
+    converted = image.convert("RGB")
+    converted.thumbnail((max_edge, max_edge))
+    out = io.BytesIO()
+    converted.save(out, format="JPEG", quality=85, optimize=True)
+    return out.getvalue(), "image/jpeg"
 
 
 def _shrink_image_bytes(
@@ -218,11 +270,7 @@ def _shrink_image_bytes(
         return image_bytes, mime_type
     try:
         with Image.open(io.BytesIO(image_bytes)) as img:
-            converted = img.convert("RGB")
-            converted.thumbnail((max_edge, max_edge))
-            out = io.BytesIO()
-            converted.save(out, format="JPEG", quality=85, optimize=True)
-            return out.getvalue(), "image/jpeg"
+            return _pil_image_to_jpeg_bytes(img, max_edge)
     except (UnidentifiedImageError, OSError, ValueError):
         return image_bytes, mime_type
 

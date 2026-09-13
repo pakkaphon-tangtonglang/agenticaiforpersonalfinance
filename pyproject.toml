@@ -53,6 +53,7 @@ dependencies = [
     "pyyaml>=6.0.3",
     "line-bot-sdk>=3.25.0",
     "psycopg2-binary>=2.9.13",
+    "pypdfium2>=5.13.0",
 ]
 
 [project.optional-dependencies]
