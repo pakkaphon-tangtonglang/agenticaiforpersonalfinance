@@ -351,6 +351,7 @@
     );
     if (cfg && role === "assistant") {
       msg.append(intentBadge(cfg));
+      if (intent === "recommendation") msg.append(intentDisclaimer());
     }
     thread.append(msg);
     thread.scrollTop = thread.scrollHeight;
@@ -362,6 +363,17 @@
       class: "msg-intent",
       style: `background:${cfg.color}1a;color:${cfg.color};`,
     }, `${cfg.icon} ${cfg.label}`);
+  }
+
+  function intentDisclaimer() {
+    return el("p", { class: "msg-disclaimer" },
+      "AI ให้ข้อมูลเพื่อการศึกษา ไม่ใช่คำแนะนำการลงทุน");
+  }
+
+  function appendIntentExtras(msgEl, intent) {
+    const cfg = INTENT_CONFIG[intent] || INTENT_CONFIG.unknown;
+    msgEl.append(intentBadge(cfg));
+    if (intent === "recommendation") msgEl.append(intentDisclaimer());
   }
 
   async function sendChat(text) {
@@ -395,8 +407,7 @@
       });
 
       assistantBubble.classList.remove("msg-cursor");
-      const cfg = INTENT_CONFIG[intent] || INTENT_CONFIG.unknown;
-      assistantBubble.closest(".msg").append(intentBadge(cfg));
+      appendIntentExtras(assistantBubble.closest(".msg"), intent);
       loadConversations();
     } catch (e) {
       assistantBubble.classList.remove("msg-cursor");
@@ -409,8 +420,7 @@
           },
         });
         assistantBubble.innerHTML = renderMarkdown(res.response);
-        const cfg = INTENT_CONFIG[res.intent] || INTENT_CONFIG.unknown;
-        assistantBubble.closest(".msg").append(intentBadge(cfg));
+        appendIntentExtras(assistantBubble.closest(".msg"), res.intent);
         loadConversations();
       } catch (e2) {
         assistantBubble.textContent = "ส่งข้อความไม่สำเร็จ โปรดลองอีกครั้ง";
