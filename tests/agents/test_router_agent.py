@@ -6,18 +6,23 @@ from unittest.mock import MagicMock, patch
 from langchain_core.messages import AIMessage
 
 from finance_ai.agents.router_agent import (
+    ROUTER_CONFIDENCE_THRESHOLD,
+    _build_clarify_response,
     _build_messages,
+    _resolve_asset_hint,
     build_unsupported_response,
     classify_query,
-    execute_expense_agent,
     execute_asset_monitoring_agent,
+    execute_expense_agent,
+    execute_general_chat,
     execute_planning_agent,
     execute_report_agent,
     execute_tax_agent,
-    parse_orchestrator_response,
     orchestrate_query,
+    parse_orchestrator_response,
 )
 from finance_ai.agents.schemas import OrchestratorDecision
+from finance_ai.tools.market_data_models import AssetSymbolMatch
 
 
 class TestParseRouterResponse:
@@ -168,23 +173,23 @@ class TestRouteQuery:
         assert result["intent"] == "planning"
         mock_execute.assert_called_once()
 
-    @patch("finance_ai.agents.router_agent.execute_planning_agent")
+    @patch("finance_ai.agents.router_agent.execute_general_chat")
     @patch("finance_ai.agents.router_agent.classify_query")
-    def test_general_intent_routes_to_planning(
+    def test_general_intent_routes_to_general_chat(
         self,
         mock_classify: MagicMock,
-        mock_execute: MagicMock,
+        mock_general_chat: MagicMock,
     ) -> None:
-        """Routes general intent to the planning agent."""
+        """Routes general intent to the general chat handler."""
         mock_classify.return_value = OrchestratorDecision(
             intent="general",
             confidence=Decimal("0.7"),
         )
-        mock_execute.return_value = {"intent": "general", "response": "คำแนะนำทั่วไป"}
+        mock_general_chat.return_value = {"intent": "general_chat", "response": "คำตอบทั่วไป"}
 
-        result = orchestrate_query("ออมเงินยังไงดี")
-        assert result["response"] == "คำแนะนำทั่วไป"
-        mock_execute.assert_called_once()
+        result = orchestrate_query("ดอกเบี้ยทบต้นคืออะไร")
+        assert result["intent"] == "general_chat"
+        mock_general_chat.assert_called_once()
 
     @patch("finance_ai.agents.router_agent.execute_general_chat")
     @patch("finance_ai.agents.router_agent.classify_query")
@@ -423,3 +428,151 @@ class TestBuildUnsupportedResponse:
         decision = OrchestratorDecision(intent="unknown", confidence=Decimal("0"))
         result = build_unsupported_response(decision)
         assert result["intent"] == "unknown"
+
+
+class TestClassifyQueryWithHistory:
+    """Tests for context-aware classification (chat history in the router)."""
+
+    def test_classify_passes_history_to_llm(self, mock_chat_model: MagicMock) -> None:
+        """Router LLM receives history messages before the current query."""
+        mock_chat_model.invoke.return_value = AIMessage(
+            content='{"intent": "asset_monitoring", "confidence": 0.9}'
+        )
+        history = [("user", "ดูพอร์ต PTT"), ("assistant", "พอร์ตของคุณมี PTT อยู่")]
+
+        classify_query("อันนั้นล่ะ", chat_model=mock_chat_model, chat_history=history)
+
+        call_args = mock_chat_model.invoke.call_args[0][0]
+        assert len(call_args) == 4  # system + 2 history + current query
+        assert call_args[1].content == "ดูพอร์ต PTT"
+        assert isinstance(call_args[2], AIMessage)
+        assert call_args[3].content == "อันนั้นล่ะ"
+
+    def test_classify_without_history_has_two_messages(self, mock_chat_model: MagicMock) -> None:
+        """No history keeps messages minimal (system + query)."""
+        mock_chat_model.invoke.return_value = AIMessage(
+            content='{"intent": "tax", "confidence": 0.9}'
+        )
+
+        classify_query("คำนวณภาษี", chat_model=mock_chat_model)
+
+        call_args = mock_chat_model.invoke.call_args[0][0]
+        assert len(call_args) == 2
+
+
+class TestOrchestrateForwardsHistoryToClassifier:
+    """Tests that orchestrate_query gives chat history to classify_query."""
+
+    @patch("finance_ai.agents.router_agent.execute_tax_agent")
+    @patch("finance_ai.agents.router_agent.classify_query")
+    def test_classifier_receives_history(
+        self, mock_classify: MagicMock, mock_execute: MagicMock
+    ) -> None:
+        """chat_history is forwarded to the classifier, not just the agent."""
+        mock_classify.return_value = OrchestratorDecision(intent="tax", confidence=Decimal("0.9"))
+        mock_execute.return_value = {"intent": "tax", "response": "ok"}
+        history = [("user", "ก่อนหน้า")]
+
+        orchestrate_query("ภาษี", chat_history=history)
+        assert mock_classify.call_args[0][2] == history
+
+
+class TestConfidenceThreshold:
+    """Tests for low-confidence clarify-back behavior."""
+
+    @patch("finance_ai.agents.router_agent.execute_expense_agent")
+    @patch("finance_ai.agents.router_agent.classify_query")
+    def test_low_confidence_returns_clarify(
+        self, mock_classify: MagicMock, mock_execute: MagicMock
+    ) -> None:
+        """Low-confidence classification asks the user instead of guessing."""
+        mock_classify.return_value = OrchestratorDecision(
+            intent="expense", confidence=Decimal("0.5")
+        )
+
+        result = orchestrate_query("เงิน")
+        assert result["intent"] == "clarify"
+        mock_execute.assert_not_called()
+
+    def test_clarify_mentions_categories(self) -> None:
+        """Clarify response lists example categories in Thai."""
+        result = _build_clarify_response()
+        assert "รายจ่าย" in result["response"]
+        assert "ภาษี" in result["response"]
+        assert "หุ้น" in result["response"] or "กองทุน" in result["response"]
+
+    @patch("finance_ai.agents.router_agent.execute_tax_agent")
+    @patch("finance_ai.agents.router_agent.classify_query")
+    def test_confidence_at_threshold_dispatches(
+        self, mock_classify: MagicMock, mock_execute: MagicMock
+    ) -> None:
+        """Confidence exactly at the threshold dispatches normally."""
+        mock_classify.return_value = OrchestratorDecision(
+            intent="tax", confidence=ROUTER_CONFIDENCE_THRESHOLD
+        )
+        mock_execute.return_value = {"intent": "tax", "response": "ok"}
+
+        result = orchestrate_query("คำนวณภาษี")
+        assert result["intent"] == "tax"
+        mock_execute.assert_called_once()
+
+    @patch("finance_ai.agents.router_agent.execute_general_chat")
+    @patch("finance_ai.agents.router_agent.classify_query")
+    def test_unknown_intent_skips_clarify(
+        self, mock_classify: MagicMock, mock_general_chat: MagicMock
+    ) -> None:
+        """Unknown intent goes to general chat regardless of confidence."""
+        mock_classify.return_value = OrchestratorDecision(
+            intent="unknown", confidence=Decimal("0.3")
+        )
+        mock_general_chat.return_value = {"intent": "general_chat", "response": "สวัสดีค่ะ"}
+
+        result = orchestrate_query("สูตรผัดไทย")
+        assert result["intent"] == "general_chat"
+        mock_general_chat.assert_called_once()
+
+
+class TestAssetHintResolution:
+    """Tests for pre-route asset symbol search."""
+
+    @patch("finance_ai.agents.router_agent.search_asset_symbols")
+    def test_hint_included_when_symbol_found(
+        self, mock_search: MagicMock, mock_chat_model: MagicMock
+    ) -> None:
+        """Router messages include the resolved symbol hint before the query."""
+        mock_search.return_value = [
+            AssetSymbolMatch(
+                symbol="PTT.BK",
+                name="PTT Public Company Limited",
+                exchange="SET",
+                quote_type="EQUITY",
+            )
+        ]
+        mock_chat_model.invoke.return_value = AIMessage(
+            content='{"intent": "asset_monitoring", "confidence": 0.9}'
+        )
+
+        classify_query("ราคา PTT เท่าไหร่", chat_model=mock_chat_model)
+
+        mock_search.assert_called_once_with("PTT")
+        call_args = mock_chat_model.invoke.call_args[0][0]
+        hint_messages = [m for m in call_args if "PTT.BK" in str(m.content)]
+        assert len(hint_messages) == 1
+
+    @patch("finance_ai.agents.router_agent.search_asset_symbols")
+    def test_no_search_for_thai_only_query(self, mock_search: MagicMock) -> None:
+        """Thai-only queries skip the symbol search entirely."""
+        assert _resolve_asset_hint("จ่ายค่ากาแฟแปดสิบบาท") is None
+        mock_search.assert_not_called()
+
+    @patch("finance_ai.agents.router_agent.search_asset_symbols")
+    def test_no_hint_when_search_finds_nothing(self, mock_search: MagicMock) -> None:
+        """Empty search results produce no hint."""
+        mock_search.return_value = []
+        assert _resolve_asset_hint("ราคา ABC เท่าไหร่") is None
+
+    @patch("finance_ai.agents.router_agent.search_asset_symbols")
+    def test_lowercase_tokens_are_not_searched(self, mock_search: MagicMock) -> None:
+        """Lowercase English words (e.g. 'test') do not trigger a search."""
+        assert _resolve_asset_hint("test the query") is None
+        mock_search.assert_not_called()

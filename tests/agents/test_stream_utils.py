@@ -257,14 +257,16 @@ class TestRouteQueryStream:
         assert events[-1].event_type == "complete"
         assert events[-1].intent == "tax"
 
+    @patch("finance_ai.agents.stream_utils.execute_general_chat")
     @patch("finance_ai.agents.stream_utils.classify_query")
     @patch("finance_ai.agents.stream_utils._get_agent_graph")
-    def test_general_intent_streams_via_planning(
+    def test_general_intent_streams_via_general_chat(
         self,
         mock_get_graph: MagicMock,
         mock_classify: MagicMock,
+        mock_general_chat: MagicMock,
     ) -> None:
-        """General intent streams through planning agent graph."""
+        """General intent streams through general chat (no graph registered)."""
         from decimal import Decimal
 
         from finance_ai.agents.schemas import OrchestratorDecision
@@ -273,15 +275,56 @@ class TestRouteQueryStream:
             intent="general",
             confidence=Decimal("0.8"),
         )
-        mock_graph = MagicMock()
-        mock_graph.stream.return_value = iter([])
-        mock_get_graph.return_value = mock_graph
+        mock_get_graph.return_value = None
+        mock_general_chat.return_value = {"intent": "general_chat", "response": "คำตอบทั่วไป"}
 
-        events = list(orchestrate_query_stream("ออมเงินยังไงดี"))
-        assert events[0].event_type == "status"
+        events = list(orchestrate_query_stream("ดอกเบี้ยทบต้นคืออะไร"))
+        assert any(e.event_type == "token" for e in events)
         assert events[-1].event_type == "complete"
-        assert events[-1].intent == "general"
+        assert events[-1].intent == "general_chat"
         mock_get_graph.assert_called_once_with("general", None)
+
+    @patch("finance_ai.agents.stream_utils.classify_query")
+    def test_low_confidence_yields_clarify(self, mock_classify: MagicMock) -> None:
+        """Low-confidence stream yields a clarify completion instead of an agent."""
+        from decimal import Decimal
+
+        from finance_ai.agents.schemas import OrchestratorDecision
+
+        mock_classify.return_value = OrchestratorDecision(
+            intent="expense", confidence=Decimal("0.4")
+        )
+
+        events = list(orchestrate_query_stream(query="เงิน", chat_model=MagicMock()))
+
+        assert events[-1].event_type == "complete"
+        assert events[-1].intent == "clarify"
+        assert "รายจ่าย" in events[-1].content
+
+    @patch("finance_ai.agents.stream_utils.execute_general_chat")
+    @patch("finance_ai.agents.stream_utils.classify_query")
+    @patch("finance_ai.agents.stream_utils._get_agent_graph")
+    def test_classifier_receives_history(
+        self,
+        mock_get_graph: MagicMock,
+        mock_classify: MagicMock,
+        mock_general_chat: MagicMock,
+    ) -> None:
+        """Streaming classifier receives chat history."""
+        from decimal import Decimal
+
+        from finance_ai.agents.schemas import OrchestratorDecision
+
+        mock_classify.return_value = OrchestratorDecision(
+            intent="unknown", confidence=Decimal("0.1")
+        )
+        mock_get_graph.return_value = None
+        mock_general_chat.return_value = {"intent": "general_chat", "response": "สวัสดีค่ะ"}
+        history = [("user", "ก่อนหน้า")]
+
+        list(orchestrate_query_stream("สวัสดี", chat_history=history))
+
+        assert mock_classify.call_args[0][2] == history
 
 
 class TestExtractLastAiFromMessages:

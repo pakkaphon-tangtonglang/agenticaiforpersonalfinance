@@ -5,12 +5,13 @@ and Report agents. General/unknown intents are handled by general chat.
 """
 
 import json
+import re
 from collections.abc import Callable
 from decimal import Decimal
 from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from sqlalchemy.orm import Session
 
 from finance_ai.agents.prompts import (
@@ -20,10 +21,23 @@ from finance_ai.agents.prompts import (
 )
 from finance_ai.agents.schemas import OrchestratorDecision
 from finance_ai.core.logging import get_logger
+from finance_ai.tools.symbol_search_service import search_asset_symbols
 
 logger = get_logger(__name__)
 
 DEFAULT_DECISION = OrchestratorDecision(intent="unknown", confidence=Decimal("0"))
+
+# Minimum confidence required to route without asking the user back
+ROUTER_CONFIDENCE_THRESHOLD = Decimal("0.7")
+
+# Maximum number of recent history messages shown to the router LLM
+_ROUTER_HISTORY_LIMIT = 6
+
+# Uppercase ticker-like tokens (PTT, AAPL, KBANK.BK); lowercase words ignored
+_ASSET_TOKEN_PATTERN = re.compile(r"^[A-Z][A-Z0-9.\-]{1,9}$")
+
+# Common uppercase words that are not asset tickers
+_NON_ASSET_TOKENS = {"USD", "THB", "OK", "ATM", "SMS", "HTTP", "WWW"}
 
 
 def parse_orchestrator_response(content: Any) -> OrchestratorDecision:
@@ -94,12 +108,17 @@ def _build_messages(
 def classify_query(
     query: str,
     chat_model: BaseChatModel | None = None,
+    chat_history: list[tuple[str, str]] | None = None,
 ) -> OrchestratorDecision:
     """Classify a user query into an intent category.
+
+    Uses recent chat history for context and resolves possible asset
+    mentions (ticker-like tokens) before classification.
 
     Args:
         query: The user's natural language query.
         chat_model: Optional ChatModel override for testing.
+        chat_history: Optional recent (role, content) messages for context.
 
     Returns:
         OrchestratorDecision with intent and confidence.
@@ -111,12 +130,119 @@ def classify_query(
         from finance_ai.agents.llm_factory import create_chat_model
 
         chat_model = create_chat_model()
-    messages = [
-        SystemMessage(content=get_date_context() + ORCHESTRATOR_SYSTEM_PROMPT),
-        HumanMessage(content=query),
-    ]
+    asset_hint = _resolve_asset_hint(query)
+    messages = _build_router_messages(query, chat_history, asset_hint)
     response = chat_model.invoke(messages)
     return parse_orchestrator_response(response.content)
+
+
+def _extract_asset_candidate_tokens(query: str) -> list[str]:
+    """Extract uppercase ticker-like tokens from a query.
+
+    Args:
+        query: The user's query text.
+
+    Returns:
+        Up to 2 unique candidate tokens (e.g. "PTT", "AAPL").
+    """
+    tokens = re.findall(r"[A-Za-z0-9.\-]+", query)
+    candidates: list[str] = []
+    for token in tokens:
+        if not _ASSET_TOKEN_PATTERN.match(token):
+            continue
+        if token in _NON_ASSET_TOKENS or token in candidates:
+            continue
+        candidates.append(token)
+    return candidates[:2]
+
+
+def _resolve_asset_hint(query: str) -> str | None:
+    """Resolve a possible asset mention into a routing hint.
+
+    Searches Yahoo Finance for uppercase ticker-like tokens in the query.
+    Thai-only or lowercase-only queries skip the search entirely.
+
+    Args:
+        query: The user's query text.
+
+    Returns:
+        Thai hint string naming the resolved asset, or None.
+
+    Example:
+        >>> _resolve_asset_hint("จ่ายค่ากาแฟ 80 บาท") is None
+        True
+    """
+    for token in _extract_asset_candidate_tokens(query):
+        matches = search_asset_symbols(token)
+        if matches:
+            best = matches[0]
+            return f"ผู้ใช้อาจกล่าวถึงหลักทรัพย์: {best.symbol} ({best.name})"
+    return None
+
+
+def _build_router_messages(
+    query: str,
+    chat_history: list[tuple[str, str]] | None = None,
+    asset_hint: str | None = None,
+) -> list[BaseMessage]:
+    """Build the router LLM message list.
+
+    Args:
+        query: The user's current query.
+        chat_history: Optional recent messages for context.
+        asset_hint: Optional resolved asset symbol hint.
+
+    Returns:
+        System prompt, trimmed history, optional hint, current query.
+    """
+    messages: list[BaseMessage] = [
+        SystemMessage(content=get_date_context() + ORCHESTRATOR_SYSTEM_PROMPT)
+    ]
+    for role, content in (chat_history or [])[-_ROUTER_HISTORY_LIMIT:]:
+        if role == "user":
+            messages.append(HumanMessage(content=content))
+        else:
+            messages.append(AIMessage(content=content))
+    if asset_hint:
+        messages.append(SystemMessage(content=asset_hint))
+    messages.append(HumanMessage(content=query))
+    return messages
+
+
+def _build_clarify_response() -> dict[str, Any]:
+    """Build the Thai clarify-back response for low-confidence routing.
+
+    Returns:
+        Dict with intent='clarify' and a Thai question listing options.
+    """
+    return {
+        "intent": "clarify",
+        "response": (
+            "ไม่แน่ใจว่าเข้าใจถูกไหมคะ ช่วยเลือกหัวข้อให้ชัดขึ้นได้ไหมคะ\n"
+            "• บันทึกรายรับ–รายจ่าย เช่น จ่ายค่ากาแฟ 80 บาท\n"
+            "• วางแผนเป้าหมาย เช่น อยากออมเงิน 100,000 บาท\n"
+            "• หุ้น/กองทุน เช่น ดูราคา PTT\n"
+            "• ภาษี เช่น คำนวณภาษีปี 2024\n"
+            "หรือพิมพ์รายละเอียดเพิ่มอีกนิดก็ได้คะ"
+        ),
+    }
+
+
+def _should_clarify(decision: OrchestratorDecision) -> bool:
+    """Check whether a routing decision is too unsure to act on.
+
+    Unknown intent (non-finance chatter) never asks back — it goes to
+    general chat, which can answer anything.
+
+    Args:
+        decision: The router's classification decision.
+
+    Returns:
+        True when confidence is below the routing threshold.
+    """
+    if decision.intent == "unknown":
+        return False
+    return decision.confidence < ROUTER_CONFIDENCE_THRESHOLD
 
 
 def _invoke_intent(
@@ -374,6 +500,24 @@ def build_unsupported_response(decision: OrchestratorDecision) -> dict[str, Any]
     }
 
 
+def _build_agent_map() -> dict[str, Callable[..., dict[str, Any]]]:
+    """Map intent keys to their executor functions.
+
+    Returns:
+        Dict from intent string to executor callable.
+    """
+    return {
+        "tax": execute_tax_agent,
+        "expense": execute_expense_agent,
+        "asset_monitoring": execute_asset_monitoring_agent,
+        "planning": execute_planning_agent,
+        "general": execute_general_chat,
+        "recommendation": execute_recommendation_agent,
+        "report": execute_report_agent,
+        "unknown": execute_general_chat,
+    }
+
+
 def orchestrate_query(
     query: str,
     chat_model: BaseChatModel | None = None,
@@ -383,8 +527,10 @@ def orchestrate_query(
 ) -> dict[str, Any]:
     """Route a user query to the appropriate agent.
 
-    Classifies the query intent and dispatches to the matching agent.
-    Passes chat_history for conversation context.
+    Classifies the query intent (with chat history and asset-hint context)
+    and dispatches to the matching agent. Low-confidence classifications
+    ask the user for clarification instead of guessing. Passes
+    chat_history for conversation context.
 
     Args:
         query: The user's natural language query.
@@ -399,20 +545,12 @@ def orchestrate_query(
     Example:
         >>> result = orchestrate_query("คำนวณภาษี เงินเดือน 1 ล้าน")
     """
-    decision = classify_query(query, chat_model)
+    decision = classify_query(query, chat_model, chat_history)
     logger.info("Routed query to: %s (confidence: %s)", decision.intent, decision.confidence)
-    args = (query, chat_model, user_id, db_session_factory, chat_history)
-    agent_map: dict[str, Callable[..., dict[str, Any]]] = {
-        "tax": execute_tax_agent,
-        "expense": execute_expense_agent,
-        "asset_monitoring": execute_asset_monitoring_agent,
-        "planning": execute_planning_agent,
-        "general": execute_planning_agent,
-        "recommendation": execute_recommendation_agent,
-        "report": execute_report_agent,
-        "unknown": execute_general_chat,
-    }
-    agent_fn = agent_map.get(decision.intent)
-    if agent_fn is not None:
-        return agent_fn(*args)
-    return execute_general_chat(*args)
+    if _should_clarify(decision):
+        logger.info("Low confidence - asking user for clarification")
+        return _build_clarify_response()
+    agent_map = _build_agent_map()
+    default_fn: Callable[..., dict[str, Any]] = execute_general_chat
+    agent_fn = agent_map.get(decision.intent, default_fn)
+    return agent_fn(query, chat_model, user_id, db_session_factory, chat_history)

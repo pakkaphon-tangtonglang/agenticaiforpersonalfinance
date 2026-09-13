@@ -16,7 +16,9 @@ from sqlalchemy.orm import Session
 
 from finance_ai.agents.graph_cache import get_compiled_graph
 from finance_ai.agents.router_agent import (
+    _build_clarify_response,
     _build_messages,
+    _should_clarify,
     classify_query,
     execute_general_chat,
 )
@@ -280,34 +282,52 @@ def orchestrate_query_stream(
     Yields:
         StreamEvent objects.
     """
-    decision = classify_query(query, chat_model)
-    intent = decision.intent
-    logger.info("Stream routing to: %s", intent)
-
-    graph = _get_agent_graph(intent, chat_model)
+    decision = classify_query(query, chat_model, chat_history)
+    logger.info("Stream routing to: %s", decision.intent)
+    if _should_clarify(decision):
+        yield from _stream_clarify_response()
+        return
+    graph = _get_agent_graph(decision.intent, chat_model)
     if graph is None:
-        result = execute_general_chat(
-            query,
-            chat_model,
-            user_id,
-            db_session_factory,
-            chat_history,
-        )
-        response_text = str(result["response"])
-        yield StreamEvent(event_type="token", content=response_text)
-        yield StreamEvent(
-            event_type="complete",
-            content=response_text,
-            intent="general_chat",
+        yield from _stream_general_chat(
+            query, chat_model, user_id, db_session_factory, chat_history
         )
         return
-
     input_state = {
         "messages": _build_messages(query, chat_history),
         "user_id": user_id,
         "db_session_factory": db_session_factory,
     }
-    yield from stream_agent_response(graph, input_state, intent)
+    yield from stream_agent_response(graph, input_state, decision.intent)
+
+
+def _stream_clarify_response() -> Generator[StreamEvent, None, None]:
+    """Yield a clarify-back exchange for low-confidence routing.
+
+    Yields:
+        Token + complete events with intent='clarify'.
+    """
+    clarify = _build_clarify_response()
+    yield StreamEvent(event_type="token", content=clarify["response"])
+    yield StreamEvent(event_type="complete", content=clarify["response"], intent="clarify")
+
+
+def _stream_general_chat(
+    query: str,
+    chat_model: BaseChatModel | None,
+    user_id: str,
+    db_session_factory: Callable[[], Session] | None,
+    chat_history: list[tuple[str, str]] | None,
+) -> Generator[StreamEvent, None, None]:
+    """Execute general chat and emit it as non-streamed events.
+
+    Yields:
+        Token + complete events with intent='general_chat'.
+    """
+    result = execute_general_chat(query, chat_model, user_id, db_session_factory, chat_history)
+    response_text = str(result["response"])
+    yield StreamEvent(event_type="token", content=response_text)
+    yield StreamEvent(event_type="complete", content=response_text, intent="general_chat")
 
 
 def _get_agent_graph(
