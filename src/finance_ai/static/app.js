@@ -146,6 +146,29 @@
     return d.innerHTML;
   }
 
+  // Thai-readable timestamp, e.g. "13 ก.ย. 2026, 17:45".
+  // Non-date strings pass through unchanged (backend may pre-format them).
+  function formatThaiDateTime(value) {
+    if (value === null || value === undefined || value === "") return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString("th-TH", {
+      day: "numeric", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit",
+    });
+  }
+
+  // Remove markdown bold markers so titles never show raw asterisks.
+  function stripMarkdownEmphasis(text) {
+    return String(text == null ? "" : text).replace(/\*\*/g, "");
+  }
+
+  // Hostname of a news link (Google News redirect URLs are long — show just the host).
+  function linkHostname(link) {
+    try { return new URL(String(link)).hostname; }
+    catch (_) { return String(link).slice(0, 60); }
+  }
+
   // Render model output as markdown → Excel-style HTML tables, sanitized.
   // Falls back to escaped text + <br> if the libs are not yet loaded.
   function renderMarkdown(text) {
@@ -191,7 +214,7 @@
     document.querySelectorAll(".nav-item").forEach((n) =>
       n.classList.toggle("is-active", n.dataset.view === name));
     $("minibarTitle").textContent = VIEW_TITLES[name] || name;
-    if (name === "assets") loadNotifications();
+    if (name === "assets") { loadNotifications(); loadWatchlist(); }
     if (name === "dashboard") loadDashboard();
     if (window.innerWidth <= 760) $("sidebar").classList.remove("open");
   }
@@ -854,6 +877,12 @@
       searchAssets();
     });
     $("markNotifBtn").addEventListener("click", markNotificationsRead);
+    $("assetSymbol").addEventListener("input", clearSelectedAssetDisplay);
+  }
+
+  // Hide the stale selected-asset chip once the symbol is edited by hand.
+  function clearSelectedAssetDisplay() {
+    $("selectedAsset").hidden = true;
   }
 
   async function fetchAsset() {
@@ -865,17 +894,62 @@
     btn.textContent = "กำลังดึง…";
     try {
       const res = await api("POST", "/assets/fetch", {
-        json: { user_id: state.userId, symbol, fetch_type: type },
+        json: { user_id: state.userId, symbol, fetch_type: type || "all" },
       });
-      const box = $("assetResult");
-      box.hidden = false;
-      box.textContent = JSON.stringify(res.result, null, 2);
+      renderAssetFetchResult(res.result || {});
     } catch (e) {
       toast("ดึงข้อมูลไม่สำเร็จ: " + e.message, true);
     } finally {
       btn.classList.remove("is-loading");
       btn.textContent = "ดึงข้อมูล";
     }
+  }
+
+  // Render POST /assets/fetch result as readable cards — never raw JSON.
+  function renderAssetFetchResult(result) {
+    const box = $("assetResult");
+    box.innerHTML = "";
+    box.append(el("span", { class: "asset-result-symbol" }, result.symbol || ""));
+    const price = result.price == null ? "" : String(result.price);
+    if (price) box.append(el("p", { class: "asset-price-line" }, `ราคาล่าสุด: ${price}`));
+    if (result.error) box.append(el("p", { class: "asset-result-error" }, result.error));
+    const news = Array.isArray(result.news) ? result.news : [];
+    if (news.length) box.append(buildNewsSection(news));
+    if (!price && !result.error && !news.length) {
+      box.append(el("p", { class: "notif-empty" }, "ไม่พบข้อมูลสำหรับสินทรัพย์นี้"));
+    }
+    box.hidden = false;
+  }
+
+  function buildNewsSection(news) {
+    const list = el("ul", { class: "asset-news-list" });
+    for (const item of news) list.append(buildNewsItem(item));
+    return el("div", { class: "asset-news-section" },
+      el("p", { class: "asset-news-heading" }, "ข่าวล่าสุด"),
+      list,
+    );
+  }
+
+  function buildNewsItem(item) {
+    const card = el("li", { class: "asset-news-card" },
+      el("span", { class: "asset-news-title" },
+        stripMarkdownEmphasis(item.title) || "ไม่มีหัวข้อ"),
+      el("span", { class: "asset-news-meta" }, newsMetaLine(item)),
+    );
+    if (item.link) card.append(buildNewsLink(item.link));
+    return card;
+  }
+
+  function newsMetaLine(item) {
+    return [stripMarkdownEmphasis(item.source), formatThaiDateTime(item.published_at)]
+      .filter(Boolean).join(" · ");
+  }
+
+  function buildNewsLink(link) {
+    return el("a", {
+      class: "asset-news-link", href: link,
+      target: "_blank", rel: "noopener",
+    }, linkHostname(link));
   }
 
   async function loadNotifications() {
@@ -891,7 +965,7 @@
         list.append(el("li", { class: "notif-item" },
           el("span", { class: "notif-symbol" }, n.symbol || "—"),
           el("span", { class: "notif-text" }, n.message || ""),
-          el("span", { class: "notif-time" }, n.created_at || ""),
+          el("span", { class: "notif-time" }, formatThaiDateTime(n.created_at)),
         ));
       }
     } catch (e) { /* silent */ }
@@ -903,6 +977,62 @@
       loadNotifications();
       toast("ทำเครื่องหมายอ่านแล้ว");
     } catch (e) { toast("ไม่สำเร็จ", true); }
+  }
+
+  // ─── Watchlist (tracked assets) ───
+  async function loadWatchlist() {
+    try {
+      const rows = await api("GET", "/assets/watchlist", { params: { user_id: state.userId } });
+      renderWatchlist(Array.isArray(rows) ? rows : []);
+    } catch (e) { /* silent — same as notifications */ }
+  }
+
+  function renderWatchlist(rows) {
+    const list = $("watchlistList");
+    list.innerHTML = "";
+    if (!rows.length) {
+      list.append(el("li", { class: "notif-empty" }, "ยังไม่มีสินทรัพย์ที่ติดตาม"));
+      return;
+    }
+    for (const row of rows) list.append(buildWatchlistRow(row));
+  }
+
+  function buildWatchlistRow(row) {
+    return el("li", { class: "watchlist-item" },
+      el("span", { class: "watchlist-symbol" }, row.symbol || "—"),
+      el("span", { class: "watchlist-name" }, row.name || ""),
+      el("button", {
+        type: "button", class: "watchlist-remove",
+        "aria-label": `ตัด ${row.name || row.symbol} ออกจากรายการ`,
+        onclick: () => removeWatchlistAsset(row),
+      }, "ตัดออก"),
+    );
+  }
+
+  async function removeWatchlistAsset(row) {
+    if (!row.id) {
+      toast("ไม่พบรหัสสินทรัพย์ในรายการ โปรดโหลดหน้าใหม่อีกครั้ง", true);
+      return;
+    }
+    try {
+      await api("DELETE", `/assets/watchlist/${row.id}`, { params: { user_id: state.userId } });
+      toast(`ตัด ${row.name || row.symbol} ออกจากรายการแล้ว`);
+      loadWatchlist();
+    } catch (e) { toast("ตัดออกไม่สำเร็จ: " + e.message, true); }
+  }
+
+  async function addToWatchlist(symbol, name) {
+    try {
+      const res = await api("POST", "/assets/watchlist",
+        { json: { user_id: state.userId, symbol, name } });
+      toast(res && res.status === "already_exists"
+        ? `${name || symbol} อยู่ในรายการติดตามอยู่แล้ว`
+        : `ติดตาม ${name} (${symbol}) แล้ว`);
+      loadWatchlist();
+    } catch (e) {
+      // 422 bodies carry an actionable Thai message — strip the status prefix.
+      toast(e.message.replace(/^\d+:\s*/, ""), true);
+    }
   }
 
   // ─── Asset search (free text) ───
@@ -931,22 +1061,33 @@
       box.hidden = false;
       return;
     }
-    for (const r of results) {
-      box.append(el("button", {
-        type: "button",
-        class: "asset-result-card",
-        dataset: { symbol: r.symbol },
-        onclick: () => selectAsset(r.symbol, r.name),
-      },
-        el("span", { class: "asset-result-name" }, r.name),
-        el("span", { class: "asset-result-meta" }, `${r.symbol} · ${r.exchange} · ${r.type}`),
-      ));
-    }
+    for (const r of results) box.append(buildAssetSearchCard(r));
     box.hidden = false;
   }
 
-  function selectAsset(symbol, name) {
+  // One card = select area (fills the form) + ติดตาม (adds to the watchlist).
+  function buildAssetSearchCard(result) {
+    return el("div", { class: "asset-result-card", dataset: { symbol: result.symbol } },
+      el("button", {
+        type: "button", class: "asset-result-main",
+        onclick: () => selectAsset(result.symbol, result.name, result.exchange, result.type),
+      },
+        el("span", { class: "asset-result-name" }, result.name),
+        el("span", { class: "asset-result-meta" },
+          `${result.symbol} · ${result.exchange} · ${result.type}`),
+      ),
+      el("button", {
+        type: "button", class: "asset-track-btn",
+        onclick: () => addToWatchlist(result.symbol, result.name),
+      }, "ติดตาม"),
+    );
+  }
+
+  function selectAsset(symbol, name, exchange, assetType) {
     $("assetSymbol").value = symbol;
+    const display = $("selectedAsset");
+    display.textContent = [name, exchange, assetType].filter(Boolean).join(" · ");
+    display.hidden = false;
     document.querySelectorAll(".asset-result-card").forEach((c) =>
       c.classList.toggle("is-selected", c.dataset.symbol === symbol));
     toast(`เลือก ${name} (${symbol})`);
