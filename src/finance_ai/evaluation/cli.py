@@ -2,6 +2,7 @@
 
 Usage:
     python -m finance_ai.evaluation.cli --eval all --provider google --model gemini-2.0-flash
+    python -m finance_ai.evaluation.cli --compare  # multi-model routing comparison
 """
 
 from __future__ import annotations
@@ -101,6 +102,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Dimensions to skip (e.g., --skip rag quality).",
     )
     parser.add_argument(
+        "--models",
+        nargs="+",
+        default=[],
+        help=(
+            "With --compare: candidate models as provider:model strings "
+            "(e.g. ollama:minimax-m3 google:gemini-3.5). Defaults to the "
+            "built-in comparison shortlist."
+        ),
+    )
+    parser.add_argument(
         "--reuse-index",
         action="store_true",
         help="Reuse existing ChromaDB index instead of re-indexing.",
@@ -119,6 +130,10 @@ def main(argv: list[str] | None = None) -> None:
     """
     args = parse_args(argv)
     print(f"[Eval] provider={args.provider} model={args.model} eval={args.eval}")
+
+    if args.compare:
+        _run_model_comparison(args)
+        return
 
     from finance_ai.evaluation.reporter import (  # noqa: PLC0415
         save_json_report,
@@ -152,6 +167,42 @@ def main(argv: list[str] | None = None) -> None:
     json_path = save_json_report(report, args.output_dir)
     md_path = save_markdown_report(report, args.output_dir)
     print(f"[Eval] Done! Results saved:")
+    print(f"  JSON: {json_path}")
+    print(f"  Markdown: {md_path}")
+
+
+def _run_model_comparison(args: argparse.Namespace) -> None:
+    """Run the routing comparison across candidate models and save reports.
+
+    Args:
+        args: Parsed CLI arguments (uses .models, .data_dir, .output_dir).
+
+    Example:
+        >>> _run_model_comparison(parse_args(["--compare"]))  # doctest: +SKIP
+    """
+    from datetime import datetime
+    from pathlib import Path
+
+    from finance_ai.evaluation.model_comparison import (  # noqa: PLC0415
+        DEFAULT_COMPARISON_MODELS,
+        format_comparison_markdown,
+        parse_model_spec,
+        run_model_comparison,
+    )
+
+    specs = [parse_model_spec(text) for text in args.models] or DEFAULT_COMPARISON_MODELS
+    print(f"[Eval] Comparing {len(specs)} models on the routing dimension...")
+    result = run_model_comparison(specs, data_dir=args.data_dir)
+
+    output_dir = Path(args.output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    json_path = output_dir / f"model_comparison_{stamp}.json"
+    md_path = output_dir / f"model_comparison_{stamp}.md"
+    json_path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
+    md_path.write_text(format_comparison_markdown(result), encoding="utf-8")
+    print(format_comparison_markdown(result))
+    print("[Eval] Comparison saved:")
     print(f"  JSON: {json_path}")
     print(f"  Markdown: {md_path}")
 
