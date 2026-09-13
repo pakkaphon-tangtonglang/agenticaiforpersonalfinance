@@ -55,7 +55,7 @@ repos:
           - httpx
           - pytest
           - google-genai
-          - sqlalchemy
+          - sqlalchemy==2.0.51
           - langchain
           - langchain-core
           - langgraph

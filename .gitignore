@@ -229,3 +229,4 @@ diagramforslide/
 .worktrees/
 .neon
 node_modules/
+tmp-upload/
