@@ -868,40 +868,39 @@
 
   // ─── Assets ───
   function setupAssets() {
-    $("assetForm").addEventListener("submit", (e) => {
-      e.preventDefault();
-      fetchAsset();
-    });
     $("assetSearchForm").addEventListener("submit", (e) => {
       e.preventDefault();
       searchAssets();
     });
     $("markNotifBtn").addEventListener("click", markNotificationsRead);
-    $("assetSymbol").addEventListener("input", clearSelectedAssetDisplay);
   }
 
-  // Hide the stale selected-asset chip once the symbol is edited by hand.
-  function clearSelectedAssetDisplay() {
-    $("selectedAsset").hidden = true;
+  // Show which asset the upcoming result belongs to.
+  function showSelectedAsset(symbol, name) {
+    const display = $("selectedAsset");
+    display.textContent = [name, symbol].filter(Boolean).join(" · ");
+    display.hidden = false;
   }
 
-  async function fetchAsset() {
-    const symbol = $("assetSymbol").value.trim();
-    const type = $("assetType").value;
+  async function fetchAssetData(symbol, name, btn) {
     if (!symbol) return;
-    const btn = $("assetForm").querySelector(".btn");
-    btn.classList.add("is-loading");
-    btn.textContent = "กำลังดึง…";
+    showSelectedAsset(symbol, name);
+    if (btn) {
+      btn.classList.add("is-loading");
+      btn.textContent = "กำลังดึง…";
+    }
     try {
       const res = await api("POST", "/assets/fetch", {
-        json: { user_id: state.userId, symbol, fetch_type: type || "all" },
+        json: { user_id: state.userId, symbol, fetch_type: "all" },
       });
       renderAssetFetchResult(res.result || {});
     } catch (e) {
       toast("ดึงข้อมูลไม่สำเร็จ: " + e.message, true);
     } finally {
-      btn.classList.remove("is-loading");
-      btn.textContent = "ดึงข้อมูล";
+      if (btn) {
+        btn.classList.remove("is-loading");
+        btn.textContent = "ดึงข้อมูล";
+      }
     }
   }
 
@@ -998,13 +997,17 @@
   }
 
   function buildWatchlistRow(row) {
-    return el("li", { class: "watchlist-item" },
+    return el("li", {
+      class: "watchlist-item watchlist-item-clickable",
+      title: "คลิกเพื่อดึงราคาและข่าวล่าสุด",
+      onclick: () => fetchAssetData(row.symbol, row.name),
+    },
       el("span", { class: "watchlist-symbol" }, row.symbol || "—"),
       el("span", { class: "watchlist-name" }, row.name || ""),
       el("button", {
         type: "button", class: "watchlist-remove",
         "aria-label": `ตัด ${row.name || row.symbol} ออกจากรายการ`,
-        onclick: () => removeWatchlistAsset(row),
+        onclick: (e) => { e.stopPropagation(); removeWatchlistAsset(row); },
       }, "ตัดออก"),
     );
   }
@@ -1065,32 +1068,25 @@
     box.hidden = false;
   }
 
-  // One card = select area (fills the form) + ติดตาม (adds to the watchlist).
+  // One card = info area + ดึงข้อมูล (fetch) + ติดตาม (add to the watchlist).
   function buildAssetSearchCard(result) {
     return el("div", { class: "asset-result-card", dataset: { symbol: result.symbol } },
-      el("button", {
-        type: "button", class: "asset-result-main",
-        onclick: () => selectAsset(result.symbol, result.name, result.exchange, result.type),
-      },
+      el("span", { class: "asset-result-main" },
         el("span", { class: "asset-result-name" }, result.name),
         el("span", { class: "asset-result-meta" },
           `${result.symbol} · ${result.exchange} · ${result.type}`),
       ),
-      el("button", {
-        type: "button", class: "asset-track-btn",
-        onclick: () => addToWatchlist(result.symbol, result.name),
-      }, "ติดตาม"),
+      el("div", { class: "asset-card-actions" },
+        el("button", {
+          type: "button", class: "asset-fetch-btn",
+          onclick: (e) => fetchAssetData(result.symbol, result.name, e.currentTarget),
+        }, "ดึงข้อมูล"),
+        el("button", {
+          type: "button", class: "asset-track-btn",
+          onclick: () => addToWatchlist(result.symbol, result.name),
+        }, "ติดตาม"),
+      ),
     );
-  }
-
-  function selectAsset(symbol, name, exchange, assetType) {
-    $("assetSymbol").value = symbol;
-    const display = $("selectedAsset");
-    display.textContent = [name, exchange, assetType].filter(Boolean).join(" · ");
-    display.hidden = false;
-    document.querySelectorAll(".asset-result-card").forEach((c) =>
-      c.classList.toggle("is-selected", c.dataset.symbol === symbol));
-    toast(`เลือก ${name} (${symbol})`);
   }
 
   // ─── Risk assessment (SEC suitability onboarding) ───

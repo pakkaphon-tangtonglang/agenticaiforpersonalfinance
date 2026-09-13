@@ -86,12 +86,12 @@ class TestAssetSearchAndRiskOnboarding:
         assert "พิมพ์ชื่อสินทรัพย์" in response.text
 
     def test_app_js_wires_asset_search(self) -> None:
-        """app.js calls /assets/search and renders/selects candidates."""
+        """app.js calls /assets/search and renders candidates with actions."""
         response = self.client.get("/static/app.js")
         assert '"/assets/search"' in response.text
         assert "function searchAssets" in response.text
         assert "function renderAssetSearchResults" in response.text
-        assert "function selectAsset" in response.text
+        assert "function fetchAssetData" in response.text
 
     def test_styles_define_asset_search(self) -> None:
         """styles.css defines the asset search card styles."""
@@ -146,21 +146,21 @@ class TestAssetFetchCardsAndWatchlist:
 
     client: TestClient = TestClient(app)
 
-    def test_index_bumps_static_versions_to_v4(self) -> None:
-        """Every static reference in index.html is cache-busted to v=4."""
+    def test_index_bumps_static_versions_to_v5(self) -> None:
+        """Every static reference in index.html is cache-busted to v=5."""
         response = self.client.get("/")
-        assert 'href="styles.css?v=4"' in response.text
-        assert 'src="config.js?v=4"' in response.text
-        assert 'src="app.js?v=4"' in response.text
-        assert "?v=3" not in response.text
+        assert 'href="styles.css?v=5"' in response.text
+        assert 'src="config.js?v=5"' in response.text
+        assert 'src="app.js?v=5"' in response.text
+        assert "?v=4" not in response.text
 
-    def test_asset_form_asks_for_desired_data_with_all_option(self) -> None:
-        """The fetch form relabels ประเภท to ข้อมูลที่ต้องการ and offers ทั้งหมด."""
+    def test_manual_symbol_form_removed(self) -> None:
+        """The raw-symbol form is gone — symbols come only from search."""
         response = self.client.get("/")
-        assert "ข้อมูลที่ต้องการ" in response.text
-        assert '<option value="all">ทั้งหมด</option>' in response.text
-        assert '<option value="price">ราคา</option>' in response.text
-        assert '<option value="news">ข่าว</option>' in response.text
+        assert 'id="assetForm"' not in response.text
+        assert 'id="assetSymbol"' not in response.text
+        assert 'id="assetType"' not in response.text
+        assert 'id="assetSearchForm"' in response.text
 
     def test_selected_asset_display_exists(self) -> None:
         """A selected-asset display sits next to the fetch form."""
@@ -186,11 +186,25 @@ class TestAssetFetchCardsAndWatchlist:
         assert "function removeWatchlistAsset" in response.text
 
     def test_app_js_renders_fetch_results_as_cards(self) -> None:
-        """app.js renders fetch results as cards and sends fetch_type fallback."""
+        """app.js renders fetch results as cards and always fetches all data."""
         response = self.client.get("/static/app.js")
         assert "function renderAssetFetchResult" in response.text
-        assert 'fetch_type: type || "all"' in response.text
+        assert 'fetch_type: "all"' in response.text
         assert "JSON.stringify(res.result" not in response.text
+
+    def test_app_js_search_cards_have_fetch_and_track_buttons(self) -> None:
+        """Search cards offer ดึงข้อมูล and ติดตาม without a manual symbol form."""
+        response = self.client.get("/static/app.js")
+        assert '"ดึงข้อมูล"' in response.text
+        assert '"ติดตาม"' in response.text
+        assert "function buildAssetSearchCard" in response.text
+        assert "fetchAssetData(result.symbol" in response.text
+
+    def test_app_js_watchlist_rows_are_clickable_to_fetch(self) -> None:
+        """Watchlist rows fetch data on click; ตัดออก does not trigger it."""
+        response = self.client.get("/static/app.js")
+        assert "fetchAssetData(row.symbol" in response.text
+        assert "e.stopPropagation()" in response.text
 
     def test_app_js_formats_thai_dates_and_strips_markdown(self) -> None:
         """app.js formats timestamps with th-TH locale and strips markdown bold."""
