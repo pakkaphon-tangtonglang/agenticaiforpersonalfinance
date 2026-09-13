@@ -462,3 +462,63 @@ class TestPreprocessImage:
         big = _make_png_bytes(3000)
         processed, _ = _preprocess_image(big, "image/png", max_edge=1568)
         assert len(processed) < len(big)
+
+
+def _build_test_pdf() -> bytes:
+    """Build a small one-line ASCII PDF for render tests.
+
+    fpdf2 is already a project dependency (evaluation PDF scripts).
+    """
+    from fpdf import FPDF  # noqa: PLC0415
+
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Helvetica", size=14)
+    pdf.cell(text="RECEIPT TOTAL 100.00")
+    return bytes(pdf.output())
+
+
+class TestPdfPreprocessing:
+    """Tests for PDF -> JPEG rendering before the vision model call.
+
+    The configured OCR provider (Ollama vision) rejects application/pdf
+    inputs outright (HTTP 400 'expected image mime type'), so PDFs must
+    be rendered to an image first. Providers that accept PDFs natively
+    (e.g. Gemini) are unaffected: they just receive the rendered page.
+    """
+
+    def test_preprocess_pdf_returns_jpeg(self) -> None:
+        """A valid PDF is rendered to JPEG bytes."""
+        processed, mime = _preprocess_image(_build_test_pdf(), "application/pdf", 1568)
+
+        assert mime == "image/jpeg"
+        assert processed[:3] == b"\xff\xd8\xff"  # JPEG magic bytes
+
+    def test_preprocess_corrupt_pdf_falls_back_unchanged(self) -> None:
+        """A non-PDF payload is passed through unchanged instead of raising."""
+        processed, mime = _preprocess_image(b"not-a-pdf", "application/pdf", 1568)
+
+        assert (processed, mime) == (b"not-a-pdf", "application/pdf")
+
+    def test_vision_model_receives_jpeg_for_pdf_upload(self) -> None:
+        """extract_document_fields sends a rendered JPEG, not application/pdf."""
+        model = MagicMock(spec=BaseChatModel)
+        model.invoke.return_value = AIMessage(content="[]")
+
+        drafts = extract_document_fields(_build_test_pdf(), "application/pdf", model)
+
+        assert drafts == []
+        message = model.invoke.call_args[0][0][0]
+        image_url = message.content[0]["image_url"]["url"]
+        assert image_url.startswith("data:image/jpeg;base64,")
+
+    def test_vision_model_receives_original_for_corrupt_pdf(self) -> None:
+        """Corrupt PDF bytes still reach the model unchanged (no hard failure)."""
+        model = MagicMock(spec=BaseChatModel)
+        model.invoke.return_value = AIMessage(content="[]")
+
+        extract_document_fields(b"not-a-pdf", "application/pdf", model)
+
+        message = model.invoke.call_args[0][0][0]
+        image_url = message.content[0]["image_url"]["url"]
+        assert image_url.startswith("data:application/pdf;base64,")
