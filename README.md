@@ -43,6 +43,7 @@ Chat with the same multi-agent system inside the LINE app:
 - `POST /line/webhook` verifies `X-Line-Signature` (HMAC-SHA256) and acknowledges within LINE's ~1 s window
 - The agent runs as a background task; the Thai answer is delivered via the Push Message API (reply tokens expire before slow agents finish)
 - Each LINE account is auto-mapped to an app user + conversation (`line_user_mappings`), so chat history persists
+- Account linking: send `เชื่อมต่อ <userId>` in LINE (command is copyable from the web sidebar card) to bind the chat to a web user; `ยกเลิกเชื่อมต่อ` / `unlink` or the website's "ยกเลิกการเชื่อมต่อ" button unbinds it
 - A tappable Quick Reply menu (บันทึกรายจ่าย / วางแผน / หุ้น / ภาษี) mirrors the web clarify options
 
 Architecture and sequence diagrams (chapter 3): [docs/diagrams.md](./docs/diagrams.md)
@@ -245,6 +246,8 @@ The system supports multiple LLM providers (configured in `.env`):
 - [x] Dependency upgrades (LangGraph 1.x, LangChain 1.x, google-genai 2.x)
 - [x] Demo seed script (`scripts/seed_demo.py`) for a populated defense demo
 - [x] LINE chatbot (`/line/webhook` + Push API replies, Quick Reply menu)
+- [x] LINE account link/unlink lifecycle (chat commands + website connect card/modal with `POST /line/unlink`)
+- [x] Production database migrated from ephemeral SQLite to Neon Postgres (free tier) via `DB_URL`
 
 ### In Progress
 - [ ] Streamlit code cleanup (legacy remnants in `ui/` and CRUD still reference Streamlit)
