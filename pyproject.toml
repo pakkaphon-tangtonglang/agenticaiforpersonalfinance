@@ -115,6 +115,7 @@ fail-under = 9.0
 ignore = ["CVS", ".git", "__pycache__", ".mypy_cache", ".pytest_cache"]
 persistent = true
 suggestion-mode = true
+init-hook = "import os, sys; sys.path.insert(0, os.path.join(os.getcwd(), 'src'))"
 
 [tool.pylint.messages_control]
 max-line-length = 100

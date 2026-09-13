@@ -1,8 +1,6 @@
 """Tests for LangGraph planning tool wrappers."""
 
 from collections.abc import Callable
-from decimal import Decimal
-
 import pytest
 from sqlalchemy.orm import Session
 
@@ -31,12 +29,8 @@ class TestCreateFinancialGoal:
                 "target_amount": "100000",
                 "target_date": "2027-12-31",
                 "priority": "4",
-            },
-            config={
-                "configurable": {
-                    "user_id": sample_user.id,
-                    "db_session_factory": db_session_factory,
-                }
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
             },
         )
         assert result["status"] == "created"
@@ -55,12 +49,8 @@ class TestCreateFinancialGoal:
                 "goal_type": "retirement",
                 "name": "เกษียณ",
                 "target_amount": "5000000",
-            },
-            config={
-                "configurable": {
-                    "user_id": sample_user.id,
-                    "db_session_factory": db_session_factory,
-                }
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
             },
         )
         assert result["priority"] == 3
@@ -77,12 +67,8 @@ class TestCreateFinancialGoal:
                     "goal_type": "crypto",
                     "name": "Test",
                     "target_amount": "100000",
-                },
-                config={
-                    "configurable": {
-                        "user_id": sample_user.id,
-                        "db_session_factory": db_session_factory,
-                    }
+                    "user_id": sample_user.id,
+                    "db_session_factory": db_session_factory,
                 },
             )
 
@@ -102,21 +88,14 @@ class TestViewFinancialGoals:
                 "name": "เงินฉุกเฉิน",
                 "target_amount": "100000",
                 "priority": "4",
-            },
-            config={
-                "configurable": {
-                    "user_id": sample_user.id,
-                    "db_session_factory": db_session_factory,
-                }
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
             },
         )
         result = view_financial_goals.invoke(
-            {},
-            config={
-                "configurable": {
-                    "user_id": sample_user.id,
-                    "db_session_factory": db_session_factory,
-                }
+            {
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
             },
         )
         assert result["total_goals"] >= 1
@@ -138,24 +117,16 @@ class TestUpdateGoalProgress:
                 "goal_type": "savings",
                 "name": "TestUpdate",
                 "target_amount": "100000",
-            },
-            config={
-                "configurable": {
-                    "user_id": sample_user.id,
-                    "db_session_factory": db_session_factory,
-                }
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
             },
         )
         result = update_goal_progress.invoke(
             {
                 "goal_id": created["goal_id"],
                 "current_amount": "50000",
-            },
-            config={
-                "configurable": {
-                    "user_id": sample_user.id,
-                    "db_session_factory": db_session_factory,
-                }
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
             },
         )
         assert result["status"] == "updated"
@@ -172,24 +143,16 @@ class TestUpdateGoalProgress:
                 "goal_type": "savings",
                 "name": "TestComplete",
                 "target_amount": "100000",
-            },
-            config={
-                "configurable": {
-                    "user_id": sample_user.id,
-                    "db_session_factory": db_session_factory,
-                }
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
             },
         )
         result = update_goal_progress.invoke(
             {
                 "goal_id": created["goal_id"],
                 "current_amount": "100000",
-            },
-            config={
-                "configurable": {
-                    "user_id": sample_user.id,
-                    "db_session_factory": db_session_factory,
-                }
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
             },
         )
         assert result["is_completed"] is True
