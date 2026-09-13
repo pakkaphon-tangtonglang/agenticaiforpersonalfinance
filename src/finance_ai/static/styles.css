@@ -219,6 +219,11 @@ a:hover { text-decoration: underline; }
   border-radius: var(--radius-md); background: var(--color-parchment);
   color: var(--color-ink); font-size: var(--text-caption); word-break: break-all;
 }
+.line-modal-note {
+  margin: 0; padding: var(--sp-2) var(--sp-3);
+  border-radius: var(--radius-md); background: var(--color-parchment);
+  font-size: var(--text-caption); color: var(--color-graphite);
+}
 
 /* ─── Main column ─── */
 .main {

@@ -30,6 +30,7 @@ from finance_ai.core.config import get_settings
 from finance_ai.core.logging import get_logger
 from finance_ai.database.crud.watched_asset_crud import WatchedAssetCRUD
 from finance_ai.database.session import create_database_engine, create_session_factory
+from finance_ai.line.link_command import unlink_web_user
 from finance_ai.line.line_bot_service import handle_line_event
 from finance_ai.line.signature import verify_line_signature
 from finance_ai.line.webhook_models import parse_line_webhook_body
@@ -121,6 +122,12 @@ def get_session() -> Generator[Session, None, None]:
 
 
 # ──────────────────── Request / Response Models ────────────────────
+
+
+class LineUnlinkRequest(BaseModel):
+    """LINE unlink request from the web app."""
+
+    user_id: str = Field(..., description="Web-app user id to disconnect")
 
 
 class ChatRequest(BaseModel):
@@ -1142,6 +1149,22 @@ async def line_webhook(request: Request, background_tasks: BackgroundTasks) -> d
             access_token=settings.line_channel_access_token,
         )
     return {"status": "ok"}
+
+
+@app.post("/line/unlink")
+def line_unlink(
+    payload: LineUnlinkRequest, session: Session = Depends(get_session)
+) -> dict[str, list[str]]:
+    """Disconnect every LINE chat linked to the given web-app user.
+
+    Args:
+        payload: Web-app user id to disconnect.
+        session: Database session.
+
+    Returns:
+        The line_user_ids that were unlinked.
+    """
+    return {"unlinked": unlink_web_user(session, payload.user_id)}
 
 
 # ──────────────────────── Health ─────────────────────────────────
