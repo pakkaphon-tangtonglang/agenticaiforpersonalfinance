@@ -322,11 +322,12 @@ class TestRecommendationDisclaimer:
     client: TestClient = TestClient(app)
 
     def test_app_js_renders_disclaimer_for_recommendation_intent(self) -> None:
-        """app.js defines the disclaimer helper and appends it on recommendation."""
+        """app.js defines the disclaimer helper and shows it once per session."""
         response = self.client.get("/static/app.js")
         assert "function intentDisclaimer" in response.text
         assert "ไม่ใช่คำแนะนำการลงทุน" in response.text
-        assert 'intent === "recommendation"' in response.text
+        assert "recommendationDisclaimerShown" in response.text
+        assert "!state.recommendationDisclaimerShown" in response.text
 
     def test_styles_define_msg_disclaimer(self) -> None:
         """styles.css defines the chat disclaimer style."""

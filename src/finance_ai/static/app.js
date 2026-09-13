@@ -70,6 +70,7 @@
     charts: {},
     mode: "hero", // "hero" | "thread"
     riskProfile: null, // latest risk assessment {risk_category, risk_level, total_score}
+    recommendationDisclaimerShown: false, // show the disclaimer once per session
   };
 
   // ─── DOM helpers ───
@@ -350,8 +351,7 @@
       bubble,
     );
     if (cfg && role === "assistant") {
-      msg.append(intentBadge(cfg));
-      if (intent === "recommendation") msg.append(intentDisclaimer());
+      appendIntentExtras(msg, intent);
     }
     thread.append(msg);
     thread.scrollTop = thread.scrollHeight;
@@ -373,7 +373,10 @@
   function appendIntentExtras(msgEl, intent) {
     const cfg = INTENT_CONFIG[intent] || INTENT_CONFIG.unknown;
     msgEl.append(intentBadge(cfg));
-    if (intent === "recommendation") msgEl.append(intentDisclaimer());
+    if (intent === "recommendation" && !state.recommendationDisclaimerShown) {
+      state.recommendationDisclaimerShown = true;
+      msgEl.append(intentDisclaimer());
+    }
   }
 
   async function sendChat(text) {
