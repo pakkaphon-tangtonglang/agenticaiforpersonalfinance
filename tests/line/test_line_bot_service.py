@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 from sqlalchemy.orm import Session, sessionmaker
 
 from finance_ai.database.models.user import User
-from finance_ai.line.line_bot_service import process_line_message
+from finance_ai.line.line_bot_service import handle_line_event, process_line_message
 from finance_ai.line.mapping_service import get_or_create_line_mapping
 
 LINE_USER_ID = "Uline-user-xyz"
@@ -98,13 +98,17 @@ class TestProcessLineMessage:
 
 
 class TestHandleLineEvent:
-    """Tests for the webhook background task (agent reply -> LINE push)."""
+    """Tests for the webhook background task (ack -> agent -> reply)."""
 
-    def test_pushes_markdown_converted_to_plain_text(self) -> None:
-        """Agent markdown is converted before the LINE push."""
-        from finance_ai.line.line_bot_service import handle_line_event  # noqa: PLC0415
+    def test_pushes_ack_then_converted_reply(self) -> None:
+        """A processing ack is pushed first, then the converted reply.
 
-        markdown_reply = "## ราคาหุ้น PTT\n\n" "| **ราคาปัจจุบัน** | 42.00 บาท |\n\n" "- **ชื่อ**: PTT\n"
+        The agent takes 10-30s; without an immediate ack, LINE users
+        stare at silence and resend the message.
+        """
+        markdown_reply = (
+            "## ราคาหุ้น PTT\n\n" + "| **ราคาปัจจุบัน** | 42.00 บาท |\n\n" + "- **ชื่อ**: PTT\n"
+        )
         with (
             patch(
                 "finance_ai.line.line_bot_service.process_line_message",
@@ -120,15 +124,37 @@ class TestHandleLineEvent:
                 access_token="token-123",
             )
 
-        pushed_text = mock_push.call_args[0][2]
+        assert mock_push.call_count == 2
+        ack_text = mock_push.call_args_list[0][0][2]
+        assert "กำลังประมวลผล" in ack_text
+        pushed_text = mock_push.call_args_list[1][0][2]
         assert pushed_text == ("ราคาหุ้น PTT\n\nราคาปัจจุบัน | 42.00 บาท\n\n• ชื่อ: PTT")
         assert "##" not in pushed_text
         assert "**" not in pushed_text
 
-    def test_pushes_error_reply_on_agent_failure(self) -> None:
-        """An agent exception still pushes a friendly Thai error."""
-        from finance_ai.line.line_bot_service import handle_line_event  # noqa: PLC0415
+    def test_skips_ack_for_link_command(self) -> None:
+        """Link commands reply instantly, so no processing ack is sent."""
+        link_reply = "เชื่อมต่อบัญชีเรียบร้อย"
+        with (
+            patch(
+                "finance_ai.line.line_bot_service.process_line_message",
+                return_value=link_reply,
+            ),
+            patch("finance_ai.line.line_bot_service.send_line_push") as mock_push,
+        ):
+            handle_line_event(
+                line_user_id=LINE_USER_ID,
+                text="เชื่อมต่อ 00000000-1111-2222-3333-444444444444",
+                session_factory=MagicMock(),
+                chat_model_provider=None,
+                access_token="token-123",
+            )
 
+        assert mock_push.call_count == 1
+        assert mock_push.call_args[0][2] == link_reply
+
+    def test_pushes_error_reply_on_agent_failure(self) -> None:
+        """An agent exception still pushes the ack, then a Thai error."""
         with (
             patch(
                 "finance_ai.line.line_bot_service.process_line_message",
@@ -144,6 +170,7 @@ class TestHandleLineEvent:
                 access_token="token-123",
             )
 
+        assert mock_push.call_count == 2
         pushed_text = mock_push.call_args[0][2]
         assert "ขออภัย" in pushed_text
         assert "boom" in pushed_text
