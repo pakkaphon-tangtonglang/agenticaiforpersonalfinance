@@ -7,6 +7,8 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, ToolMessage
 
 from finance_ai.agents.graph_utils import should_continue
+from finance_ai.agents.prompts import RECOMMENDATION_AGENT_SYSTEM_PROMPT
+from finance_ai.core.config import Settings
 from finance_ai.agents.recommendation_agent import (
     RECOMMENDATION_AGENT_TOOLS,
     build_recommendation_agent_graph,
@@ -191,6 +193,41 @@ class TestBuildRecommendationAgentGraph:
         assert "agent" in node_names
         assert "tools" in node_names
         assert "guardrail" in node_names
+
+    @patch("finance_ai.agents.recommendation_agent.get_settings")
+    @patch("finance_ai.agents.llm_factory.create_chat_model")
+    def test_default_model_uses_recommendation_temperature(
+        self,
+        mock_create: MagicMock,
+        mock_get_settings: MagicMock,
+    ) -> None:
+        """Without an injected model, the agent uses its low temperature setting."""
+        mock_get_settings.return_value = Settings(_env_file=None, llm_provider="ollama")
+        mock_create.return_value = MagicMock()
+        build_recommendation_agent_graph()
+        mock_create.assert_called_once_with(temperature=0.3)
+
+
+class TestRecommendationPromptRules:
+    """Tests for tool-grounded advice rules in the system prompt."""
+
+    def test_forbids_naming_instruments_without_tool(self) -> None:
+        """Prompt must forbid naming stocks/funds not backed by tool results."""
+        assert "ห้ามระบุชื่อหุ้น" in RECOMMENDATION_AGENT_SYSTEM_PROMPT
+
+    def test_requires_asking_back_when_data_insufficient(self) -> None:
+        """Prompt must require asking back instead of guessing."""
+        assert "ถามกลับ" in RECOMMENDATION_AGENT_SYSTEM_PROMPT
+        assert "ห้ามเดา" in RECOMMENDATION_AGENT_SYSTEM_PROMPT
+
+    def test_requires_rag_for_regulatory_facts(self) -> None:
+        """Regulatory/fund facts must come from search_finance_knowledge."""
+        assert "search_finance_knowledge" in RECOMMENDATION_AGENT_SYSTEM_PROMPT
+        assert "ห้ามใช้ความจำของโมเดล" in RECOMMENDATION_AGENT_SYSTEM_PROMPT
+
+    def test_forbids_percentage_returns_without_tools(self) -> None:
+        """Prompt must forbid unbacked percentage return claims."""
+        assert "เปอร์เซ็นต์ที่ไม่ได้มาจาก tool" in RECOMMENDATION_AGENT_SYSTEM_PROMPT
 
 
 class TestGetUserRiskLevel:

@@ -23,6 +23,7 @@ from finance_ai.agents.recommendation_tools import (
     get_financial_health_score,
 )
 from finance_ai.agents.schemas import RecommendationAgentState
+from finance_ai.core.config import get_settings
 from finance_ai.core.logging import get_logger
 from finance_ai.database.crud.risk_assessment_crud import RiskAssessmentCRUD
 from finance_ai.agents.session_helper import get_tool_session
@@ -201,11 +202,11 @@ def build_recommendation_agent_graph(
         ... })
     """
     if chat_model is None:
-        from finance_ai.agents.llm_factory import (
+        from finance_ai.agents.llm_factory import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
             create_chat_model,
-        )  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        )
 
-        chat_model = create_chat_model()
+        chat_model = create_chat_model(temperature=get_settings().llm_recommendation_temperature)
 
     graph = StateGraph(RecommendationAgentState)
     graph.add_node("agent", create_llm_node(chat_model))
