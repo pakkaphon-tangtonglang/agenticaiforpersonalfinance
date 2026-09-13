@@ -38,6 +38,15 @@ ChromaDB vector store with 23 Thai finance documents covering:
 - Life/health insurance, social security
 - Retirement and financial planning
 
+### LINE Chatbot
+Chat with the same multi-agent system inside the LINE app:
+- `POST /line/webhook` verifies `X-Line-Signature` (HMAC-SHA256) and acknowledges within LINE's ~1 s window
+- The agent runs as a background task; the Thai answer is delivered via the Push Message API (reply tokens expire before slow agents finish)
+- Each LINE account is auto-mapped to an app user + conversation (`line_user_mappings`), so chat history persists
+- A tappable Quick Reply menu (บันทึกรายจ่าย / วางแผน / หุ้น / ภาษี) mirrors the web clarify options
+
+Architecture and sequence diagrams (chapter 3): [docs/diagrams.md](./docs/diagrams.md)
+
 ## Quick Start
 
 ### Prerequisites
@@ -133,6 +142,7 @@ agenticaiforpersonalfinance/
 │   │   ├── llm_factory.py        # LLM provider factory
 │   │   ├── stream_utils.py       # Streaming agent responses
 │   │   └── prompts.py            # System prompts
+│   ├── line/               # LINE chatbot (webhook, mapping, push)
 │   ├── tools/              # Service layer (business logic + tools)
 │   ├── rag/                # ChromaDB vector store + embeddings
 │   ├── database/           # SQLAlchemy models + CRUD + Alembic
@@ -144,6 +154,7 @@ agenticaiforpersonalfinance/
 ├── tests/                  # Test suite (mirrors src/)
 ├── alembic/                # Database migrations
 ├── docs/
+│   ├── diagrams.md         # Architecture + sequence diagrams (Mermaid)
 │   └── knowledge_base/     # RAG source documents (Thai finance)
 ├── scripts/                # Utility scripts (eval, PDF generation)
 ├── .github/workflows/      # CI/CD pipeline
@@ -232,6 +243,8 @@ The system supports multiple LLM providers (configured in `.env`):
 - [x] FastAPI backend (replaced Streamlit; 14 REST endpoints)
 - [x] Static web frontend (HTML/JS/CSS served by FastAPI)
 - [x] Dependency upgrades (LangGraph 1.x, LangChain 1.x, google-genai 2.x)
+- [x] Demo seed script (`scripts/seed_demo.py`) for a populated defense demo
+- [x] LINE chatbot (`/line/webhook` + Push API replies, Quick Reply menu)
 
 ### In Progress
 - [ ] Streamlit code cleanup (legacy remnants in `ui/` and CRUD still reference Streamlit)
