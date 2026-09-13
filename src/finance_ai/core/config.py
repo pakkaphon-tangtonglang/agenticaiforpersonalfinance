@@ -32,6 +32,14 @@ class Settings(BaseSettings):
     # Database
     db_url: str = Field(default="sqlite:///./finance_ai.db", description="Database connection URL")
 
+    # LINE Messaging API (chatbot channel); both stored as Render env vars
+    line_channel_secret: Optional[str] = Field(
+        default=None, description="LINE Messaging API channel secret (X-Line-Signature HMAC)"
+    )
+    line_channel_access_token: Optional[str] = Field(
+        default=None, description="LINE Messaging API channel access token (Push API)"
+    )
+
     # LLM Provider Selection
     llm_provider: Literal["google", "ollama", "openrouter", "opencode"] = Field(
         default="google",

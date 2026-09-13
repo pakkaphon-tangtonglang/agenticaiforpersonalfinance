@@ -16,7 +16,7 @@ import asyncio
 
 from datetime import date, datetime
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -30,6 +30,9 @@ from finance_ai.core.config import get_settings
 from finance_ai.core.logging import get_logger
 from finance_ai.database.crud.watched_asset_crud import WatchedAssetCRUD
 from finance_ai.database.session import create_database_engine, create_session_factory
+from finance_ai.line.line_bot_service import handle_line_event
+from finance_ai.line.signature import verify_line_signature
+from finance_ai.line.webhook_models import parse_line_webhook_body
 from finance_ai.tools.bank_statement_parser import parse_bank_statement
 from finance_ai.tools.bank_statement_service import bulk_insert_transactions
 from finance_ai.tools.receipt_ocr import (
@@ -1093,6 +1096,52 @@ def _allocation_payload(risk_level: int) -> dict[str, Any]:
 
     columns, row = get_allocation(risk_level)
     return {"columns": list(columns), "row": list(row), "footnote": ALLOCATION_FOOTNOTE}
+
+
+# ──────────────────────── LINE Webhook ──────────────────────────
+
+
+@app.post("/line/webhook")
+async def line_webhook(request: Request, background_tasks: BackgroundTasks) -> dict[str, str]:
+    """Receive LINE Messaging API webhook push (signature-verified).
+
+    Verifies X-Line-Signature, acknowledges within LINE's ~1s window, then
+    runs the agent in a background task and delivers the answer via the
+    Push Message API (reply tokens expire before slow agents finish).
+
+    Args:
+        request: Incoming webhook request (raw body + signature header).
+        background_tasks: FastAPI background task queue.
+
+    Returns:
+        Acknowledgement dict for LINE.
+
+    Raises:
+        HTTPException: 503 when credentials are missing; 403 when the
+                       signature is invalid; 400 when the body is not JSON.
+    """
+    settings = get_settings()
+    if not settings.line_channel_secret or not settings.line_channel_access_token:
+        raise HTTPException(status_code=503, detail="LINE integration is not configured")
+    body = (await request.body()).decode("utf-8")
+    if not verify_line_signature(
+        settings.line_channel_secret, body, request.headers.get("x-line-signature", "")
+    ):
+        raise HTTPException(status_code=403, detail="Invalid LINE signature")
+    try:
+        webhook_body = parse_line_webhook_body(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    for event in webhook_body.text_message_events():
+        background_tasks.add_task(
+            handle_line_event,
+            line_user_id=event.source.user_id,
+            text=event.message.text,
+            session_factory=_session_factory,
+            chat_model_provider=get_chat_model,
+            access_token=settings.line_channel_access_token,
+        )
+    return {"status": "ok"}
 
 
 # ──────────────────────── Health ─────────────────────────────────
