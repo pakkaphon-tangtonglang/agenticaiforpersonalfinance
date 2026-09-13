@@ -135,6 +135,7 @@ max-statements = 20
 
 [tool.mypy]
 python_version = "3.12"
+mypy_path = "src"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -173,6 +174,19 @@ module = [
     "apscheduler.*",
 ]
 ignore_missing_imports = true
+
+# fpdf2 ships no py.typed marker; subclassing its (Any-typed) FPDF base is
+# intentional in scripts/md_to_pdf.py.
+[[tool.mypy.overrides]]
+module = "fpdf.*"
+ignore_missing_imports = true
+
+# pydantic mypy plugin (as used by mypy 1.15) synthesizes __init__ from model
+# fields and rejects pydantic-settings' _env_file kwarg. Tests pass
+# _env_file=None to isolate from the developer's .env file.
+[[tool.mypy.overrides]]
+module = ["tests.core.test_config", "tests.agents.test_llm_factory"]
+disable_error_code = ["call-arg"]
 
 [tool.pytest.ini_options]
 minversion = "8.0"

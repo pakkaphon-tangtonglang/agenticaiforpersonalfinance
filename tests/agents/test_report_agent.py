@@ -5,11 +5,11 @@ from unittest.mock import MagicMock
 
 from langchain_core.messages import AIMessage
 
+from finance_ai.agents.graph_utils import should_continue
 from finance_ai.agents.report_agent import (
     REPORT_AGENT_TOOLS,
     build_report_agent_graph,
     create_llm_node,
-    should_continue,
 )
 
 
@@ -33,7 +33,7 @@ class TestShouldContinue:
             "user_id": "",
             "db_session_factory": None,
         }
-        assert should_continue(state) == "tools"  # type: ignore[arg-type]
+        assert should_continue(state) == "tools"
 
     def test_returns_end_when_no_tool_calls(self) -> None:
         """When last message has no tool_calls, should route to 'end'."""
@@ -43,7 +43,7 @@ class TestShouldContinue:
             "user_id": "",
             "db_session_factory": None,
         }
-        assert should_continue(state) == "end"  # type: ignore[arg-type]
+        assert should_continue(state) == "end"
 
     def test_returns_end_when_tool_calls_empty(self) -> None:
         """When tool_calls is empty list, should route to 'end'."""
@@ -53,7 +53,7 @@ class TestShouldContinue:
             "user_id": "",
             "db_session_factory": None,
         }
-        assert should_continue(state) == "end"  # type: ignore[arg-type]
+        assert should_continue(state) == "end"
 
 
 class TestCreateLlmNode:

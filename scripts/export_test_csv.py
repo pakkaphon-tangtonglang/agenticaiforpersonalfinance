@@ -1,8 +1,10 @@
 """Export all evaluation datasets to CSV files."""
 
 import csv
-import yaml
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 DEDUCTION_LABELS = {
     "personal_allowance": "ลดหย่อนส่วนตัว",
@@ -47,7 +49,7 @@ DIFFICULTY_LABELS = {
 OUT_DIR = Path("data/evaluation")
 
 
-def _write_csv(path: Path, rows: list[dict]) -> None:
+def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     with path.open("w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
@@ -56,21 +58,25 @@ def _write_csv(path: Path, rows: list[dict]) -> None:
 
 
 def export_tax() -> None:
-    data = yaml.safe_load(Path("data/evaluation/tax_accuracy_dataset.yaml").read_text(encoding="utf-8"))
+    data = yaml.safe_load(
+        Path("data/evaluation/tax_accuracy_dataset.yaml").read_text(encoding="utf-8")
+    )
     rows = []
     for c in data["cases"]:
         ded = c.get("deductions_by_type", {})
         ded_parts = [f"{DEDUCTION_LABELS.get(k, k)}: {int(v):,} บาท" for k, v in ded.items()]
-        rows.append({
-            "case_id": c["case_id"],
-            "description": c.get("description", ""),
-            "query": c["query"],
-            "gross_income_thb": int(c["gross_income"]),
-            "deductions": " | ".join(ded_parts) if ded_parts else "ไม่มีค่าลดหย่อน",
-            "expected_total_tax_thb": int(c["expected_total_tax"]),
-            "expected_effective_rate_pct": f"{float(c['expected_effective_rate']) * 100:.2f}%",
-            "tolerance_thb": int(c["tolerance_thb"]),
-        })
+        rows.append(
+            {
+                "case_id": c["case_id"],
+                "description": c.get("description", ""),
+                "query": c["query"],
+                "gross_income_thb": int(c["gross_income"]),
+                "deductions": " | ".join(ded_parts) if ded_parts else "ไม่มีค่าลดหย่อน",
+                "expected_total_tax_thb": int(c["expected_total_tax"]),
+                "expected_effective_rate_pct": f"{float(c['expected_effective_rate']) * 100:.2f}%",
+                "tolerance_thb": int(c["tolerance_thb"]),
+            }
+        )
     _write_csv(OUT_DIR / "tax_accuracy_dataset.csv", rows)
 
 
@@ -79,32 +85,38 @@ def export_routing() -> None:
     rows = []
     for c in data["cases"]:
         intent = c.get("expected_intent", "")
-        rows.append({
-            "case_id": c["case_id"],
-            "query": c["query"],
-            "expected_intent": intent,
-            "expected_intent_th": INTENT_LABELS.get(intent, intent),
-            "difficulty": c.get("difficulty", ""),
-            "difficulty_th": DIFFICULTY_LABELS.get(c.get("difficulty", ""), ""),
-        })
+        rows.append(
+            {
+                "case_id": c["case_id"],
+                "query": c["query"],
+                "expected_intent": intent,
+                "expected_intent_th": INTENT_LABELS.get(intent, intent),
+                "difficulty": c.get("difficulty", ""),
+                "difficulty_th": DIFFICULTY_LABELS.get(c.get("difficulty", ""), ""),
+            }
+        )
     _write_csv(OUT_DIR / "routing_dataset.csv", rows)
 
 
 def export_hallucination() -> None:
-    data = yaml.safe_load(Path("data/evaluation/hallucination_dataset.yaml").read_text(encoding="utf-8"))
+    data = yaml.safe_load(
+        Path("data/evaluation/hallucination_dataset.yaml").read_text(encoding="utf-8")
+    )
     rows = []
     for c in data["cases"]:
         category = c.get("category", "")
         facts = c.get("known_facts", [])
         forbidden = c.get("forbidden_patterns", [])
-        rows.append({
-            "case_id": c["case_id"],
-            "category": category,
-            "category_th": CATEGORY_LABELS.get(category, category),
-            "query": c["query"],
-            "known_facts": " | ".join(facts),
-            "forbidden_patterns": " | ".join(forbidden),
-        })
+        rows.append(
+            {
+                "case_id": c["case_id"],
+                "category": category,
+                "category_th": CATEGORY_LABELS.get(category, category),
+                "query": c["query"],
+                "known_facts": " | ".join(facts),
+                "forbidden_patterns": " | ".join(forbidden),
+            }
+        )
     _write_csv(OUT_DIR / "hallucination_dataset.csv", rows)
 
 

@@ -1,6 +1,8 @@
 """Generate test dataset PDF with questions and expected answers."""
 
 from pathlib import Path
+from collections.abc import Callable
+from typing import Any
 
 import json
 
@@ -79,9 +81,25 @@ def _add_cover(pdf: FPDF) -> None:
     pdf.cell(0, 8, "ประกอบด้วยชุดทดสอบ 3 หมวด:", align="C", new_x="LMARGIN", new_y="NEXT")
     pdf.ln(6)
     _f(pdf, 11)
-    pdf.cell(0, 8, "หมวดที่ 1 — การคำนวณภาษี (Tax Accuracy)  20 กรณี", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 8, "หมวดที่ 2 — การจำแนกเจตนา (Intent Routing)  27 กรณี", align="C", new_x="LMARGIN", new_y="NEXT")
-    pdf.cell(0, 8, "หมวดที่ 3 — ป้องกัน Hallucination  10 กรณี", align="C", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(
+        0,
+        8,
+        "หมวดที่ 1 — การคำนวณภาษี (Tax Accuracy)  20 กรณี",
+        align="C",
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
+    pdf.cell(
+        0,
+        8,
+        "หมวดที่ 2 — การจำแนกเจตนา (Intent Routing)  27 กรณี",
+        align="C",
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
+    pdf.cell(
+        0, 8, "หมวดที่ 3 — ป้องกัน Hallucination  10 กรณี", align="C", new_x="LMARGIN", new_y="NEXT"
+    )
     pdf.ln(20)
     _f(pdf, 10)
     pdf.cell(0, 7, "รวมทั้งหมด 57 กรณีทดสอบ", align="C", new_x="LMARGIN", new_y="NEXT")
@@ -112,7 +130,7 @@ def _draw_row(pdf: FPDF, label: str, value: str, fill: bool = False) -> None:
     pdf.multi_cell(0, 7, value, border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
 
 
-def _add_tax_section(pdf: FPDF, cases: list) -> None:
+def _add_tax_section(pdf: FPDF, cases: list[dict[str, Any]]) -> None:
     _section_header(pdf, "หมวดที่ 1: ชุดทดสอบการคำนวณภาษี", f"จำนวน {len(cases)} กรณีทดสอบ")
 
     for case in cases:
@@ -137,8 +155,7 @@ def _add_tax_section(pdf: FPDF, cases: list) -> None:
         deductions = case.get("deductions_by_type", {})
         if deductions:
             ded_parts = [
-                f"{DEDUCTION_LABELS.get(k, k)}: {int(v):,} บาท"
-                for k, v in deductions.items()
+                f"{DEDUCTION_LABELS.get(k, k)}: {int(v):,} บาท" for k, v in deductions.items()
             ]
             ded_text = "  |  ".join(ded_parts)
         else:
@@ -158,7 +175,7 @@ def _add_tax_section(pdf: FPDF, cases: list) -> None:
         pdf.ln(3)
 
 
-def _add_routing_section(pdf: FPDF, cases: list) -> None:
+def _add_routing_section(pdf: FPDF, cases: list[dict[str, Any]]) -> None:
     _section_header(pdf, "หมวดที่ 2: ชุดทดสอบการจำแนกเจตนา", f"จำนวน {len(cases)} กรณีทดสอบ")
     _draw_table_header_routing(pdf)
 
@@ -196,7 +213,7 @@ def _draw_table_header_routing(pdf: FPDF) -> None:
     pdf.set_text_color(0, 0, 0)
 
 
-def _add_hallucination_section(pdf: FPDF, cases: list) -> None:
+def _add_hallucination_section(pdf: FPDF, cases: list[dict[str, Any]]) -> None:
     _section_header(pdf, "หมวดที่ 3: ชุดทดสอบป้องกัน Hallucination", f"จำนวน {len(cases)} กรณีทดสอบ")
 
     for case in cases:
@@ -208,8 +225,14 @@ def _add_hallucination_section(pdf: FPDF, cases: list) -> None:
         _f(pdf, 10, bold=True)
         category = case.get("category", "")
         category_th = CATEGORY_LABELS.get(category, category)
-        pdf.cell(0, 8, f"  {case['case_id']}  |  ประเภท: {category_th}",
-                 fill=True, new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(
+            0,
+            8,
+            f"  {case['case_id']}  |  ประเภท: {category_th}",
+            fill=True,
+            new_x="LMARGIN",
+            new_y="NEXT",
+        )
         pdf.set_text_color(0, 0, 0)
 
         fill = False
@@ -232,10 +255,10 @@ def _add_hallucination_section(pdf: FPDF, cases: list) -> None:
         pdf.ln(3)
 
 
-def _load_eval_results() -> list[dict]:
+def _load_eval_results() -> list[dict[str, Any]]:
     """Load and aggregate evaluation results per model from JSON files."""
     results_dir = Path("data/evaluation/results")
-    aggregated: dict[str, dict] = {}
+    aggregated: dict[str, dict[str, Any]] = {}
 
     for f in sorted(results_dir.glob("*.json")):
         d = json.loads(f.read_text(encoding="utf-8"))
@@ -248,50 +271,85 @@ def _load_eval_results() -> list[dict]:
             aggregated[key] = {"provider": provider, "model": model, "runs": []}
         aggregated[key]["runs"].append(d)
 
-    rows = []
+    rows: list[dict[str, Any]] = []
     for key, entry in aggregated.items():
         runs = entry["runs"]
 
-        def avg(getter):
-            vals = [getter(r) for r in runs if getter(r) is not None]
+        def avg(getter: Callable[[dict[str, Any]], float | None]) -> float | None:
+            vals = [v for r in runs if (v := getter(r)) is not None]
             return sum(vals) / len(vals) if vals else None
 
-        routing_acc = avg(lambda r: float((r.get("routing") or {}).get("accuracy", 0)) if r.get("routing") else None)
-        tax_pass = avg(lambda r: float((r.get("tax_accuracy") or {}).get("accuracy_rate", 0)) if r.get("tax_accuracy") else None)
-        tax_mae = avg(lambda r: float((r.get("tax_accuracy") or {}).get("mean_absolute_error_thb", 0)) if r.get("tax_accuracy") else None)
-        tax_latency = avg(lambda r: float((r.get("tax_accuracy") or {}).get("mean_latency_seconds", 0)) if r.get("tax_accuracy") else None)
-        quality_overall = avg(lambda r: float((r.get("quality") or {}).get("mean_overall", 0)) if r.get("quality") else None)
-        quality_thai = avg(lambda r: float((r.get("quality") or {}).get("mean_thai_language_quality", 0)) if r.get("quality") else None)
+        routing_acc = avg(
+            lambda r: (
+                float((r.get("routing") or {}).get("accuracy", 0)) if r.get("routing") else None
+            )
+        )
+        tax_pass = avg(
+            lambda r: (
+                float((r.get("tax_accuracy") or {}).get("accuracy_rate", 0))
+                if r.get("tax_accuracy")
+                else None
+            )
+        )
+        tax_mae = avg(
+            lambda r: (
+                float((r.get("tax_accuracy") or {}).get("mean_absolute_error_thb", 0))
+                if r.get("tax_accuracy")
+                else None
+            )
+        )
+        tax_latency = avg(
+            lambda r: (
+                float((r.get("tax_accuracy") or {}).get("mean_latency_seconds", 0))
+                if r.get("tax_accuracy")
+                else None
+            )
+        )
+        quality_overall = avg(
+            lambda r: (
+                float((r.get("quality") or {}).get("mean_overall", 0)) if r.get("quality") else None
+            )
+        )
+        quality_thai = avg(
+            lambda r: (
+                float((r.get("quality") or {}).get("mean_thai_language_quality", 0))
+                if r.get("quality")
+                else None
+            )
+        )
 
-        rows.append({
-            "model": entry["model"],
-            "routing_acc": routing_acc,
-            "tax_pass": tax_pass,
-            "tax_mae": tax_mae,
-            "tax_latency": tax_latency,
-            "quality_overall": quality_overall,
-            "quality_thai": quality_thai,
-            "runs": len(runs),
-        })
+        rows.append(
+            {
+                "model": entry["model"],
+                "routing_acc": routing_acc,
+                "tax_pass": tax_pass,
+                "tax_mae": tax_mae,
+                "tax_latency": tax_latency,
+                "quality_overall": quality_overall,
+                "quality_thai": quality_thai,
+                "runs": len(runs),
+            }
+        )
 
     return rows
 
 
-def _best(rows: list[dict], key: str, higher_is_better: bool = True) -> str:
+def _best(rows: list[dict[str, Any]], key: str, higher_is_better: bool = True) -> str:
     """Return the model name with the best value for a metric."""
-    valid = [(r["model"], r[key]) for r in rows if r[key] is not None]
+    valid = [(str(r["model"]), r[key]) for r in rows if r[key] is not None]
     if not valid:
         return ""
-    return max(valid, key=lambda x: x[1] if higher_is_better else -x[1])[0]
+    best_tuple = max(valid, key=lambda x: x[1] if higher_is_better else -x[1])
+    return best_tuple[0]
 
 
-def _fmt(value, fmt: str = ".2f", suffix: str = "") -> str:
+def _fmt(value: float | None, fmt: str = ".2f", suffix: str = "") -> str:
     if value is None:
         return "-"
     return f"{value:{fmt}}{suffix}"
 
 
-def _add_llm_selection_section(pdf: FPDF, rows: list[dict]) -> None:
+def _add_llm_selection_section(pdf: FPDF, rows: list[dict[str, Any]]) -> None:
     _section_header(
         pdf,
         "ภาคที่ 4: ผลการเปรียบเทียบและคัดเลือก LLM",
@@ -301,7 +359,8 @@ def _add_llm_selection_section(pdf: FPDF, rows: list[dict]) -> None:
     # --- intro ---
     _f(pdf, 10)
     pdf.multi_cell(
-        0, 7,
+        0,
+        7,
         "การคัดเลือกโมเดลภาษา (LLM) ดำเนินการโดยรันชุดทดสอบเดียวกันกับทุกโมเดล "
         "แล้วเปรียบเทียบตามเกณฑ์ 5 มิติ ได้แก่ "
         "ความแม่นยำในการจำแนกเจตนา (Routing Accuracy), "
@@ -309,7 +368,8 @@ def _add_llm_selection_section(pdf: FPDF, rows: list[dict]) -> None:
         "ค่าคลาดเคลื่อนภาษีเฉลี่ย (Tax MAE), "
         "เวลาตอบสนองเฉลี่ย (Latency) และ "
         "คะแนนคุณภาพคำตอบโดยรวม (Quality Score 1-5)",
-        new_x="LMARGIN", new_y="NEXT",
+        new_x="LMARGIN",
+        new_y="NEXT",
     )
     pdf.ln(4)
 
@@ -319,7 +379,15 @@ def _add_llm_selection_section(pdf: FPDF, rows: list[dict]) -> None:
     pdf.ln(2)
 
     col_w = [52, 22, 20, 24, 22, 22, 22]
-    headers = ["โมเดล", "Routing\nAcc (%)", "Tax\nPass (%)", "Tax MAE\n(THB)", "Latency\n(s)", "Quality\nOverall", "Thai\nQuality"]
+    headers = [
+        "โมเดล",
+        "Routing\nAcc (%)",
+        "Tax\nPass (%)",
+        "Tax MAE\n(THB)",
+        "Latency\n(s)",
+        "Quality\nOverall",
+        "Thai\nQuality",
+    ]
 
     # Header row
     pdf.set_fill_color(33, 97, 140)
@@ -376,12 +444,18 @@ def _add_llm_selection_section(pdf: FPDF, rows: list[dict]) -> None:
 
     # --- per-intent routing breakdown ---
     _f(pdf, 10, bold=True)
-    pdf.cell(0, 8, "ความแม่นยำการจำแนกเจตนา แยกตาม Agent (Routing per Intent)", new_x="LMARGIN", new_y="NEXT")
+    pdf.cell(
+        0,
+        8,
+        "ความแม่นยำการจำแนกเจตนา แยกตาม Agent (Routing per Intent)",
+        new_x="LMARGIN",
+        new_y="NEXT",
+    )
     pdf.ln(2)
 
     intents = list(INTENT_LABELS.keys())
     result_files = sorted(Path("data/evaluation/results").glob("*.json"))
-    model_routing: dict[str, dict] = {}
+    model_routing: dict[str, dict[str, Any]] = {}
     for f in result_files:
         d = json.loads(f.read_text(encoding="utf-8"))
         model = d.get("llm_model", "") or ""
@@ -409,7 +483,16 @@ def _add_llm_selection_section(pdf: FPDF, rows: list[dict]) -> None:
     pdf.ln(8)
     pdf.set_text_color(0, 0, 0)
 
-    intent_order = ["tax", "expense", "investment", "planning", "recommendation", "report", "general", "unknown"]
+    intent_order = [
+        "tax",
+        "expense",
+        "investment",
+        "planning",
+        "recommendation",
+        "report",
+        "general",
+        "unknown",
+    ]
     for idx, intent in enumerate(intent_order):
         intent_th = INTENT_LABELS.get(intent, intent)
         fill = idx % 2 == 0
@@ -442,15 +525,20 @@ def _add_llm_selection_section(pdf: FPDF, rows: list[dict]) -> None:
     pdf.set_draw_color(0, 0, 0)
 
     conclusions = [
-        ("Gemini 2.5 Flash",
-         "ค่า Tax MAE ต่ำที่สุด (53 THB) และคะแนนคุณภาพภาษาไทยสูงสุด (4.93/5.00) "
-         "เหมาะกับงานที่ต้องการความแม่นยำของตัวเลขสูงและการสื่อสารเป็นภาษาไทย เช่น Tax Agent และ Planning Agent"),
-        ("GPT-4o-mini",
-         "Routing Accuracy สูงสุด (97.14%) และ Tax Pass Rate สูงสุด (95%) "
-         "พร้อม Latency เฉลี่ยต่ำที่สุด (8.3s) เหมาะกับ Router Agent ที่ต้องการความเร็วและความถูกต้องในการจำแนกคำถาม"),
-        ("DeepSeek v3",
-         "Tax Pass Rate ไม่เสถียร (45-55%) ซึ่งต่ำกว่าเกณฑ์ที่ยอมรับได้ "
-         "ไม่แนะนำสำหรับงานคำนวณภาษีในระบบนี้"),
+        (
+            "Gemini 2.5 Flash",
+            "ค่า Tax MAE ต่ำที่สุด (53 THB) และคะแนนคุณภาพภาษาไทยสูงสุด (4.93/5.00) "
+            "เหมาะกับงานที่ต้องการความแม่นยำของตัวเลขสูงและการสื่อสารเป็นภาษาไทย เช่น Tax Agent และ Planning Agent",
+        ),
+        (
+            "GPT-4o-mini",
+            "Routing Accuracy สูงสุด (97.14%) และ Tax Pass Rate สูงสุด (95%) "
+            "พร้อม Latency เฉลี่ยต่ำที่สุด (8.3s) เหมาะกับ Router Agent ที่ต้องการความเร็วและความถูกต้องในการจำแนกคำถาม",
+        ),
+        (
+            "DeepSeek v3",
+            "Tax Pass Rate ไม่เสถียร (45-55%) ซึ่งต่ำกว่าเกณฑ์ที่ยอมรับได้ " "ไม่แนะนำสำหรับงานคำนวณภาษีในระบบนี้",
+        ),
     ]
 
     for model_name, reason in conclusions:
@@ -463,9 +551,15 @@ def _add_llm_selection_section(pdf: FPDF, rows: list[dict]) -> None:
 
 
 def main() -> None:
-    tax_data = yaml.safe_load(Path("data/evaluation/tax_accuracy_dataset.yaml").read_text(encoding="utf-8"))
-    routing_data = yaml.safe_load(Path("data/evaluation/routing_dataset.yaml").read_text(encoding="utf-8"))
-    hal_data = yaml.safe_load(Path("data/evaluation/hallucination_dataset.yaml").read_text(encoding="utf-8"))
+    tax_data = yaml.safe_load(
+        Path("data/evaluation/tax_accuracy_dataset.yaml").read_text(encoding="utf-8")
+    )
+    routing_data = yaml.safe_load(
+        Path("data/evaluation/routing_dataset.yaml").read_text(encoding="utf-8")
+    )
+    hal_data = yaml.safe_load(
+        Path("data/evaluation/hallucination_dataset.yaml").read_text(encoding="utf-8")
+    )
     eval_rows = _load_eval_results()
 
     pdf = _make_pdf()

@@ -6,11 +6,11 @@ from unittest.mock import MagicMock
 from langchain_core.messages import AIMessage, HumanMessage
 from sqlalchemy.orm import Session
 
+from finance_ai.agents.graph_utils import should_continue
 from finance_ai.agents.expense_agent import (
     EXPENSE_TOOLS,
     build_expense_agent_graph,
     create_llm_node,
-    should_continue,
 )
 from finance_ai.agents.prompts import EXPENSE_AGENT_SYSTEM_PROMPT
 from finance_ai.database.models.user import User
@@ -29,7 +29,7 @@ class TestShouldContinue:
             "user_id": "test-user",
             "db_session_factory": None,
         }
-        assert should_continue(state) == "tools"  # type: ignore[arg-type]
+        assert should_continue(state) == "tools"
 
     def test_returns_end_when_no_tool_calls(
         self,
@@ -41,7 +41,7 @@ class TestShouldContinue:
             "user_id": "test-user",
             "db_session_factory": None,
         }
-        assert should_continue(state) == "end"  # type: ignore[arg-type]
+        assert should_continue(state) == "end"
 
     def test_returns_end_for_empty_tool_calls(self) -> None:
         """Routes to 'end' when tool_calls is an empty list."""
@@ -51,7 +51,7 @@ class TestShouldContinue:
             "user_id": "test-user",
             "db_session_factory": None,
         }
-        assert should_continue(state) == "end"  # type: ignore[arg-type]
+        assert should_continue(state) == "end"
 
 
 class TestCreateLlmNode:

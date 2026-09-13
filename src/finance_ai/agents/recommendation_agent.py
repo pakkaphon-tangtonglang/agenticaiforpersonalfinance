@@ -120,7 +120,7 @@ def create_llm_node(
 
 def build_recommendation_agent_graph(
     chat_model: BaseChatModel | None = None,
-) -> CompiledStateGraph[RecommendationAgentState, Any]:
+) -> CompiledStateGraph[RecommendationAgentState, None, Any, Any]:
     """Build the LangGraph StateGraph for the Recommendation Agent.
 
     Creates a ReAct-style graph: agent -> (tool_calls?) -> tools -> agent -> END.

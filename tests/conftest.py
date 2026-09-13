@@ -11,6 +11,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from finance_ai.core.config import Settings
 from finance_ai.core.llm.base import LLMResponse
@@ -87,10 +88,20 @@ def test_engine() -> Engine:
     """
     Create an in-memory SQLite engine for testing.
 
+    Uses StaticPool so every session (including those created by agent
+    tools via db_session_factory) shares the same in-memory database.
+    Without it, each new connection gets its own empty database and
+    table creation is invisible to tool sessions.
+
     Returns:
         Engine: SQLAlchemy engine using in-memory SQLite.
     """
-    engine = create_engine("sqlite:///:memory:", echo=False)
+    engine = create_engine(
+        "sqlite://",
+        echo=False,
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
     Base.metadata.create_all(bind=engine)
     return engine
 

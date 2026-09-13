@@ -69,7 +69,7 @@ def create_llm_node(
 
 def build_report_agent_graph(
     chat_model: BaseChatModel | None = None,
-) -> CompiledStateGraph[ReportAgentState, Any]:
+) -> CompiledStateGraph[ReportAgentState, None, Any, Any]:
     """Build the LangGraph StateGraph for the Report Agent.
 
     Creates a ReAct-style graph: agent -> (tool_calls?) -> tools -> agent -> END.

@@ -7,6 +7,7 @@ from collections.abc import Callable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from finance_ai.database.models.user import User
 from finance_ai.database.models.income import Income
 from finance_ai.database.models.transaction import Transaction
 from finance_ai.tools.receipt_ocr import ReceiptOcrResult
@@ -75,13 +76,13 @@ class TestConfirmReceiptTransactions:
 
     def test_expense_persisted_to_transaction_table(
         self,
-        sample_user: object,
+        sample_user: User,
         db_session_factory: Callable[[], Session],
     ) -> None:
         """Confirming an expense writes one row to the transactions table."""
         result = confirm_receipt_transactions(
             [_expense_draft()],
-            str(sample_user.id),  # type: ignore[attr-defined]
+            str(sample_user.id),
             db_session_factory,
         )
         assert result.inserted == 1
@@ -100,13 +101,13 @@ class TestConfirmReceiptTransactions:
 
     def test_income_dual_written(
         self,
-        sample_user: object,
+        sample_user: User,
         db_session_factory: Callable[[], Session],
     ) -> None:
         """Confirming income writes both Transaction and Income rows."""
         result = confirm_receipt_transactions(
             [_income_draft()],
-            str(sample_user.id),  # type: ignore[attr-defined]
+            str(sample_user.id),
             db_session_factory,
         )
         assert result.inserted == 1
@@ -128,11 +129,11 @@ class TestConfirmReceiptTransactions:
 
     def test_duplicate_skipped(
         self,
-        sample_user: object,
+        sample_user: User,
         db_session_factory: Callable[[], Session],
     ) -> None:
         """Confirming the same draft twice skips the duplicate."""
-        uid = str(sample_user.id)  # type: ignore[attr-defined]
+        uid = str(sample_user.id)
         confirm_receipt_transactions([_expense_draft()], uid, db_session_factory)
         result = confirm_receipt_transactions([_expense_draft()], uid, db_session_factory)
         assert result.inserted == 0
@@ -141,11 +142,11 @@ class TestConfirmReceiptTransactions:
 
     def test_multiple_drafts_mixed(
         self,
-        sample_user: object,
+        sample_user: User,
         db_session_factory: Callable[[], Session],
     ) -> None:
         """A mix of expense and income drafts all persist."""
-        uid = str(sample_user.id)  # type: ignore[attr-defined]
+        uid = str(sample_user.id)
         result = confirm_receipt_transactions(
             [_expense_draft(), _income_draft()],
             uid,
@@ -156,13 +157,11 @@ class TestConfirmReceiptTransactions:
 
     def test_empty_drafts_inserts_nothing(
         self,
-        sample_user: object,
+        sample_user: User,
         db_session_factory: Callable[[], Session],
     ) -> None:
         """An empty draft list inserts nothing and reports zero."""
-        result = confirm_receipt_transactions(
-            [], str(sample_user.id), db_session_factory  # type: ignore[attr-defined]
-        )
+        result = confirm_receipt_transactions([], str(sample_user.id), db_session_factory)
         assert result.inserted == 0
         assert result.total == 0
         assert result.skipped == 0

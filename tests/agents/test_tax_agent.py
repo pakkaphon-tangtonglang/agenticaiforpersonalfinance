@@ -4,13 +4,13 @@ from unittest.mock import MagicMock
 
 from langchain_core.messages import AIMessage, HumanMessage
 
+from finance_ai.agents.graph_utils import should_continue
 from finance_ai.agents.prompts import TAX_AGENT_SYSTEM_PROMPT
 from finance_ai.agents.tax_agent import (
     TAX_TOOLS,
     _create_first_turn_node,
     _create_respond_node,
     build_tax_agent_graph,
-    should_continue,
 )
 from finance_ai.agents.tax_tools import calculate_thai_tax
 
@@ -24,7 +24,7 @@ class TestShouldContinue:
     ) -> None:
         """Routes to 'tools' when last message has tool_calls."""
         state = {"messages": [tax_tool_call_message], "tax_result": None}
-        assert should_continue(state) == "tools"  # type: ignore[arg-type]
+        assert should_continue(state) == "tools"
 
     def test_returns_end_when_no_tool_calls(
         self,
@@ -32,13 +32,13 @@ class TestShouldContinue:
     ) -> None:
         """Routes to 'end' when last message has no tool_calls."""
         state = {"messages": [tax_formatted_response], "tax_result": None}
-        assert should_continue(state) == "end"  # type: ignore[arg-type]
+        assert should_continue(state) == "end"
 
     def test_returns_end_for_empty_tool_calls(self) -> None:
         """Routes to 'end' when tool_calls is an empty list."""
         message = AIMessage(content="response", tool_calls=[])
         state = {"messages": [message], "tax_result": None}
-        assert should_continue(state) == "end"  # type: ignore[arg-type]
+        assert should_continue(state) == "end"
 
 
 class TestCreateFirstTurnNode:

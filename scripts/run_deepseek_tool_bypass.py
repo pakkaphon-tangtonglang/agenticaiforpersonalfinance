@@ -19,6 +19,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from dotenv import load_dotenv
+from langchain_core.language_models import BaseChatModel
 
 load_dotenv()
 
@@ -27,7 +28,7 @@ MD_OUTPUT = "data/evaluation/results/deepseek_tool_bypass.md"
 PDF_OUTPUT = "data/evaluation/results/deepseek_tool_bypass.pdf"
 
 
-def _create_deepseek_model():
+def _create_deepseek_model() -> BaseChatModel:
     """Create DeepSeek chat model via OpenRouter.
 
     Returns:
@@ -37,8 +38,8 @@ def _create_deepseek_model():
     from finance_ai.agents.llm_factory import create_chat_model
 
     settings = get_settings()
-    settings.llm_provider = "openrouter"  # type: ignore[assignment]
-    settings.openrouter_model = MODEL_NAME  # type: ignore[assignment]
+    settings.llm_provider = "openrouter"
+    settings.openrouter_model = MODEL_NAME
     return create_chat_model(settings=settings)
 
 

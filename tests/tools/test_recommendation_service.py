@@ -111,14 +111,14 @@ class TestAnalyzeExpensePatterns:
                 {"category": "utilities", "label": "สาธารณูปโภค", "amount": "3000"},
             ],
         )
-        income = _make_income_data("600000")  # 50k/month
+        income = _make_income_data("50000")  # 50k/month (monthly contract)
         result = analyze_expense_patterns(expense, income)
         assert result == []
 
     def test_overspending_triggers_recommendation(self) -> None:
         """Expenses > 80% of monthly income triggers recommendation."""
         expense = _make_expense_data("45000")  # 45k/month
-        income = _make_income_data("480000")  # 40k/month -> 45/40 = 112%
+        income = _make_income_data("40000")  # 40k/month -> 45/40 = 112%
         result = analyze_expense_patterns(expense, income)
         assert len(result) >= 1
         assert any(r.category == "savings_rate" for r in result)
@@ -132,7 +132,7 @@ class TestAnalyzeExpensePatterns:
                 {"category": "transport", "label": "การเดินทาง", "amount": "4000"},
             ],
         )
-        income = _make_income_data("1200000")
+        income = _make_income_data("100000")
         result = analyze_expense_patterns(expense, income)
         assert any(r.category == "expense_optimization" for r in result)
 
@@ -312,7 +312,7 @@ class TestAnalyzeSavingsRate:
 
     def test_low_savings_triggers_recommendation(self) -> None:
         """Savings < 20% triggers recommendation."""
-        income = _make_income_data("600000")  # 50k/month
+        income = _make_income_data("50000")  # 50k/month
         expense = _make_expense_data("45000")  # 45k/month = 10% savings
         goals = _make_goals_data(
             goals=[
@@ -331,7 +331,7 @@ class TestAnalyzeSavingsRate:
 
     def test_good_savings_no_recommendation(self) -> None:
         """Savings >= 20% produces no savings rate recommendation."""
-        income = _make_income_data("600000")  # 50k/month
+        income = _make_income_data("50000")  # 50k/month
         expense = _make_expense_data("30000")  # 30k/month = 40% savings
         goals = _make_goals_data(
             goals=[
@@ -351,7 +351,7 @@ class TestAnalyzeSavingsRate:
     def test_no_emergency_fund_triggers_recommendation(self) -> None:
         """No emergency fund goal triggers recommendation."""
         result = analyze_savings_rate(
-            _make_income_data("600000"),
+            _make_income_data("50000"),
             _make_expense_data("20000"),
             _make_goals_data(),
         )
@@ -372,7 +372,7 @@ class TestAnalyzeSavingsRate:
             ]
         )
         result = analyze_savings_rate(
-            _make_income_data("600000"),
+            _make_income_data("50000"),
             _make_expense_data("20000"),
             goals,
         )
