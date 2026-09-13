@@ -186,17 +186,16 @@ class TestDeployableFrontendPaths:
     def test_index_uses_relative_asset_paths(self) -> None:
         """index.html references styles.css and app.js relatively, not /static/."""
         response = self.client.get("/")
-        assert 'href="styles.css"' in response.text
-        assert 'src="app.js"' in response.text
+        assert 'href="styles.css?v=' in response.text
+        assert 'src="app.js?v=' in response.text
         assert 'href="/static/styles.css"' not in response.text
         assert 'src="/static/app.js"' not in response.text
 
     def test_index_loads_config_before_app(self) -> None:
         """config.js is loaded before app.js so FINANCE_API_BASE is set in time."""
         response = self.client.get("/")
-        config_pos = response.text.index("config.js")
-        assert "config.js?v=" in response.text
-        app_pos = response.text.index('src="app.js"')
+        config_pos = response.text.index("config.js?v=")
+        app_pos = response.text.index('src="app.js?v=')
         assert config_pos < app_pos
 
     def test_config_js_served(self) -> None:
