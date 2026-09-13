@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from finance_ai.database.models.financial_goal import FinancialGoal
     from finance_ai.database.models.income import Income
     from finance_ai.database.models.investment_holding import InvestmentHolding
+    from finance_ai.database.models.risk_assessment import RiskAssessment
     from finance_ai.database.models.tax_filing import TaxFiling
     from finance_ai.database.models.transaction import Transaction
     from finance_ai.database.models.watched_asset import WatchedAsset
@@ -64,5 +65,8 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         back_populates="user", cascade="all, delete-orphan"
     )
     watched_assets: Mapped[list["WatchedAsset"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
+    risk_assessments: Mapped[list["RiskAssessment"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )

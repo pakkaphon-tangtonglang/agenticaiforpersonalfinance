@@ -24,6 +24,8 @@ from finance_ai.agents.recommendation_tools import (
 )
 from finance_ai.agents.schemas import RecommendationAgentState
 from finance_ai.core.logging import get_logger
+from finance_ai.database.crud.risk_assessment_crud import RiskAssessmentCRUD
+from finance_ai.agents.session_helper import get_tool_session
 
 logger = get_logger(__name__)
 
@@ -34,6 +36,40 @@ RECOMMENDATION_AGENT_TOOLS = [
     search_finance_news,
     detect_psychological_cues,
 ]
+
+
+def get_risk_profile_context(user_id: str, db_session_factory: Any) -> str:
+    """Build the Thai risk-profile context block from the user's latest assessment.
+
+    Never raises: any failure (no DB session factory, connection error,
+    missing table) is logged as a warning and an empty string is returned so
+    that chat keeps working without personalization.
+
+    Args:
+        user_id: UUID string of the user.
+        db_session_factory: Session factory used by get_tool_session.
+
+    Returns:
+        Thai context block ending with a blank line, or "" when unavailable.
+
+    Example:
+        >>> get_risk_profile_context("abc-123", session_factory)
+        'บริบทผู้ใช้ ...'
+    """
+    try:
+        with get_tool_session(db_session_factory) as session:
+            assessment = RiskAssessmentCRUD().get_latest_by_user(session, user_id)
+        if assessment is None:
+            return ""
+        return (
+            "บริบทผู้ใช้ (แบบประเมินความเหมาะสมในการลงทุน):\n"
+            f"ระดับความเสี่ยงที่รับได้: {assessment.risk_category} "
+            f"(ระดับ {assessment.risk_level}, คะแนน {assessment.total_score})\n"
+            "เมื่อให้คำแนะนำการลงทุน ให้เหมาะสมกับระดับความเสี่ยงนี้เสมอ\n\n"
+        )
+    except Exception as error:  # noqa: BLE001  # chat must never crash on context
+        logger.warning("Failed to load risk profile context for user %s: %s", user_id, error)
+        return ""
 
 
 def create_llm_node(
@@ -54,6 +90,18 @@ def create_llm_node(
     """
     model_with_tools = chat_model.bind_tools(RECOMMENDATION_AGENT_TOOLS)
 
+    def _build_system_content(state: RecommendationAgentState) -> str:
+        """Compose the system prompt: date, risk context, and base prompt.
+
+        Args:
+            state: Current agent state with user_id and db_session_factory.
+
+        Returns:
+            The full system prompt content for the LLM.
+        """
+        risk_context = get_risk_profile_context(state["user_id"], state["db_session_factory"])
+        return get_date_context() + risk_context + RECOMMENDATION_AGENT_SYSTEM_PROMPT
+
     def llm_node(state: RecommendationAgentState) -> dict[str, Any]:
         """Invoke the LLM with current messages and system prompt.
 
@@ -63,9 +111,7 @@ def create_llm_node(
         Returns:
             Dict with updated messages list.
         """
-        messages = [
-            SystemMessage(content=get_date_context() + RECOMMENDATION_AGENT_SYSTEM_PROMPT)
-        ] + state["messages"]
+        messages = [SystemMessage(content=_build_system_content(state))] + state["messages"]
         response = model_with_tools.invoke(messages)
         return {"messages": [response]}
 
