@@ -212,7 +212,7 @@ The system supports multiple LLM providers (configured in `.env`):
 | Provider | Config key | Default model |
 |---|---|---|
 | Google Gemini | `llm_provider=google` | `gemini-2.5-flash` |
-| Ollama (local) | `llm_provider=ollama` | `THALLE` |
+| Ollama | `llm_provider=ollama` | `minimax-m3` |
 | OpenRouter | `llm_provider=openrouter` | `deepseek/deepseek-chat-v3.1` |
 
 ## Roadmap

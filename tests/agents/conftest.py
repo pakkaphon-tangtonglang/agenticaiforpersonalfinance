@@ -96,7 +96,7 @@ def mock_ollama_settings() -> dict[str, Any]:
     return {
         "llm_provider": "ollama",
         "ollama_base_url": "http://localhost:11434",
-        "ollama_model": "THALLE",
+        "ollama_model": "minimax-m3",
         "llm_temperature": 0.7,
         "llm_max_tokens": 4000,
     }

@@ -61,7 +61,7 @@ def test_get_llm_client_ollama() -> None:
     client = get_llm_client(settings)
 
     assert isinstance(client, OLLAMAClient)
-    assert client.model == "THALLE"
+    assert client.model == "minimax-m3"
 
 
 def test_get_llm_client_missing_google_key() -> None:

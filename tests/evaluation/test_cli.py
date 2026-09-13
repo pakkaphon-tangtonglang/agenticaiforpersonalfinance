@@ -34,7 +34,7 @@ class TestEvaluationCli:
                 "--provider",
                 "ollama",
                 "--model",
-                "THALLE",
+                "minimax-m3",
                 "--skip",
                 "rag",
                 "accuracy",
@@ -42,7 +42,7 @@ class TestEvaluationCli:
         )
         assert args.eval == "routing"
         assert args.provider == "ollama"
-        assert args.model == "THALLE"
+        assert args.model == "minimax-m3"
         assert args.skip == ["rag", "accuracy"]
 
     def test_valid_eval_types(self) -> None:
