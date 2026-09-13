@@ -110,3 +110,44 @@ class AssetSymbolMatch(BaseModel):
     name: str  # e.g. "PTT Public Company Limited"
     exchange: str  # e.g. "SET" / "NASDAQ"
     quote_type: str  # e.g. "EQUITY" / "CRYPTOCURRENCY" / "COMMODITY"
+
+
+class NewsItem(BaseModel):
+    """A single parsed news article for the asset page.
+
+    Attributes:
+        title: Article headline.
+        source: Publisher name (e.g., "Reuters").
+        link: Article URL, or None when unavailable.
+        published_at: ISO 8601 timestamp string, or None when unparsable.
+
+    Example:
+        >>> item = NewsItem(title="Oil rises", source="Reuters")
+    """
+
+    title: str
+    source: str = ""
+    link: Optional[str] = None
+    published_at: Optional[str] = None
+
+
+class AssetFetchResult(BaseModel):
+    """Structured result of an immediate asset data fetch.
+
+    Attributes:
+        symbol: Canonical (uppercased) ticker symbol.
+        price: Formatted price string with 2 decimals, or None when unavailable.
+        currency: Uppercased currency code (e.g., "USD"), or None when unavailable.
+        news: Parsed news articles for the symbol.
+        error: Combined Thai error message, or None when the requested
+            data was fetched successfully.
+
+    Example:
+        >>> result = AssetFetchResult(symbol="AAPL", price="254.30", currency="USD")
+    """
+
+    symbol: str
+    price: Optional[str] = None
+    currency: Optional[str] = None
+    news: list[NewsItem] = Field(default_factory=list)
+    error: Optional[str] = None

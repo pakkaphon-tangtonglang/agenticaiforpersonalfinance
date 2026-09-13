@@ -7,6 +7,7 @@ from decimal import Decimal
 from unittest.mock import MagicMock, PropertyMock, patch
 
 from finance_ai.tools.price_client import (
+    fetch_currency,
     fetch_current_price,
     fetch_multiple_prices,
     is_valid_ticker,
@@ -121,3 +122,32 @@ class TestIsValidTicker:
         mock_fetch.return_value = None
 
         assert is_valid_ticker("NOTREAL") is False
+
+
+class TestFetchCurrency:
+    """Tests for fetch_currency."""
+
+    @patch(YFINANCE_TICKER_PATH)
+    def test_returns_uppercase_currency(self, mock_ticker_cls: MagicMock) -> None:
+        """Currency codes are uppercased (e.g. "thb" -> "THB")."""
+        ticker = MagicMock()
+        ticker.info = {"currency": "thb"}
+        mock_ticker_cls.return_value = ticker
+
+        assert fetch_currency("PTT.BK") == "THB"
+
+    @patch(YFINANCE_TICKER_PATH)
+    def test_returns_none_when_missing(self, mock_ticker_cls: MagicMock) -> None:
+        """A ticker without currency info returns None."""
+        ticker = MagicMock()
+        ticker.info = {}
+        mock_ticker_cls.return_value = ticker
+
+        assert fetch_currency("NOTREAL") is None
+
+    @patch(YFINANCE_TICKER_PATH)
+    def test_returns_none_on_exception(self, mock_ticker_cls: MagicMock) -> None:
+        """A failing yfinance call degrades to None."""
+        mock_ticker_cls.side_effect = RuntimeError("boom")
+
+        assert fetch_currency("AAPL") is None

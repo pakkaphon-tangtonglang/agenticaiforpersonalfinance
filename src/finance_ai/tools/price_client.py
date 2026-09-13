@@ -71,3 +71,31 @@ def is_valid_ticker(symbol: str) -> bool:
         True
     """
     return fetch_current_price(symbol) is not None
+
+
+def fetch_currency(symbol: str) -> Optional[str]:
+    """Fetch the trading currency code for a symbol via yfinance (free).
+
+    Args:
+        symbol: Ticker symbol (e.g., "PTT.BK", "AAPL", "BTC-USD").
+
+    Returns:
+        Uppercased currency code (e.g., "THB"), or None when yfinance
+        does not report a currency or the lookup fails.
+
+    Example:
+        >>> fetch_currency("PTT.BK")
+        'THB'
+    """
+    try:
+        import yfinance as yf  # noqa: PLC0415
+
+        info = yf.Ticker(symbol).info or {}
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("yfinance currency fetch failed for %s: %s", symbol, exc)
+        return None
+    currency = info.get("currency")
+    if not currency:
+        logger.warning("No currency reported by yfinance for: %s", symbol)
+        return None
+    return str(currency).upper()

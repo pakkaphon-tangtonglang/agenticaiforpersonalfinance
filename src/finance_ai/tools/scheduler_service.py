@@ -5,6 +5,7 @@ data-fetching jobs via the Bright Data API, storing results as
 notifications for the user.
 """
 
+from decimal import Decimal
 from typing import Any, Optional
 
 from sqlalchemy.orm import Session
@@ -16,8 +17,14 @@ from finance_ai.database.crud.schedule_crud import (
 )
 from finance_ai.database.models.asset_notification import AssetNotification
 from finance_ai.database.models.asset_schedule import AssetSchedule
+from finance_ai.tools.market_data_models import AssetFetchResult, NewsItem
 
 logger = get_logger(__name__)
+
+# Structured fetch error messages (immediate /assets/fetch endpoint)
+_PRICE_UNAVAILABLE_MESSAGE = "ไม่สามารถดึงราคา {symbol} ได้ในขณะนี้"
+_NEWS_UNAVAILABLE_MESSAGE = "ไม่พบข่าวสำหรับ {symbol} ในขณะนี้"
+_VALID_FETCH_TYPES = ("price", "news", "all")
 
 
 def create_schedule(
@@ -170,92 +177,135 @@ def _auto_unregister(schedule_id: str) -> None:
     logger.info("Auto-deactivated schedule %s (max_runs reached)", schedule_id)
 
 
-def execute_immediate_fetch(
-    session: Session,
-    user_id: str,
+def fetch_asset_data_structured(
     symbol: str,
     fetch_type: str = "all",
-    chat_model: Any = None,
-) -> AssetNotification:
-    """Execute an immediate one-time fetch (no schedule needed).
+) -> AssetFetchResult:
+    """Fetch structured price/news data without creating a notification.
+
+    Used by the immediate /assets/fetch endpoint. Only scheduled fetches
+    create AssetNotification rows.
 
     Args:
-        session: SQLAlchemy session.
-        user_id: UUID of the user.
-        symbol: Ticker symbol to fetch.
-        fetch_type: "news" for news only, "price" for price only,
-                    "all" for both.
-        chat_model: Optional LangChain ChatModel for LLM summarization.
+        symbol: Ticker symbol (e.g., "aapl", "PTT.BK"); uppercased.
+        fetch_type: "price", "news", or "all".
 
     Returns:
-        Created AssetNotification with fetched data.
+        AssetFetchResult with the formatted price, currency, parsed news,
+        and a combined Thai error message when data is unavailable.
+
+    Raises:
+        ValueError: If fetch_type is not one of price/news/all.
 
     Example:
-        >>> notification = execute_immediate_fetch(session, "u1", "GC=F")
+        >>> result = fetch_asset_data_structured("PTT.BK", "price")
+        >>> result.price
+        '35.50'
     """
-    if fetch_type == "news":
-        content = _fetch_news_only(symbol, chat_model)
-    elif fetch_type == "price":
-        content = _fetch_price_only(symbol)
-    else:
-        content = _fetch_asset_summary(symbol, chat_model)
-
-    crud = AssetNotificationCRUD()
-    return crud.create(
-        session,
-        user_id=user_id,
-        symbol=symbol.strip().upper(),
-        content=content,
+    canonical_symbol = symbol.strip().upper()
+    if fetch_type not in _VALID_FETCH_TYPES:
+        raise ValueError(
+            f"Invalid fetch_type: '{fetch_type}'. Expected one of {_VALID_FETCH_TYPES}."
+        )
+    price, currency = _fetch_price_fields(canonical_symbol, fetch_type)
+    news = _fetch_news_field(canonical_symbol, fetch_type)
+    return AssetFetchResult(
+        symbol=canonical_symbol,
+        price=_format_price(price),
+        currency=currency,
+        news=news,
+        error=_build_fetch_error(canonical_symbol, fetch_type, price, news),
     )
 
 
-def _fetch_price_only(symbol: str) -> str:
-    """Fetch only price data for a symbol.
+def _fetch_price_fields(
+    symbol: str,
+    fetch_type: str,
+) -> tuple[Optional[Decimal], Optional[str]]:
+    """Fetch price and currency for "price"/"all" fetch types.
 
     Args:
-        symbol: Ticker symbol to fetch.
+        symbol: Canonical ticker symbol.
+        fetch_type: Requested fetch type ("price" or "all").
 
     Returns:
-        Formatted price text in Thai.
+        (price, currency) tuple; currency is only resolved when a price
+        exists. Both None when a news-only fetch was requested.
     """
+    if fetch_type not in ("price", "all"):
+        return None, None
     from finance_ai.tools.price_client import (  # noqa: PLC0415
+        fetch_currency,
         fetch_current_price,
     )
 
     price = fetch_current_price(symbol)
-    if price is None:
-        return f"ไม่สามารถดึงราคา {symbol} ได้ในขณะนี้"
-    return f"💰 **{symbol}**: ราคาปัจจุบัน {price:,.2f}"
+    currency = fetch_currency(symbol) if price is not None else None
+    return price, currency
 
 
-def _fetch_news_only(
-    symbol: str,
-    chat_model: Any = None,
-) -> str:
-    """Fetch news for a symbol, optionally summarize via LLM.
+def _fetch_news_field(symbol: str, fetch_type: str) -> list[NewsItem]:
+    """Fetch parsed news items for "news"/"all" fetch types.
 
     Args:
-        symbol: Ticker symbol to fetch.
-        chat_model: Optional ChatModel for LLM summarization.
+        symbol: Canonical ticker symbol.
+        fetch_type: Requested fetch type ("news" or "all").
 
     Returns:
-        Formatted news text in Thai.
+        Parsed news items, or [] when news was not requested or none found.
     """
+    if fetch_type not in ("news", "all"):
+        return []
     from finance_ai.tools.market_data_service import (  # noqa: PLC0415
-        fetch_finance_news,
+        fetch_news_items,
     )
 
-    news_result = fetch_finance_news(symbol)
-    if not news_result.has_news:
-        return f"ไม่พบข่าวสำหรับ {symbol} ในขณะนี้"
+    return fetch_news_items(symbol)
 
-    if chat_model is not None:
-        return _summarize_with_llm(
-            chat_model,
-            symbol,
-            news_result.news_content,
-        )
-    return f"📰 **ข่าวล่าสุด {symbol}**\n{news_result.news_content}"
+
+def _build_fetch_error(
+    symbol: str,
+    fetch_type: str,
+    price: Optional[Decimal],
+    news: list[NewsItem],
+) -> Optional[str]:
+    """Build the combined Thai error message for unavailable data.
+
+    Args:
+        symbol: Canonical ticker symbol.
+        fetch_type: Requested fetch type.
+        price: Fetched price, or None when unavailable.
+        news: Fetched news items, or [] when unavailable.
+
+    Returns:
+        Combined Thai message, or None when all requested data was fetched.
+    """
+    errors: list[str] = []
+    if fetch_type in ("price", "all") and price is None:
+        errors.append(_PRICE_UNAVAILABLE_MESSAGE.format(symbol=symbol))
+    if fetch_type in ("news", "all") and not news:
+        errors.append(_NEWS_UNAVAILABLE_MESSAGE.format(symbol=symbol))
+    if not errors:
+        return None
+    return "; ".join(errors)
+
+
+def _format_price(price: Optional[Decimal]) -> Optional[str]:
+    """Format a price Decimal as a fixed 2-decimal string.
+
+    Args:
+        price: Price value, or None.
+
+    Returns:
+        Formatted string (e.g., "35.50"), or None.
+
+    Example:
+        >>> _format_price(Decimal("35.5"))
+        '35.50'
+    """
+    if price is None:
+        return None
+    return str(price.quantize(Decimal("0.01")))
 
 
 def _fetch_asset_summary(
@@ -280,9 +330,7 @@ def _fetch_asset_summary(
 
     price = fetch_current_price(symbol)
     price_text = (
-        f"💰 **{symbol}**: ราคาปัจจุบัน {price:,.2f}"
-        if price
-        else f"ไม่สามารถดึงราคา {symbol} ได้ในขณะนี้"
+        f"💰 **{symbol}**: ราคาปัจจุบัน {price:,.2f}" if price else f"ไม่สามารถดึงราคา {symbol} ได้ในขณะนี้"
     )
 
     news_result = fetch_finance_news(symbol)

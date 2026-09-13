@@ -1,5 +1,7 @@
 """Tests for scheduler_service module."""
 
+# pylint: disable=redefined-outer-name,unused-argument,too-many-arguments,too-many-positional-arguments,import-outside-toplevel
+
 from unittest.mock import MagicMock, patch
 from decimal import Decimal
 
@@ -9,11 +11,13 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from finance_ai.database.base import Base
 from finance_ai.database.models.user import User
+from finance_ai.tools.market_data_models import NewsItem
 from finance_ai.tools.scheduler_service import (
     create_schedule,
     deactivate_schedule,
     delete_schedule,
     execute_scheduled_fetch,
+    fetch_asset_data_structured,
     get_unread_notifications,
     get_user_schedules,
     mark_all_notifications_read,
@@ -212,7 +216,7 @@ class TestNotificationService:
         n = crud.create(session, user.id, "GC=F", "ราคา 2,350")
 
         assert mark_notification_read(session, n.id, user.id) is True
-        assert get_unread_notifications(session, user.id) == []
+        assert not get_unread_notifications(session, user.id)
 
     def test_mark_all_read(self, session: Session, user: User) -> None:
         """Mark all notifications as read."""
@@ -226,3 +230,120 @@ class TestNotificationService:
 
         count = mark_all_notifications_read(session, user.id)
         assert count == 2
+
+
+class TestFetchAssetDataStructured:
+    """Tests for the notification-free structured fetch used by /assets/fetch."""
+
+    @patch("finance_ai.tools.market_data_service.fetch_news_items")
+    @patch("finance_ai.tools.price_client.fetch_currency")
+    @patch("finance_ai.tools.price_client.fetch_current_price")
+    def test_all_fetch_success(
+        self,
+        mock_price: MagicMock,
+        mock_currency: MagicMock,
+        mock_news: MagicMock,
+        session: Session,
+        user: User,
+    ) -> None:
+        """A successful all-fetch returns price, currency, and news, no error."""
+        mock_price.return_value = Decimal("35.50")
+        mock_currency.return_value = "THB"
+        mock_news.return_value = [NewsItem(title="PTT wins contract", source="Reuters")]
+
+        result = fetch_asset_data_structured("ptt.bk", "all")
+
+        assert result.symbol == "PTT.BK"
+        assert result.price == "35.50"
+        assert result.currency == "THB"
+        assert len(result.news) == 1
+        assert result.news[0].title == "PTT wins contract"
+        assert result.error is None
+
+    @patch("finance_ai.tools.market_data_service.fetch_news_items")
+    @patch("finance_ai.tools.price_client.fetch_currency")
+    @patch("finance_ai.tools.price_client.fetch_current_price")
+    def test_price_only_skips_news(
+        self,
+        mock_price: MagicMock,
+        mock_currency: MagicMock,
+        mock_news: MagicMock,
+        session: Session,
+        user: User,
+    ) -> None:
+        """fetch_type=price returns price data with empty news."""
+        mock_price.return_value = Decimal("35.50")
+        mock_currency.return_value = "THB"
+
+        result = fetch_asset_data_structured("PTT.BK", "price")
+
+        assert result.price == "35.50"
+        assert result.currency == "THB"
+        assert result.news == []
+        assert result.error is None
+        mock_news.assert_not_called()
+
+    @patch("finance_ai.tools.market_data_service.fetch_news_items")
+    @patch("finance_ai.tools.price_client.fetch_currency")
+    @patch("finance_ai.tools.price_client.fetch_current_price")
+    def test_news_only_skips_price(
+        self,
+        mock_price: MagicMock,
+        mock_currency: MagicMock,
+        mock_news: MagicMock,
+        session: Session,
+        user: User,
+    ) -> None:
+        """fetch_type=news returns news with null price/currency."""
+        mock_news.return_value = [NewsItem(title="Oil rises")]
+
+        result = fetch_asset_data_structured("PTT.BK", "news")
+
+        assert result.price is None
+        assert result.currency is None
+        assert len(result.news) == 1
+        assert result.error is None
+        mock_price.assert_not_called()
+        mock_currency.assert_not_called()
+
+    @patch("finance_ai.tools.market_data_service.fetch_news_items")
+    @patch("finance_ai.tools.price_client.fetch_currency")
+    @patch("finance_ai.tools.price_client.fetch_current_price")
+    def test_unavailable_data_sets_thai_error(
+        self,
+        mock_price: MagicMock,
+        mock_currency: MagicMock,
+        mock_news: MagicMock,
+        session: Session,
+        user: User,
+    ) -> None:
+        """Failed price and empty news produce a combined Thai error."""
+        mock_price.return_value = None
+        mock_news.return_value = []
+
+        result = fetch_asset_data_structured("AAPL", "all")
+
+        assert result.price is None
+        assert result.error is not None
+        assert "ไม่สามารถดึงราคา AAPL" in result.error
+        assert "ไม่พบข่าวสำหรับ AAPL" in result.error
+
+    @patch("finance_ai.tools.market_data_service.fetch_news_items")
+    @patch("finance_ai.tools.price_client.fetch_currency")
+    @patch("finance_ai.tools.price_client.fetch_current_price")
+    def test_creates_no_notification(
+        self,
+        mock_price: MagicMock,
+        mock_currency: MagicMock,
+        mock_news: MagicMock,
+        session: Session,
+        user: User,
+    ) -> None:
+        """The structured fetch must not write any AssetNotification row."""
+        mock_price.return_value = Decimal("35.50")
+        mock_currency.return_value = "THB"
+        mock_news.return_value = [NewsItem(title="News")]
+
+        fetch_asset_data_structured("PTT.BK", "all")
+
+        assert not get_unread_notifications(session, user.id)
