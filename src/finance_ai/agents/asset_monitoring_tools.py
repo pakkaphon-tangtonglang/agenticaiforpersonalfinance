@@ -10,6 +10,10 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from finance_ai.agents.session_helper import get_tool_session
+from finance_ai.tools.symbol_guard import (
+    SymbolResolutionError,
+    resolve_and_validate_symbol,
+)
 
 
 @tool
@@ -68,26 +72,43 @@ def _handle_add(
     symbol: str,
     name: str,
 ) -> dict[str, Any]:
-    """Add a symbol to the watchlist.
+    """Add a symbol to the watchlist after validating it via the guard.
+
+    The raw input is resolved to a canonical Yahoo symbol; input that does
+    not match a real search candidate is rejected with a Thai message.
 
     Args:
         crud: WatchedAssetCRUD instance.
         db_session_factory: Session factory callable.
         user_id: UUID of the user.
-        symbol: Ticker symbol.
+        symbol: Raw user-provided symbol (e.g., "ptt", "PTT.BK").
         name: Display name.
 
     Returns:
-        Dict with add result.
+        Dict with add result, or {"error": ...} when the symbol cannot
+        be resolved.
     """
     if not symbol:
         return {"error": "symbol is required for action='add'"}
+    try:
+        canonical_symbol = resolve_and_validate_symbol(symbol)
+    except SymbolResolutionError as exc:
+        return {"error": str(exc)}
     with get_tool_session(db_session_factory) as session:
-        record = crud.add(session, user_id, symbol, name)
+        record = crud.add(session, user_id, canonical_symbol, name)
         session.commit()
         if record is None:
-            return {"action": "add", "symbol": symbol.upper(), "status": "already_exists"}
-        return {"action": "add", "symbol": record.symbol, "name": record.name, "status": "added"}
+            return {
+                "action": "add",
+                "symbol": canonical_symbol,
+                "status": "already_exists",
+            }
+        return {
+            "action": "add",
+            "symbol": record.symbol,
+            "name": record.name,
+            "status": "added",
+        }
 
 
 def _handle_remove(

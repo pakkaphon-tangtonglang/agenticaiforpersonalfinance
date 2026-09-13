@@ -14,11 +14,13 @@ from finance_ai.tools.market_data_models import (
 )
 from finance_ai.tools.market_data_service import (
     _fetch_exchange_rate,
+    _parse_pub_date,
     _parse_rss_items,
     _to_decimal,
     _validate_currency_code,
     convert_currency,
     fetch_finance_news,
+    fetch_news_items,
     fetch_stock_dashboard,
 )
 
@@ -318,3 +320,73 @@ class TestFetchFinanceNews:
 
         assert result.has_news is False
         assert result.news_content == NEWS_NOT_FOUND_MESSAGE.format(symbol="AAPL")
+
+
+# ---------------------------------------------------------------------------
+# fetch_news_items (structured news for the asset page)
+# ---------------------------------------------------------------------------
+
+
+class TestFetchNewsItems:
+    """Tests for the structured news item retrieval."""
+
+    @patch(f"{SERVICE_PATH}._fetch_news_rss")
+    def test_returns_parsed_items(self, mock_rss: MagicMock) -> None:
+        """Should map RSS items into NewsItem models with ISO timestamps."""
+        mock_rss.return_value = RSS_FEED_TWO_ITEMS
+
+        items = fetch_news_items("PTT.BK")
+
+        assert len(items) == 2
+        assert items[0].title == "PTT reports strong Q4 earnings"
+        assert items[0].source == "Bangkok Post"
+        assert items[0].link == "https://example.com/ptt-q4"
+        assert items[0].published_at == "2026-09-12T09:00:00+00:00"
+        assert items[1].title == "Oil prices rise on supply concerns"
+        assert items[1].published_at == "2026-09-12T10:30:00+00:00"
+
+    @patch(f"{SERVICE_PATH}._fetch_news_rss")
+    def test_fetch_failure_returns_empty(self, mock_rss: MagicMock) -> None:
+        """Should return [] when the RSS fetch fails (never raises)."""
+        mock_rss.side_effect = httpx.HTTPError("network down")
+
+        assert fetch_news_items("AAPL") == []
+
+    @patch(f"{SERVICE_PATH}._fetch_news_rss")
+    def test_unparsable_pub_date_keeps_title(self, mock_rss: MagicMock) -> None:
+        """A bad pubDate yields published_at=None but keeps the article."""
+        mock_rss.return_value = (
+            '<?xml version="1.0"?><rss version="2.0"><channel><item>'
+            "<title>Weird date article</title><source>S</source>"
+            "<link>https://example.com/x</link>"
+            "<pubDate>not-a-date</pubDate></item></channel></rss>"
+        )
+
+        items = fetch_news_items("AAPL")
+
+        assert len(items) == 1
+        assert items[0].title == "Weird date article"
+        assert items[0].published_at is None
+
+    @patch(f"{SERVICE_PATH}._fetch_news_rss")
+    def test_empty_feed_returns_empty(self, mock_rss: MagicMock) -> None:
+        """An empty feed returns an empty list."""
+        mock_rss.return_value = RSS_FEED_EMPTY
+
+        assert fetch_news_items("XYZ") == []
+
+
+class TestParsePubDate:
+    """Tests for the RFC 2822 to ISO conversion helper."""
+
+    def test_converts_rfc2822_to_iso(self) -> None:
+        """A standard GMT pubDate converts to an ISO 8601 string."""
+        assert _parse_pub_date("Mon, 12 Sep 2026 09:00:00 GMT") == "2026-09-12T09:00:00+00:00"
+
+    def test_invalid_date_returns_none(self) -> None:
+        """Unparsable dates return None."""
+        assert _parse_pub_date("not-a-date") is None
+
+    def test_empty_date_returns_none(self) -> None:
+        """An empty pubDate returns None."""
+        assert _parse_pub_date("") is None

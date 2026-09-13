@@ -10,7 +10,7 @@ import json
 from collections.abc import Generator
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import asyncio
 
@@ -28,6 +28,7 @@ from finance_ai.agents.router_agent import orchestrate_query
 from finance_ai.agents.stream_utils import StreamEvent, orchestrate_query_stream
 from finance_ai.core.config import get_settings
 from finance_ai.core.logging import get_logger
+from finance_ai.database.crud.watched_asset_crud import WatchedAssetCRUD
 from finance_ai.database.session import create_database_engine, create_session_factory
 from finance_ai.tools.bank_statement_parser import parse_bank_statement
 from finance_ai.tools.bank_statement_service import bulk_insert_transactions
@@ -47,11 +48,16 @@ from finance_ai.tools.conversation_service import (
     save_user_message,
     update_conversation_title,
 )
+from finance_ai.tools.market_data_models import AssetFetchResult
 from finance_ai.tools.report_service import generate_financial_report
 from finance_ai.tools.scheduler_service import (
-    execute_immediate_fetch,
+    fetch_asset_data_structured,
     get_unread_notifications,
     mark_all_notifications_read,
+)
+from finance_ai.tools.symbol_guard import (
+    SymbolResolutionError,
+    resolve_and_validate_symbol,
 )
 
 logger = get_logger(__name__)
@@ -157,7 +163,32 @@ class AssetFetchRequest(BaseModel):
 
     user_id: str = Field(..., description="User UUID")
     symbol: str = Field(..., description="Ticker symbol")
-    fetch_type: str = Field(default="price", description="'price' or 'news'")
+    fetch_type: Literal["price", "news", "all"] = Field(
+        default="price", description="Which data to fetch"
+    )
+
+
+class AssetFetchResponse(BaseModel):
+    """Structured immediate fetch response."""
+
+    status: str = Field(default="ok", description="Request status")
+    result: AssetFetchResult = Field(..., description="Fetched asset data")
+
+
+class WatchlistAddRequest(BaseModel):
+    """Watchlist add request."""
+
+    user_id: str = Field(..., description="User UUID")
+    symbol: str = Field(..., description="Ticker symbol or free text (e.g. 'ptt')")
+    name: str = Field(default="", description="Display name")
+
+
+class WatchlistItemOut(BaseModel):
+    """Watchlist row returned by GET /assets/watchlist."""
+
+    id: str = Field(..., description="Asset UUID used by DELETE /assets/watchlist/{id}")
+    symbol: str = Field(..., description="Canonical Yahoo symbol (e.g. 'PTT.BK')")
+    name: str = Field(default="", description="Display name")
 
 
 class RiskAssessmentSubmitRequest(BaseModel):
@@ -745,26 +776,21 @@ def search_assets(query: str) -> dict[str, Any]:
     return {"status": "ok", "results": results}
 
 
-@app.post("/assets/fetch")  # type: ignore[misc]
-def fetch_asset_data(
-    req: AssetFetchRequest, session: Session = Depends(get_session)
-) -> dict[str, Any]:
-    """Fetch immediate asset data (price or news).
+@app.post("/assets/fetch", response_model=AssetFetchResponse)  # type: ignore[misc]
+def fetch_asset_data(req: AssetFetchRequest) -> AssetFetchResponse:
+    """Fetch immediate asset data (price/news) without creating a notification.
+
+    Only scheduled fetches create notifications; this endpoint returns the
+    structured result directly.
 
     Args:
-        req: Asset fetch request.
-        session: Database session.
+        req: Asset fetch request (symbol and fetch_type).
 
     Returns:
-        Fetch result summary.
+        AssetFetchResponse wrapping the structured fetch result.
     """
-    result = execute_immediate_fetch(
-        session=session,
-        user_id=req.user_id,
-        symbol=req.symbol,
-        fetch_type=req.fetch_type,
-    )
-    return {"status": "ok", "result": result}
+    result = fetch_asset_data_structured(req.symbol, req.fetch_type)
+    return AssetFetchResponse(status="ok", result=result)
 
 
 @app.get("/assets/notifications")  # type: ignore[misc]
@@ -786,7 +812,7 @@ def get_asset_notifications(
             "id": str(n.id),
             "symbol": n.symbol,
             "message": n.content,
-            "created_at": str(n.created_at),
+            "created_at": _format_thai_datetime(n.created_at),
         }
         for n in notifications
     ]
@@ -807,6 +833,139 @@ def mark_notifications_read(
     """
     mark_all_notifications_read(session, user_id)
     return {"status": "ok"}
+
+
+_THAI_MONTH_ABBREVIATIONS: tuple[str, ...] = (
+    "",
+    "ม.ค.",
+    "ก.พ.",
+    "มี.ค.",
+    "เม.ย.",
+    "พ.ค.",
+    "มิ.ย.",
+    "ก.ค.",
+    "ส.ค.",
+    "ก.ย.",
+    "ต.ค.",
+    "พ.ย.",
+    "ธ.ค.",
+)
+
+
+def _format_thai_datetime(value: datetime) -> str:
+    """Format a datetime as a compact Thai string ('13 ก.ย. 2026, 17:45').
+
+    Uses the Gregorian year with Thai month abbreviations, matching Thai
+    UI conventions for notification timestamps.
+
+    Args:
+        value: Datetime to format (naive or timezone-aware).
+
+    Returns:
+        Formatted string 'D MMM YYYY, HH:MM'.
+
+    Example:
+        >>> _format_thai_datetime(datetime(2026, 9, 13, 17, 45))
+        '13 ก.ย. 2026, 17:45'
+    """
+    month = _THAI_MONTH_ABBREVIATIONS[value.month]
+    return f"{value.day} {month} {value.year}, {value.hour:02d}:{value.minute:02d}"
+
+
+@app.get("/assets/watchlist", response_model=list[WatchlistItemOut])  # type: ignore[misc]
+def get_watchlist(user_id: str, session: Session = Depends(get_session)) -> list[WatchlistItemOut]:
+    """List the user's watched assets (canonical symbol + display name).
+
+    Args:
+        user_id: User UUID.
+        session: Database session.
+
+    Returns:
+        List of watched assets, oldest first.
+    """
+    assets = WatchedAssetCRUD().list_for_user(session, user_id)
+    return [
+        WatchlistItemOut(id=str(asset.id), symbol=asset.symbol, name=asset.name) for asset in assets
+    ]
+
+
+@app.post("/assets/watchlist")  # type: ignore[misc]
+def add_watchlist_asset(
+    req: WatchlistAddRequest, session: Session = Depends(get_session)
+) -> dict[str, str]:
+    """Add a symbol to the user's watchlist after validation.
+
+    The input is resolved to a canonical Yahoo symbol via the shared guard;
+    unresolvable input is rejected with HTTP 422 and a Thai message.
+    Re-adding the same canonical symbol is idempotent.
+
+    Args:
+        req: Add request (user_id, symbol, optional name).
+        session: Database session.
+
+    Returns:
+        {"status": "added"|"already_exists", "symbol", "name"}.
+
+    Raises:
+        HTTPException: 422 when the symbol cannot be resolved.
+    """
+    try:
+        canonical_symbol = resolve_and_validate_symbol(req.symbol)
+    except SymbolResolutionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    record = WatchedAssetCRUD().add(session, req.user_id, canonical_symbol, req.name)
+    session.commit()
+    status = "already_exists" if record is None else "added"
+    return {"status": status, "symbol": canonical_symbol, "name": req.name}
+
+
+@app.delete("/assets/watchlist/{asset_id}")  # type: ignore[misc]
+def delete_watchlist_asset(
+    asset_id: str, user_id: str, session: Session = Depends(get_session)
+) -> dict[str, str]:
+    """Remove an asset from the user's watchlist.
+
+    The path value may be the canonical symbol (e.g. "PTT.BK") or the
+    asset's UUID; both are resolved within the requesting user's list.
+
+    Args:
+        asset_id: Canonical symbol or asset UUID.
+        user_id: User UUID.
+        session: Database session.
+
+    Returns:
+        {"status": "ok"}.
+
+    Raises:
+        HTTPException: 404 when the asset is not in the user's watchlist.
+    """
+    if _delete_watchlist_asset(session, WatchedAssetCRUD(), asset_id, user_id):
+        session.commit()
+        return {"status": "ok"}
+    raise HTTPException(
+        status_code=404,
+        detail=f"ไม่พบ '{asset_id}' ในรายการสินทรัพย์ที่ติดตามของผู้ใช้",
+    )
+
+
+def _delete_watchlist_asset(
+    session: Session, crud: WatchedAssetCRUD, asset_id: str, user_id: str
+) -> bool:
+    """Delete a watched asset matched by symbol first, then by asset id.
+
+    Args:
+        session: Database session.
+        crud: WatchedAssetCRUD instance.
+        asset_id: Canonical symbol or asset UUID from the request path.
+        user_id: UUID of the requesting user.
+
+    Returns:
+        True when a row owned by the user was deleted.
+    """
+    asset = crud.get_by_symbol(session, user_id, asset_id)
+    if asset is not None:
+        return crud.delete(session, asset.id, user_id)
+    return crud.delete(session, asset_id, user_id)
 
 
 # ──────────────────────── Risk Assessment ────────────────────────

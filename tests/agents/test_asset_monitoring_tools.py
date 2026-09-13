@@ -2,10 +2,24 @@
 
 from collections.abc import Callable
 
+import pytest
 from sqlalchemy.orm import Session
 
 from finance_ai.agents.asset_monitoring_tools import manage_watchlist
 from finance_ai.database.models.user import User
+from finance_ai.tools.market_data_models import AssetSymbolMatch
+
+
+@pytest.fixture(autouse=True)
+def mock_symbol_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Stub symbol resolution so watchlist tests make no network calls."""
+
+    def fake_search(query: str) -> list[AssetSymbolMatch]:
+        """Echo the query back as a single exact candidate."""
+        upper = query.strip().upper()
+        return [AssetSymbolMatch(symbol=upper, name=upper, exchange="MOCK", quote_type="EQUITY")]
+
+    monkeypatch.setattr("finance_ai.tools.symbol_guard.search_asset_symbols", fake_search)
 
 
 class TestManageWatchlistAdd:

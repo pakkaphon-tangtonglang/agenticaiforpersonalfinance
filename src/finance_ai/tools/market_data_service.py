@@ -4,7 +4,9 @@ No database dependency. Uses free, no-API-key sources only: yfinance for
 stock dashboards and FX rates, Google News RSS for financial news.
 """
 
+from datetime import timezone
 from decimal import Decimal, InvalidOperation
+from email.utils import parsedate_to_datetime
 from typing import Any, Optional
 from xml.etree import ElementTree
 
@@ -18,6 +20,7 @@ from finance_ai.tools.market_data_constants import (
 from finance_ai.tools.market_data_models import (
     CurrencyConversionResult,
     FinanceNewsResult,
+    NewsItem,
     StockDashboardResult,
 )
 
@@ -309,3 +312,72 @@ def _format_news_items(items: list[dict[str, str]], symbol: str) -> str:
     if not articles:
         return ""
     return f"ข่าวล่าสุดสำหรับ {symbol}:\n\n" + "\n\n---\n\n".join(articles)
+
+
+def fetch_news_items(symbol: str) -> list[NewsItem]:
+    """Fetch parsed news items for a symbol via Google News RSS (free).
+
+    Structured counterpart of fetch_finance_news: returns validated article
+    models instead of a markdown string. Never raises — failures degrade
+    to an empty list.
+
+    Args:
+        symbol: Ticker symbol (e.g., "AAPL", "PTT.BK").
+
+    Returns:
+        List of NewsItem (at most 5), [] on any failure.
+
+    Example:
+        >>> items = fetch_news_items("AAPL")
+        >>> len(items) <= 5
+        True
+    """
+    try:
+        xml_text = _fetch_news_rss(symbol)
+        raw_items = _parse_rss_items(xml_text)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("News items fetch failed for %s: %s", symbol, exc)
+        return []
+    return [_raw_item_to_news_item(item) for item in raw_items[:5]]
+
+
+def _raw_item_to_news_item(raw_item: dict[str, str]) -> NewsItem:
+    """Convert a parsed RSS item dict into a NewsItem model.
+
+    Args:
+        raw_item: Dict with title, source, link, and pubDate keys.
+
+    Returns:
+        NewsItem with an ISO 8601 published_at (None when unparsable).
+    """
+    return NewsItem(
+        title=raw_item.get("title", ""),
+        source=raw_item.get("source", ""),
+        link=raw_item.get("link") or None,
+        published_at=_parse_pub_date(raw_item.get("pubDate", "")),
+    )
+
+
+def _parse_pub_date(raw_date: str) -> Optional[str]:
+    """Convert an RFC 2822 pubDate into an ISO 8601 timestamp string.
+
+    Args:
+        raw_date: Raw pubDate string from the RSS feed.
+
+    Returns:
+        ISO 8601 string (e.g., "2026-09-12T09:00:00+00:00"), or None when
+        the date is empty or unparsable.
+
+    Example:
+        >>> _parse_pub_date("Mon, 12 Sep 2026 09:00:00 GMT")
+        '2026-09-12T09:00:00+00:00'
+    """
+    if not raw_date:
+        return None
+    try:
+        parsed_date = parsedate_to_datetime(raw_date)
+    except (TypeError, ValueError):
+        return None
+    if parsed_date.tzinfo is None:
+        parsed_date = parsed_date.replace(tzinfo=timezone.utc)
+    return parsed_date.isoformat()
