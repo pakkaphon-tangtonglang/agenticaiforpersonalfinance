@@ -45,6 +45,7 @@ from finance_ai.tools.receipt_ocr_service import confirm_receipt_transactions
 from finance_ai.tools.expense_constants import VALID_EXPENSE_CATEGORIES
 from finance_ai.tools.conversation_service import (
     create_conversation,
+    get_or_create_active_conversation,
     get_recent_history_as_tuples,
     list_user_conversations,
     load_conversation_messages,
@@ -282,6 +283,30 @@ class ConfirmTransactionRequest(BaseModel):
 # ──────────────────────────── Chat ────────────────────────────────
 
 
+def _resolve_conversation_id(
+    session: Session,
+    conversation_id: str | None,
+    user_id: str,
+) -> str:
+    """Return a real conversation id, creating one when missing/blank.
+
+    Postgres (unlike SQLite) rejects message writes whose conversation_id
+    is blank — a FK violation. Missing ids fall back to the user's latest
+    conversation (continuity), or a new one for first-time users.
+
+    Args:
+        session: Database session.
+        conversation_id: Client-supplied conversation UUID, if any.
+        user_id: User UUID.
+
+    Returns:
+        An existing or newly created conversation UUID.
+    """
+    if conversation_id:
+        return conversation_id
+    return get_or_create_active_conversation(session, user_id).id
+
+
 @app.post("/chat", response_model=ChatResponse)
 def chat(req: ChatRequest, session: Session = Depends(get_session)) -> ChatResponse:
     """Process a chat query (non-streaming).
@@ -293,8 +318,9 @@ def chat(req: ChatRequest, session: Session = Depends(get_session)) -> ChatRespo
     Returns:
         ChatResponse with intent and response text.
     """
-    history = _load_history(session, req.conversation_id)
-    save_user_message(session, req.conversation_id or "", req.query)
+    conversation_id = _resolve_conversation_id(session, req.conversation_id, req.user_id)
+    history = _load_history(session, conversation_id)
+    save_user_message(session, conversation_id, req.query)
 
     result = orchestrate_query(
         query=req.query,
@@ -304,7 +330,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_session)) -> ChatRespo
         chat_history=history,
     )
 
-    save_assistant_message(session, req.conversation_id or "", result["response"], result["intent"])
+    save_assistant_message(session, conversation_id, result["response"], result["intent"])
     return ChatResponse(intent=result["intent"], response=result["response"])
 
 
@@ -326,8 +352,9 @@ def chat_stream(
     Returns:
         StreamingResponse with Server-Sent Events.
     """
+    conversation_id = _resolve_conversation_id(session, conversation_id, user_id)
     history = _load_history(session, conversation_id)
-    save_user_message(session, conversation_id or "", query)
+    save_user_message(session, conversation_id, query)
 
     return StreamingResponse(
         _stream_generator(query, user_id, history, conversation_id, session),
@@ -339,7 +366,7 @@ def _stream_generator(
     query: str,
     user_id: str,
     history: list[tuple[str, str]],
-    conversation_id: str | None,
+    conversation_id: str,
     session: Session,
 ) -> Generator[str, None, None]:
     """Generate SSE events from the streaming agent.
@@ -372,7 +399,7 @@ def _stream_generator(
         if event.event_type == "token":
             full_response += event.content
 
-    save_assistant_message(session, conversation_id or "", full_response, intent)
+    save_assistant_message(session, conversation_id, full_response, intent)
 
 
 def _format_sse_event(event: StreamEvent) -> str | None:
