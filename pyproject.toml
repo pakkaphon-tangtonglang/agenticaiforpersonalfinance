@@ -51,6 +51,7 @@ dependencies = [
     # Thai language support
     "pythainlp>=5.0.6",
     "pyyaml>=6.0.3",
+    "line-bot-sdk>=3.25.0",
 ]
 
 [project.optional-dependencies]
@@ -172,6 +173,7 @@ module = [
     "openai.*",
     "openpyxl.*",
     "apscheduler.*",
+    "linebot.*",
 ]
 ignore_missing_imports = true
 
