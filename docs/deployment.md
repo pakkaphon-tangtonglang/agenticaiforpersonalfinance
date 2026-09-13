@@ -132,6 +132,8 @@ Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `a
 | Migration error ตอน deploy | ดู release log ตรวจ `DB_URL` ใน env vars |
 | ข้อมูลหายหลัง deploy | `DB_URL` ไม่ได้ตั้ง (ยังใช้ SQLite บนดิสก์ ephemeral) — ใส่ connection string ของ Neon |
 | เชื่อมต่อ Neon ไม่ได้ / connection timeout | ใช้ connection string ตัว **pooled** (`...-pooler...`) ไม่ใช่ตัว unpooled |
+| ส่ง/บันทึกข้อมูลไม่ได้ (500 เฉพาะ endpoint ที่เขียน, อ่านได้ปกติ) | บน Postgres FK ถูกบังคับจริง (ต่างจาก SQLite) — ระบบจะ auto-create user ให้เองตั้งแต่ `4ac76c0`; ถ้ายังพังดู release log ว่า deploy ล่าสุดรวมโค้ดนี้แล้ว |
+| `/chat` ตอบ 500 ทันที (อ่าน DB ได้ปกติ) | LLM call พัง — เช็ค `OLLAMA_API_KEY` ใน Render dashboard (key หาย/หมดอายุ), ทดสอบ key เดียวกันจากเครื่อง local ก่อน |
 
 ### การพัฒนาต่อในอนาคต
 
@@ -258,6 +260,8 @@ works under the `/~<username>/` sub-path.
 | Migration error during deploy | Check the release log and the `DB_URL` env var |
 | Data lost after deploy | `DB_URL` is not set (still on ephemeral-disk SQLite) — set the Neon connection string |
 | Neon connection fails / times out | Use the **pooled** connection string (`...-pooler...`), not the unpooled one |
+| Writes fail with 500 (reads work fine) | Postgres enforces foreign keys (SQLite did not) — `ensure_user_exists` auto-creates missing users since `4ac76c0`; if it still fails, check the release log includes that commit |
+| `/chat` returns 500 instantly (DB reads fine) | The LLM call is failing — check `OLLAMA_API_KEY` in the Render dashboard (missing/expired key); test the same key locally first |
 
 ### Future improvements
 
