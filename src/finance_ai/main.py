@@ -1073,7 +1073,11 @@ def _save_risk_assessment(
     from finance_ai.database.models.risk_assessment import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
         RiskAssessment,
     )
+    from finance_ai.tools.user_provisioning_service import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        ensure_user_exists,
+    )
 
+    ensure_user_exists(session, req.user_id)
     assessment = RiskAssessment(
         user_id=req.user_id,
         answers=req.answers,

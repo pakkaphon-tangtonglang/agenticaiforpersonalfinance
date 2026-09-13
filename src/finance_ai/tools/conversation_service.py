@@ -41,6 +41,11 @@ def create_conversation(
     Example:
         >>> conv = create_conversation(session, "user-123")
     """
+    from finance_ai.tools.user_provisioning_service import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        ensure_user_exists,
+    )
+
+    ensure_user_exists(session, user_id)
     conversation = _conversation_crud.create(session, user_id=user_id, title=title)
     session.commit()
     session.refresh(conversation)
