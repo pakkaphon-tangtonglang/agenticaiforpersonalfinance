@@ -246,3 +246,56 @@ class TestComparisonErrorClassification:
 
         assert "line one" in markdown
         assert "line three" not in markdown
+
+
+class TestConcurrentComparison:
+    """Tests for parallel candidate evaluation."""
+
+    def test_parallel_run_preserves_spec_order(self) -> None:
+        """max_workers>1 evaluates concurrently but keeps input order."""
+        specs = [ModelSpec(provider="ollama", model_name=f"model-{index}") for index in range(4)]
+        runners = {}
+        for spec in specs:
+            runner = MagicMock()
+            runner.run_routing.return_value = _routing_result(
+                f"0.{8 - specs.index(spec)}", float(specs.index(spec) + 1)
+            )
+            runners[spec.model_name] = runner
+
+        result = run_model_comparison(
+            specs,
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runners[spec.model_name],
+            max_workers=3,
+        )
+
+        assert [e.model_name for e in result.entries] == [s.model_name for s in specs]
+        assert all(e.status == "ok" for e in result.entries)
+
+    def test_parallel_run_uses_multiple_threads(self) -> None:
+        """Concurrent evaluation spreads work across worker threads."""
+        import threading  # noqa: PLC0415
+
+        thread_names: list[str] = []
+        barrier = threading.Barrier(3, timeout=10)
+
+        def _factory(spec: ModelSpec) -> Any:
+            barrier.wait()
+            thread_names.append(threading.current_thread().name)
+            return MagicMock()
+
+        def _runner_factory(model: Any, spec: ModelSpec) -> Any:
+            runner = MagicMock()
+            runner.run_routing.return_value = _routing_result("0.90", 1.0)
+            return runner
+
+        specs = [ModelSpec(provider="ollama", model_name=f"m{i}") for i in range(3)]
+        result = run_model_comparison(
+            specs,
+            model_factory=_factory,
+            runner_factory=_runner_factory,
+            max_workers=3,
+        )
+
+        assert len(result.entries) == 3
+        assert len(set(thread_names)) > 1
