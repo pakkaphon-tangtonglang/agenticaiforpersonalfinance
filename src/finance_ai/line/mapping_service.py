@@ -7,7 +7,7 @@ from finance_ai.database.models.line_user_mapping import LineUserMapping
 from finance_ai.database.models.user import User
 from finance_ai.tools.conversation_service import create_conversation
 
-_LINE_EMAIL_DOMAIN = "line.users.finance-ai.local"
+LINE_EMAIL_DOMAIN = "line.users.finance-ai.local"
 
 
 def get_or_create_line_mapping(session: Session, line_user_id: str) -> LineUserMapping:
@@ -37,7 +37,7 @@ def get_or_create_line_mapping(session: Session, line_user_id: str) -> LineUserM
 def _create_line_mapping(session: Session, line_user_id: str) -> LineUserMapping:
     """Create the backing user, default conversation, and mapping row."""
     user = User(
-        email=f"line-{line_user_id}@{_LINE_EMAIL_DOMAIN}",
+        email=f"line-{line_user_id}@{LINE_EMAIL_DOMAIN}",
         hashed_password="line-login-not-supported",
         full_name="ผู้ใช้ LINE",
     )

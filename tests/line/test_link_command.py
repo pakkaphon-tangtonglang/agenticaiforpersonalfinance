@@ -4,7 +4,12 @@ from sqlalchemy.orm import Session
 
 from finance_ai.database.models.line_user_mapping import LineUserMapping
 from finance_ai.database.models.user import User
-from finance_ai.line.link_command import link_line_user, parse_link_command
+from finance_ai.line.link_command import (
+    link_line_user,
+    parse_link_command,
+    parse_unlink_command,
+    unlink_line_user,
+)
 from finance_ai.line.mapping_service import get_or_create_line_mapping
 
 LINE_USER_ID = "Uline-user-link"
@@ -79,3 +84,57 @@ class TestLinkLineUser:
         success, message = link_line_user(test_session, "Unever-seen-before", TARGET_USER_ID)
         assert success is False
         assert "ไม่พบ" in message
+
+
+class TestParseUnlinkCommand:
+    """Tests for parse_unlink_command."""
+
+    def test_thai_command_matches(self) -> None:
+        """'ยกเลิกเชื่อมต่อ' is an unlink command."""
+        assert parse_unlink_command("ยกเลิกเชื่อมต่อ") is True
+
+    def test_english_command_case_insensitive(self) -> None:
+        """'UNLINK' and 'unlink' are unlink commands."""
+        assert parse_unlink_command("UNLINK") is True
+        assert parse_unlink_command("unlink") is True
+
+    def test_normal_text_is_not_unlink(self) -> None:
+        """Chat messages and link commands are not unlink commands."""
+        assert parse_unlink_command("ภาษีของฉันเท่าไหร่") is False
+        assert parse_unlink_command(f"เชื่อมต่อ {TARGET_USER_ID}") is False
+
+
+class TestUnlinkLineUser:
+    """Tests for unlink_line_user."""
+
+    def _seed_mapping(self, session: Session) -> LineUserMapping:
+        """Create the auto-generated LINE mapping."""
+        return get_or_create_line_mapping(session, LINE_USER_ID)
+
+    def test_restores_original_line_user(self, test_session: Session) -> None:
+        """After unlink, the mapping points back at the auto-created user."""
+        mapping = self._seed_mapping(test_session)
+        original_user_id = mapping.user_id
+
+        test_session.add(
+            User(
+                id=TARGET_USER_ID,
+                email="web@finance-ai.local",
+                hashed_password="not-a-login",
+                full_name="ผู้ใช้เว็บ",
+            )
+        )
+        test_session.commit()
+        link_line_user(test_session, LINE_USER_ID, TARGET_USER_ID)
+        success, message = unlink_line_user(test_session, LINE_USER_ID)
+
+        assert success is True
+        assert "ยกเลิก" in message
+        mapping = test_session.query(LineUserMapping).filter_by(line_user_id=LINE_USER_ID).one()
+        assert mapping.user_id == original_user_id
+
+    def test_without_mapping_replies_error(self, test_session: Session) -> None:
+        """A LINE user that never chatted cannot unlink."""
+        success, message = unlink_line_user(test_session, "Unever-seen")
+        assert success is False
+        assert "ยังไม่มีการเชื่อมต่อ" in message

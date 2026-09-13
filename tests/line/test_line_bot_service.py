@@ -79,3 +79,19 @@ class TestProcessLineMessage:
         factory = sessionmaker(bind=test_session.get_bind())
         reply = process_line_message(factory, None, LINE_USER_ID, f"เชื่อมต่อ {target_user_id}")
         assert "เชื่อมต่อบัญชีเรียบร้อย" in reply
+
+    def test_unlink_command_short_circuits_agent(
+        self,
+        test_session: Session,
+        monkeypatch: Any,
+    ) -> None:
+        """An unlink command replies directly without invoking any agent."""
+        get_or_create_line_mapping(test_session, LINE_USER_ID)
+
+        def fail_orchestrate(**kwargs: Any) -> dict[str, str]:
+            raise AssertionError("agent must not run for unlink commands")
+
+        monkeypatch.setattr("finance_ai.line.line_bot_service.orchestrate_query", fail_orchestrate)
+        factory = sessionmaker(bind=test_session.get_bind())
+        reply = process_line_message(factory, None, LINE_USER_ID, "ยกเลิกเชื่อมต่อ")
+        assert "ยกเลิกการเชื่อมต่อเรียบร้อย" in reply

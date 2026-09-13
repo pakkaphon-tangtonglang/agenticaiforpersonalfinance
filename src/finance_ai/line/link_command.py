@@ -1,9 +1,10 @@
-"""LINE command linking a LINE account to an existing web-app user.
+"""LINE commands linking a LINE account to an existing web-app user.
 
 The web frontend identifies users by a random UUID stored in the
 browser (localStorage 'pfai_uid'). Sending `เชื่อมต่อ <user-id>` in
 LINE re-points this LINE account's mapping at that user so both
-surfaces share the same finances.
+surfaces share the same finances; `ยกเลิกเชื่อมต่อ` restores the
+auto-created LINE-only user.
 """
 
 from sqlalchemy import select
@@ -11,8 +12,10 @@ from sqlalchemy.orm import Session
 
 from finance_ai.database.models.line_user_mapping import LineUserMapping
 from finance_ai.database.models.user import User
+from finance_ai.line.mapping_service import LINE_EMAIL_DOMAIN
 
 LINK_COMMAND_PREFIXES = ("เชื่อมต่อ", "link")
+UNLINK_COMMANDS = ("ยกเลิกเชื่อมต่อ", "unlink")
 
 
 def parse_link_command(text: str) -> str | None:
@@ -61,3 +64,59 @@ def link_line_user(session: Session, line_user_id: str, target_user_id: str) -> 
     session.commit()
     display_name = target_user.full_name or target_user.email
     return True, f"เชื่อมต่อบัญชีเรียบร้อยแล้วครับ ({display_name}) ข้อมูลการเงินชุดนี้จะใช้ทั้งในแชท LINE และหน้าเว็บ"
+
+
+def parse_unlink_command(text: str) -> bool:
+    """Return True when the text is an unlink command.
+
+    Args:
+        text: Raw message text from the LINE user.
+
+    Returns:
+        bool: True for 'ยกเลิกเชื่อมต่อ' or 'unlink' (case-insensitive).
+
+    Example:
+        >>> parse_unlink_command("UNLINK")
+        True
+    """
+    return text.strip().lower() in UNLINK_COMMANDS
+
+
+def unlink_line_user(session: Session, line_user_id: str) -> tuple[bool, str]:
+    """Restore a LINE mapping to its auto-created LINE-only user.
+
+    Args:
+        session: Database session.
+        line_user_id: LINE platform userId of the sender.
+
+    Returns:
+        (success, thai_message) — success is True when the mapping again
+        points at the LINE-only account; the message is the bot's reply.
+
+    Example:
+        >>> unlink_line_user(session, "U4af...")
+        (True, 'ยกเลิกการเชื่อมต่อเรียบร้อยครับ ...')
+    """
+    mapping = session.scalar(
+        select(LineUserMapping).where(LineUserMapping.line_user_id == line_user_id)
+    )
+    if mapping is None:
+        return False, "ยังไม่มีการเชื่อมต่อบัญชีอยู่ครับ"
+    mapping.user_id = _get_or_create_line_only_user(session, line_user_id).id
+    session.commit()
+    return True, "ยกเลิกการเชื่อมต่อเรียบร้อยครับ กลับไปใช้บัญชีเดิมของแชท LINE นี้แล้ว"
+
+
+def _get_or_create_line_only_user(session: Session, line_user_id: str) -> User:
+    """Return the auto-created user for a LINE account, recreating if needed."""
+    line_email = f"line-{line_user_id}@{LINE_EMAIL_DOMAIN}"
+    user = session.scalar(select(User).where(User.email == line_email))
+    if user is None:
+        user = User(
+            email=line_email,
+            hashed_password="line-login-not-supported",
+            full_name="ผู้ใช้ LINE",
+        )
+        session.add(user)
+        session.flush()
+    return user

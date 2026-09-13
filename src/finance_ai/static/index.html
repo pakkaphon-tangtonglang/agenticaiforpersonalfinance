@@ -50,6 +50,7 @@
 
     <div class="user-box">
       <span class="user-id" id="userIdLabel">—</span>
+      <button class="user-reset" id="connectLineBtn" type="button" title="เชื่อมต่อบัญชี LINE">เชื่อมต่อ LINE</button>
       <button class="user-reset" id="resetUserBtn" type="button" title="สร้างไอดีใหม่">รีเซ็ต</button>
     </div>
   </aside>
@@ -307,6 +308,28 @@
 
 <!-- Toast -->
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<!-- Connect LINE modal -->
+<div class="modal-overlay" id="lineModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="lineModalTitle">
+    <header class="modal-head">
+      <h2 class="modal-title" id="lineModalTitle">เชื่อมต่อบัญชีกับ LINE</h2>
+    </header>
+    <div class="modal-body">
+      <p class="line-modal-text">คุยกับผู้ช่วยการเงินในแอป LINE โดยใช้ข้อมูลชุดเดียวกับหน้าเว็บนี้</p>
+      <ol class="line-modal-steps">
+        <li>กดปุ่ม "คัดลอกคำสั่ง" ด้านล่าง</li>
+        <li>ส่งข้อความนั้นในแชท LINE กับบอทของเรา</li>
+        <li>รับคำตอบที่อิงข้อมูลของคุณใน LINE</li>
+      </ol>
+      <code class="line-command" id="lineCommandText"></code>
+    </div>
+    <footer class="modal-foot">
+      <button class="btn btn-ghost" id="closeLineModalBtn" type="button">ปิด</button>
+      <button class="btn" id="copyLineCmdBtn" type="button">คัดลอกคำสั่ง</button>
+    </footer>
+  </div>
+</div>
 
 <!-- Risk assessment onboarding modal -->
 <div class="modal-overlay" id="riskModal" hidden>
