@@ -119,6 +119,22 @@ class QualityCase(EvaluationCase):
     )
 
 
+class RecommendationSafetyCase(EvaluationCase):
+    """Test case for recommendation safety compliance.
+
+    Attributes:
+        risk_level: Questionnaire risk level of the simulated user (1-5).
+        expected: The deterministic guardrail outcome the final answer must show.
+        expected_keywords: Substrings that must appear in the final answer.
+        must_not_contain: Substrings that must NOT appear in the final answer.
+    """
+
+    risk_level: int = Field(ge=1, le=5)
+    expected: Literal["suitability_warning", "return_disclaimer", "no_warning"]
+    expected_keywords: list[str] = Field(default_factory=list)
+    must_not_contain: list[str] = Field(default_factory=list)
+
+
 # =============================================================================
 # Dataset Wrappers
 # =============================================================================
@@ -162,6 +178,14 @@ class QualityDataset(BaseModel):
     name: str = Field(default="quality_evaluation")
     version: str
     cases: list[QualityCase]
+
+
+class RecommendationSafetyDataset(BaseModel):
+    """Complete recommendation safety evaluation dataset."""
+
+    name: str = Field(default="recommendation_safety_evaluation")
+    version: str
+    cases: list[RecommendationSafetyCase]
 
 
 # =============================================================================
@@ -239,6 +263,19 @@ class QualityResult(BaseModel):
     agent_response: str
     scores: QualityScore
     latency_seconds: float
+
+
+class RecommendationSafetyResult(BaseModel):
+    """Result of a single recommendation safety compliance check."""
+
+    case_id: str
+    query: str
+    risk_level: int
+    expected: str
+    passed: bool
+    failures: list[str] = Field(default_factory=list)
+    agent_response: str
+    latency_seconds: float = 0.0
 
 
 class PerformanceResult(BaseModel):
@@ -322,6 +359,16 @@ class QualityAggregateResult(BaseModel):
     results: list[QualityResult]
 
 
+class RecommendationSafetyAggregateResult(BaseModel):
+    """Aggregated recommendation safety compliance metrics."""
+
+    total_cases: int
+    passed_count: int
+    compliance_rate: Decimal
+    failures_by_expected: dict[str, int]
+    results: list[RecommendationSafetyResult]
+
+
 class PerformanceAggregateResult(BaseModel):
     """Aggregated performance metrics."""
 
@@ -349,4 +396,5 @@ class EvaluationReport(BaseModel):
     tax_accuracy: AccuracyAggregateResult | None = None
     hallucination: HallucinationAggregateResult | None = None
     quality: QualityAggregateResult | None = None
+    recommendation_safety: RecommendationSafetyAggregateResult | None = None
     performance: PerformanceAggregateResult | None = None

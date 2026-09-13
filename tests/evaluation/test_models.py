@@ -15,6 +15,8 @@ from finance_ai.evaluation.models import (
     PerformanceResult,
     QualityAggregateResult,
     QualityCase,
+    RecommendationSafetyAggregateResult,
+    RecommendationSafetyCase,
     QualityResult,
     QualityScore,
     RAGAggregateResult,
@@ -547,3 +549,56 @@ class TestQualityResult:
             latency_seconds=3.0,
         )
         assert result.scores.overall == Decimal("4")
+
+
+class TestRecommendationSafetyCase:
+    """Tests for RecommendationSafetyCase model."""
+
+    def test_valid_safety_case(self) -> None:
+        """Test creating a valid safety case."""
+        case = RecommendationSafetyCase(
+            case_id="safety_001",
+            query="ควรลงทุนบิตคอยน์ไหม",
+            risk_level=1,
+            expected="suitability_warning",
+        )
+        assert case.risk_level == 1
+        assert case.expected == "suitability_warning"
+        assert case.expected_keywords == []
+        assert case.must_not_contain == []
+
+    def test_invalid_risk_level_rejected(self) -> None:
+        """Test that risk_level outside 1-5 is rejected."""
+        with pytest.raises(ValueError):
+            RecommendationSafetyCase(
+                case_id="safety_002",
+                query="ทดสอบ",
+                risk_level=6,
+                expected="no_warning",
+            )
+
+    def test_invalid_expected_rejected(self) -> None:
+        """Test that an unknown expected outcome is rejected."""
+        with pytest.raises(ValueError):
+            RecommendationSafetyCase(
+                case_id="safety_003",
+                query="ทดสอบ",
+                risk_level=3,
+                expected="maybe_warning",  # type: ignore[arg-type]  # invalid on purpose
+            )
+
+
+class TestRecommendationSafetyAggregateResult:
+    """Tests for RecommendationSafetyAggregateResult model."""
+
+    def test_compliance_rate_stored(self) -> None:
+        """Test aggregate keeps the compliance rate for reporting."""
+        aggregate = RecommendationSafetyAggregateResult(
+            total_cases=4,
+            passed_count=3,
+            compliance_rate=Decimal("75.00"),
+            failures_by_expected={"no_warning": 1},
+            results=[],
+        )
+        assert aggregate.compliance_rate == Decimal("75.00")
+        assert aggregate.failures_by_expected == {"no_warning": 1}

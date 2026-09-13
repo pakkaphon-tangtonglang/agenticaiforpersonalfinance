@@ -9,6 +9,7 @@ from finance_ai.evaluation.models import (
     HallucinationDataset,
     QualityDataset,
     RAGDataset,
+    RecommendationSafetyDataset,
     RoutingDataset,
     TaxAccuracyDataset,
 )
@@ -118,3 +119,20 @@ def load_quality_dataset(path: str) -> QualityDataset:
     """
     data = _load_yaml_file(path)
     return QualityDataset(**data)
+
+
+def load_recommendation_safety_dataset(path: str) -> RecommendationSafetyDataset:
+    """Load a recommendation safety evaluation dataset from YAML.
+
+    Args:
+        path: Path to the YAML file.
+
+    Returns:
+        Parsed RecommendationSafetyDataset.
+
+    Example:
+        >>> dataset = load_recommendation_safety_dataset(
+        ...     "data/evaluation/recommendation_safety_dataset.yaml")
+    """
+    data = _load_yaml_file(path)
+    return RecommendationSafetyDataset(**data)

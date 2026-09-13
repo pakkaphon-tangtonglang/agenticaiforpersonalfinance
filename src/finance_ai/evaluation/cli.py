@@ -28,6 +28,7 @@ VALID_EVAL_TYPES = (
     "accuracy-forced",
     "hallucination",
     "quality",
+    "safety",
     "performance",
     "all",
 )
@@ -96,7 +97,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--skip",
         nargs="+",
         default=[],
-        choices=["routing", "rag", "accuracy", "hallucination", "quality", "performance"],
+        choices=["routing", "rag", "accuracy", "hallucination", "quality", "safety", "performance"],
         help="Dimensions to skip (e.g., --skip rag quality).",
     )
     parser.add_argument(
@@ -191,6 +192,7 @@ def _run_selected_evaluation(
         "accuracy-forced": ("tax_accuracy", runner.run_tax_accuracy_forced),
         "hallucination": ("hallucination", runner.run_hallucination),
         "quality": ("quality", runner.run_quality),
+        "safety": ("recommendation_safety", runner.run_recommendation_safety),
         "performance": ("performance", runner.run_performance),
     }
     if eval_type in eval_map:

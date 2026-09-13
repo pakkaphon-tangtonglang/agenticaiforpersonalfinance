@@ -50,6 +50,7 @@ class TestEvaluationCli:
         assert "all" in VALID_EVAL_TYPES
         assert "routing" in VALID_EVAL_TYPES
         assert "accuracy-forced" in VALID_EVAL_TYPES
+        assert "safety" in VALID_EVAL_TYPES
 
     def test_valid_providers(self) -> None:
         """VALID_PROVIDERS contains expected entries."""
@@ -124,6 +125,14 @@ class TestRunSelectedEvaluation:
         report = _run_selected_evaluation(runner, "routing")
         runner.run_routing.assert_called_once_with()
         assert report.routing is runner.run_routing.return_value
+
+    def test_run_safety(self) -> None:
+        """'safety' eval type calls run_recommendation_safety and sets field."""
+        runner = MagicMock()
+        runner.run_recommendation_safety.return_value = MagicMock()
+        report = _run_selected_evaluation(runner, "safety")
+        runner.run_recommendation_safety.assert_called_once_with()
+        assert report.recommendation_safety is runner.run_recommendation_safety.return_value
 
     def test_run_accuracy_forced(self) -> None:
         """'accuracy-forced' eval type calls run_tax_accuracy_forced."""

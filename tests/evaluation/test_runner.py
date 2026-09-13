@@ -7,6 +7,7 @@ from finance_ai.evaluation.models import (
     AccuracyAggregateResult,
     HallucinationAggregateResult,
     RAGAggregateResult,
+    RecommendationSafetyAggregateResult,
     RoutingAggregateResult,
 )
 from finance_ai.evaluation.runner import EvaluationRunner
@@ -129,3 +130,35 @@ class TestEvaluationRunner:
 
         with pytest.raises(ValueError, match="Judge model required"):
             runner.run_quality()
+
+
+class TestRunRecommendationSafety:
+    """Tests for run_recommendation_safety."""
+
+    @patch("finance_ai.evaluation.runner.generate_safety_responses")
+    @patch("finance_ai.evaluation.runner.evaluate_safety_dataset")
+    @patch("finance_ai.evaluation.runner.load_recommendation_safety_dataset")
+    def test_generates_then_evaluates(
+        self,
+        mock_load: MagicMock,
+        mock_eval: MagicMock,
+        mock_generate: MagicMock,
+    ) -> None:
+        """run_recommendation_safety generates responses then evaluates."""
+        expected = RecommendationSafetyAggregateResult(
+            total_cases=1,
+            passed_count=1,
+            compliance_rate=Decimal("1.0000"),
+            failures_by_expected={},
+            results=[],
+        )
+        mock_eval.return_value = expected
+        mock_generate.return_value = ({"s1": "ok"}, {"s1": True})
+        runner = _make_runner()
+
+        result = runner.run_recommendation_safety()
+
+        assert result is expected
+        mock_load.assert_called_once_with("data/evaluation/recommendation_safety_dataset.yaml")
+        mock_generate.assert_called_once()
+        mock_eval.assert_called_once()
