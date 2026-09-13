@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Callable
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from finance_ai.core.logging import get_logger
 from finance_ai.evaluation.models import (
@@ -137,6 +137,15 @@ def _compare_single_model(
         model = factory(spec)
         runner = _build_runner(model, spec, data_dir, runner_factory)
         routing = runner.run_routing()
+    except ValidationError as exc:
+        # Dataset/config problems are real failures — not missing
+        # credentials (ValidationError subclasses ValueError).
+        return ModelComparisonEntry(
+            provider=spec.provider,
+            model_name=spec.model_name,
+            status="error",
+            error_message=str(exc),
+        )
     except ValueError as exc:
         return _skipped_entry(spec, exc)
     except Exception as exc:  # pylint: disable=broad-exception-caught
@@ -283,17 +292,36 @@ def _format_entry_row(entry: ModelComparisonEntry) -> str:
 
 
 def _format_skipped_notes(entries: list[ModelComparisonEntry]) -> str:
-    """Collect skip reasons as markdown footnotes.
+    """Collect skip/error reasons as markdown footnotes.
+
+    Long messages (e.g. multi-field pydantic errors) are truncated to
+    their first line so the table stays readable.
 
     Args:
         entries: Comparison entries.
 
     Returns:
-        Footnote lines (empty string when nothing was skipped).
+        Footnote lines (empty string when everything ran).
     """
     notes = [
-        f"- {entry.model_name}: {entry.error_message}"
+        f"- {entry.model_name}: {_first_line(entry.error_message, limit=160)}"
         for entry in entries
-        if entry.status == "skipped"
+        if entry.status in ("skipped", "error")
     ]
     return "\n".join(notes) + "\n" if notes else ""
+
+
+def _first_line(message: str, limit: int) -> str:
+    """Return the first line of a message, truncated to a length cap.
+
+    Args:
+        message: Full error/skip message.
+        limit: Maximum characters to keep.
+
+    Returns:
+        Single-line summary with an ellipsis marker when truncated.
+    """
+    first = message.splitlines()[0] if message else ""
+    if len(first) > limit:
+        return first[:limit] + "..."
+    return first

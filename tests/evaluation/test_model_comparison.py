@@ -188,3 +188,61 @@ class TestComparisonReport:
 
         assert dumped["entries"][0]["model_name"] == "minimax-m3"
         assert dumped["dimension"] == "routing"
+
+
+class TestComparisonErrorClassification:
+    """Tests distinguishing skipped (missing key) from error (bad data)."""
+
+    def test_validation_error_is_error_not_skipped(self) -> None:
+        """Dataset ValidationError must be 'error', not 'skipped'.
+
+        pydantic ValidationError subclasses ValueError, so the skip
+        path (missing credentials) must not swallow it.
+        """
+        import pytest  # noqa: PLC0415
+        from typing import cast  # noqa: PLC0415
+        from finance_ai.evaluation.models import RoutingCase  # noqa: PLC0415
+
+        def _raising_run_routing() -> None:
+            invalid_intent = cast(Any, "bogus")
+            RoutingCase(case_id="x", query="y", expected_intent=invalid_intent)
+
+        runner = MagicMock()
+        runner.run_routing.side_effect = _raising_run_routing
+        result = run_model_comparison(
+            [ModelSpec(provider="ollama", model_name="minimax-m3")],
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runner,
+        )
+
+        entry = result.entries[0]
+        assert entry.status == "error"
+        assert "expected_intent" in entry.error_message
+
+    def test_missing_key_still_skipped(self) -> None:
+        """A plain ValueError (missing API key) stays 'skipped'."""
+
+        def _fail(spec: ModelSpec) -> Any:
+            raise ValueError("ollama_api_key is required")
+
+        result = run_model_comparison(
+            [ModelSpec(provider="ollama", model_name="minimax-m3")],
+            model_factory=_fail,
+            runner_factory=lambda model, spec: MagicMock(),
+        )
+
+        assert result.entries[0].status == "skipped"
+
+    def test_long_error_messages_truncated_in_markdown(self) -> None:
+        """Multi-line error messages collapse to one line in markdown."""
+        runner = MagicMock()
+        runner.run_routing.side_effect = RuntimeError("line one\nline two\nline three")
+        result = run_model_comparison(
+            [ModelSpec(provider="ollama", model_name="bad-model")],
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runner,
+        )
+        markdown = format_comparison_markdown(result)
+
+        assert "line one" in markdown
+        assert "line three" not in markdown

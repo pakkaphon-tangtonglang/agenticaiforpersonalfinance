@@ -66,31 +66,31 @@ cases:
   # === Investment ===
   - case_id: "route_invest_001"
     query: "ดูพอร์ตการลงทุนของฉัน"
-    expected_intent: "investment"
+    expected_intent: "asset_monitoring"
     difficulty: "easy"
     tags: ["investment", "portfolio"]
 
   - case_id: "route_invest_002"
     query: "ราคาหุ้น PTT วันนี้เท่าไหร่"
-    expected_intent: "investment"
+    expected_intent: "asset_monitoring"
     difficulty: "easy"
     tags: ["investment", "price"]
 
   - case_id: "route_invest_003"
     query: "ซื้อหุ้น ADVANC 100 หุ้น ราคา 200 บาท"
-    expected_intent: "investment"
+    expected_intent: "asset_monitoring"
     difficulty: "easy"
     tags: ["investment", "trade"]
 
   - case_id: "route_invest_004"
     query: "กำไรขาดทุนพอร์ตเป็นเท่าไหร่"
-    expected_intent: "investment"
+    expected_intent: "asset_monitoring"
     difficulty: "medium"
     tags: ["investment", "pnl"]
 
   - case_id: "route_invest_005"
     query: "สัดส่วนพอร์ตเป็นยังไงบ้าง"
-    expected_intent: "investment"
+    expected_intent: "asset_monitoring"
     difficulty: "medium"
     tags: ["investment", "allocation"]
 
@@ -206,9 +206,9 @@ cases:
 
   - case_id: "route_ambig_003"
     query: "หุ้นที่ซื้อขาดทุน ควรขายเพื่อลดหย่อนภาษีมั้ย"
-    expected_intent: "investment"
+    expected_intent: "asset_monitoring"
     difficulty: "hard"
-    description: "Mix of investment and tax. Investment is primary intent."
+    description: "Mix of investment and tax. Asset monitoring is primary intent."
     tags: ["ambiguous", "investment", "tax"]
 
   - case_id: "route_ambig_004"

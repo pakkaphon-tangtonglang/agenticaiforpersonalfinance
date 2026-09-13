@@ -189,3 +189,29 @@ cases:
         """Test that missing file raises FileNotFoundError."""
         with pytest.raises(FileNotFoundError):
             load_recommendation_safety_dataset("/nonexistent/safety.yaml")
+
+
+class TestProductionDatasetsValidate:
+    """Regression tests: on-disk datasets must validate against models.
+
+    Guards against label drift between dataset YAML and the pydantic
+    Literal types (caught live during the 2026-09-14 model comparison).
+    """
+
+    def test_routing_dataset_file_validates(self) -> None:
+        """The production routing dataset validates against RoutingCase."""
+        dataset = load_routing_dataset("data/evaluation/routing_dataset.yaml")
+
+        assert dataset is not None
+        assert len(dataset.cases) >= 30
+        intents = {case.expected_intent for case in dataset.cases}
+        assert intents <= {
+            "tax",
+            "expense",
+            "asset_monitoring",
+            "planning",
+            "recommendation",
+            "report",
+            "general",
+            "unknown",
+        }
