@@ -173,6 +173,37 @@ class TestCreateChatModel:
         mock_get_settings.assert_called_once()
 
 
+class TestCreateChatModelTemperatureOverride:
+    """Tests for the temperature override parameter."""
+
+    @patch("finance_ai.agents.llm_factory.create_google_chat_model")
+    def test_override_replaces_temperature(self, mock_google: MagicMock) -> None:
+        """Dispatches with llm_temperature replaced by the override value."""
+        settings = Settings(llm_provider="google", google_api_key="test-key", llm_temperature=0.7)
+        create_chat_model(settings, temperature=0.2)
+        called_settings = mock_google.call_args[0][0]
+        assert called_settings.llm_temperature == 0.2
+
+    @patch("finance_ai.agents.llm_factory.create_google_chat_model")
+    def test_no_override_keeps_settings_object(self, mock_google: MagicMock) -> None:
+        """Without override, the settings object passes through unchanged."""
+        settings = Settings(llm_provider="google", google_api_key="test-key")
+        create_chat_model(settings)
+        assert mock_google.call_args[0][0] is settings
+
+    @patch("finance_ai.agents.llm_factory.get_settings")
+    @patch("finance_ai.agents.llm_factory.create_google_chat_model")
+    def test_override_with_default_settings(
+        self,
+        mock_google: MagicMock,
+        mock_get_settings: MagicMock,
+    ) -> None:
+        """Works with get_settings() default plus an explicit override."""
+        mock_get_settings.return_value = Settings(_env_file=None, google_api_key="test-key")
+        create_chat_model(temperature=0.4)
+        assert mock_google.call_args[0][0].llm_temperature == 0.4
+
+
 class TestCreateOcrGoogleChatModel:
     """Tests for the OCR Google ChatModel creation."""
 
