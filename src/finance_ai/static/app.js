@@ -103,6 +103,27 @@
     label.title = state.userId;
   }
 
+  // ─── Connect LINE ───
+  function openLineModal() {
+    $("lineCommandText").textContent = "เชื่อมต่อ " + state.userId;
+    $("copyLineCmdBtn").textContent = "คัดลอกคำสั่ง";
+    $("lineModal").hidden = false;
+  }
+
+  function closeLineModal() {
+    $("lineModal").hidden = true;
+  }
+
+  async function copyLineCommand() {
+    const command = "เชื่อมต่อ " + state.userId;
+    try {
+      await navigator.clipboard.writeText(command);
+      $("copyLineCmdBtn").textContent = "คัดลอกแล้ว ✓";
+    } catch (_err) {
+      window.prompt("คัดลอกคำสั่ง:", command);
+    }
+  }
+
   function resetUser() {
     localStorage.removeItem("pfai_uid");
     localStorage.removeItem("pfai_conv");
@@ -1379,6 +1400,9 @@
       n.addEventListener("click", () => switchView(n.dataset.view)));
     $("newChatBtn").addEventListener("click", newConversation);
     $("resetUserBtn").addEventListener("click", resetUser);
+    $("connectLineBtn").addEventListener("click", openLineModal);
+    $("closeLineModalBtn").addEventListener("click", closeLineModal);
+    $("copyLineCmdBtn").addEventListener("click", copyLineCommand);
     $("healthChip").addEventListener("click", () => switchView("dashboard"));
     $("menuToggle").addEventListener("click", () => $("sidebar").classList.toggle("open"));
   }

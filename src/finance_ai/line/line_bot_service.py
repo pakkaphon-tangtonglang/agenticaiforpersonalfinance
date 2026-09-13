@@ -7,7 +7,12 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from finance_ai.agents.router_agent import orchestrate_query
 from finance_ai.database.models.line_user_mapping import LineUserMapping
-from finance_ai.line.link_command import link_line_user, parse_link_command
+from finance_ai.line.link_command import (
+    link_line_user,
+    parse_link_command,
+    parse_unlink_command,
+    unlink_line_user,
+)
 from finance_ai.line.mapping_service import get_or_create_line_mapping
 from finance_ai.line.messaging_client import send_line_push
 from finance_ai.tools.conversation_service import (
@@ -66,11 +71,14 @@ def process_line_message(
 
 
 def _maybe_handle_link_command(session: Session, mapping: LineUserMapping, text: str) -> str | None:
-    """Handle a 'เชื่อมต่อ <user-id>' command, or return None to run the agent."""
-    target_user_id = parse_link_command(text)
-    if target_user_id is None:
-        return None
-    success, reply = link_line_user(session, mapping.line_user_id, target_user_id)
+    """Handle link/unlink commands, or return None to run the agent."""
+    if parse_unlink_command(text):
+        success, reply = unlink_line_user(session, mapping.line_user_id)
+    else:
+        target_user_id = parse_link_command(text)
+        if target_user_id is None:
+            return None
+        success, reply = link_line_user(session, mapping.line_user_id, target_user_id)
     intent = "link_success" if success else "link_failed"
     save_assistant_message(session, mapping.conversation_id, reply, intent)
     return reply
