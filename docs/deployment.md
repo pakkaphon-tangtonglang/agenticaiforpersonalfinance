@@ -9,14 +9,24 @@ iHost only runs PHP, so the FastAPI backend cannot live there. The frontend
 is static HTML/JS and calls the backend over HTTPS via `config.js`.
 
 ```
-Browser
+Browser                                    LINE app
+  │                                           │
+  ▼                                           ▼
+https://www.it.kmitl.ac.th/~<username>   POST /line/webhook
+  │   fetch() / EventSource ผ่าน window.FINANCE_API_BASE
+  ▼                                           ▼
+https://<app>.onrender.com                ← Render free tier (FastAPI, 1 worker)
   │
   ▼
-https://www.it.kmitl.ac.th/~<username>   ← iHost KMITL (static HTML/CSS/JS)
-  │   fetch() / EventSource ผ่าน window.FINANCE_API_BASE
-  ▼
-https://<app>.onrender.com                ← Render free tier (FastAPI, 1 worker)
+Neon Postgres (free tier)                ← persistent database (`DB_URL` secret)
 ```
+
+**Database** — production data lives on **Neon Postgres** (free tier, no
+expiry, no idle pause) via the `DB_URL` environment variable. SQLite is used
+only for local development. Render's free-tier disk is ephemeral, so a
+local SQLite file would lose all user data on every deploy/restart/spin-down —
+Neon solves this (set up with the Neon CLI; migrations run via
+`alembic upgrade head` against the Neon URL).
 
 ---
 
@@ -45,16 +55,20 @@ iHost รันได้เฉพาะ PHP จึงใส่ FastAPI ลงไ
    Free plan has no pre-deploy/release command (`preDeployCommand`),
    so bootstrap is folded into the start command.
 
-   ใช้ worker เดียวเท่านั้น — SQLite + RAM ของแผนฟรีไม่พอสำหรับ `--workers 4`
+   ใช้ worker เดียวเท่านั้น — RAM ของแผนฟรีไม่พอสำหรับ `--workers 4`
    Render กำหนด `$PORT` ให้เอง
 3. ตั้ง Environment variables ในหน้า Dashboard (ค่ามาจาก `.env` ในเครื่อง
    ห้าม commit): ตัวที่ไม่ใช่ความลับ (`APP_ENV`, `DEBUG`, `LOG_LEVEL`,
-   `DB_URL`, `LLM_PROVIDER=ollama`, `LLM_MAX_TOKENS`, `OLLAMA_BASE_URL`,
+   `LLM_PROVIDER=ollama`, `LLM_MAX_TOKENS`, `OLLAMA_BASE_URL`,
    `OLLAMA_MODEL`, `OCR_PROVIDER`, `OCR_MODEL`, `RAG_KNOWLEDGE_BASE_DIRECTORY`)
-   อยู่ใน `render.yaml` อยู่แล้ว — เหลือแค่ secret สองตัวที่ต้องกรอกตอน sync:
-   `OLLAMA_API_KEY` และ `OCR_API_KEY` (ใช้ค่า Ollama Cloud key เดียวกันได้)
-   ส่วน `GOOGLE_API_KEY` เป็นทางเลือก (เปิดใช้ RAG) — เพิ่มทีหลังได้
-   ถ้าไม่มี bootstrap จะข้าม RAG แต่ API ยังทำงานปกติ
+   อยู่ใน `render.yaml` อยู่แล้ว — ต้องกรอกเองในหน้า Environment:
+
+   | Secret | ค่า |
+   |---|---|
+   | `DB_URL` | connection string ของ **Neon Postgres** (ใช้ตัว pooled จาก Neon dashboard / `DATABASE_URL` ใน `.env`) — **สำคัญที่สุด** ถ้าไม่ใส่ ข้อมูลจะหายทุกครั้งที่ deploy เพราะดิสก์ Render เป็นแบบ ephemeral |
+   | `OLLAMA_API_KEY`, `OCR_API_KEY` | Ollama Cloud key (ใช้ค่าเดียวกันได้) |
+   | `GOOGLE_API_KEY` | ทางเลือก (เปิดใช้ RAG) — ไม่มี bootstrap จะข้าม RAG แต่ API ยังทำงานปกติ |
+   | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | จาก LINE Developers Console — ต้องมีเพื่อเปิด `/line/webhook` |
 4. ตรวจสอบการติดตั้ง:
 
    ```bash
@@ -88,9 +102,11 @@ Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `a
 
 - บริการ **หลับหลังไม่มีการใช้งาน 15 นาที** — request แรกหลังตื่นช้า ~50 วินาที
   (cold start) แก้ได้ด้วย uptime pinger (เช่น cron-job.org ping `/health`)
-- **ดิสก์เป็นแบบ ephemeral** — SQLite และ ChromaDB หายทุกครั้งที่ deploy/ตื่นจากหลับ
-  migration กับ RAG index สร้างใหม่อัตโนมัติตอน deploy แต่ **ข้อมูลผู้ใช้ไม่อยู่รอด**
-  (เหมาะกับ demo เท่านั้น)
+- **ดิสก์เป็นแบบ ephemeral** — มีผลกับไฟล์บน Render เท่านั้น ข้อมูลผู้ใช้อยู่บน
+  Neon Postgres ผ่าน `DB_URL` จึง **ไม่หาย** แต่ **index ของ ChromaDB (RAG) ยังหาย**
+  ทุกครั้งที่ deploy/ตื่นจากหลับ — bootstrap สร้างใหม่อัตโนมัติตอน start
+- **LINE Push quota** — แผนฟรีได้ 200 push messages/ต่อเดือน (แชร์กันทุก user)
+  reply API ไม่จำกัดแต่ใช้ไม่ได้กับ agent ที่ตอบช้า จึงต้องใช้ Push
 
 ### ความปลอดภัย
 
@@ -114,11 +130,14 @@ Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `a
 | Mixed content (API calls ถูก block) | `FINANCE_API_BASE` ต้องเป็น HTTPS เสมอ |
 | RAG ไม่มีข้อมูลหลังตื่นจากหลับ | ดิสก์ ephemeral — bootstrap รันตอน start ทุกครั้ง จะสร้าง index ให้ใหม่ถ้าหาย |
 | Migration error ตอน deploy | ดู release log ตรวจ `DB_URL` ใน env vars |
+| ข้อมูลหายหลัง deploy | `DB_URL` ไม่ได้ตั้ง (ยังใช้ SQLite บนดิสก์ ephemeral) — ใส่ connection string ของ Neon |
+| เชื่อมต่อ Neon ไม่ได้ / connection timeout | ใช้ connection string ตัว **pooled** (`...-pooler...`) ไม่ใช่ตัว unpooled |
 
 ### การพัฒนาต่อในอนาคต
 
-Authentication จริง, PostgreSQL, persistent disk, rate limiting, custom domain
+Authentication จริง, persistent disk (สำหรับ RAG index), rate limiting, custom domain
 — ดูรายการเต็มใน `websitehosting.md` ส่วน "Future improvements"
+(ย้ายไป Postgres เสร็จแล้ว — ดูส่วน Database ด้านบน)
 
 ---
 
@@ -131,6 +150,13 @@ Authentication จริง, PostgreSQL, persistent disk, rate limiting, custom 
 
 iHost only runs PHP, so the FastAPI backend cannot live there. The frontend
 is static HTML/JS and calls the backend over HTTPS via `config.js`.
+
+**Database** — production data lives on **Neon Postgres** (free tier, no expiry,
+no idle pause) via the `DB_URL` environment variable. SQLite is used only for
+local development. Render's free-tier disk is ephemeral, so a local SQLite file
+would lose all user data on every deploy/restart/spin-down — Neon solves this
+(set up with the Neon CLI; migrations run via `alembic upgrade head` against
+the Neon URL).
 
 ### Backend deployment (Render)
 
@@ -147,17 +173,21 @@ is static HTML/JS and calls the backend over HTTPS via `config.js`.
    Free plan has no pre-deploy/release command (`preDeployCommand`),
    so bootstrap is folded into the start command.
 
-   One worker only: SQLite plus free-tier RAM cannot afford `--workers 4`
+   One worker only: free-tier RAM cannot afford `--workers 4`
    (write contention). Render injects `$PORT`.
 3. Set environment variables in the Render dashboard (values mirror local
    `.env`; never commit them): all non-secrets (`APP_ENV`, `DEBUG`,
-   `LOG_LEVEL`, `DB_URL`, `LLM_PROVIDER=ollama`, `LLM_MAX_TOKENS`,
+   `LOG_LEVEL`, `LLM_PROVIDER=ollama`, `LLM_MAX_TOKENS`,
    `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OCR_PROVIDER`, `OCR_MODEL`,
-   `RAG_KNOWLEDGE_BASE_DIRECTORY`) already live in `render.yaml` — only two
-   secrets are prompted at sync: `OLLAMA_API_KEY` and `OCR_API_KEY`
-   (both can hold the same Ollama Cloud key). `GOOGLE_API_KEY` is optional
-   (enables RAG) — add it later via the Environment tab. Without it,
-   bootstrap skips RAG and the API still works.
+   `RAG_KNOWLEDGE_BASE_DIRECTORY`) already live in `render.yaml` — enter
+   these secrets yourself in the Environment tab:
+
+   | Secret | Value |
+   |---|---|
+   | `DB_URL` | the **Neon Postgres** connection string (use the pooled one from the Neon dashboard / `DATABASE_URL` in `.env`) — **most important**; without it, every deploy wipes the data because Render's disk is ephemeral |
+   | `OLLAMA_API_KEY`, `OCR_API_KEY` | Ollama Cloud key (the same value works for both) |
+   | `GOOGLE_API_KEY` | optional (enables RAG) — without it bootstrap skips RAG and the API still works |
+   | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | from the LINE Developers Console — required for `/line/webhook` |
 4. Verify the deploy:
 
    ```bash
@@ -193,9 +223,13 @@ works under the `/~<username>/` sub-path.
 - The service **sleeps after 15 minutes of inactivity**; the first request
   after waking takes ~50 s (cold start). Mitigate with an uptime pinger
   (e.g., cron-job.org hitting `/health`).
-- **Disk is ephemeral**: SQLite and ChromaDB reset on every deploy/wake.
-  Migrations and the RAG index re-apply automatically on deploy, but user
-  data does **not** survive. Suitable for a demo only.
+- **Disk is ephemeral** — this only affects files on Render. User data lives
+  on Neon Postgres via `DB_URL`, so it **survives** deploys and spin-downs.
+  The **ChromaDB (RAG) index is still ephemeral** and is rebuilt automatically
+  by the bootstrap on every start.
+- **LINE Push quota** — the free plan allows 200 push messages/month
+  (shared across all users). The reply API is unlimited but unusable for
+  slow agents, hence Push.
 
 ### Security notes
 
@@ -222,8 +256,12 @@ works under the `/~<username>/` sub-path.
 | Mixed content (API calls blocked) | `FINANCE_API_BASE` must always be HTTPS |
 | RAG empty after wake from sleep | Ephemeral disk — the start-command bootstrap re-indexes automatically on next start |
 | Migration error during deploy | Check the release log and the `DB_URL` env var |
+| Data lost after deploy | `DB_URL` is not set (still on ephemeral-disk SQLite) — set the Neon connection string |
+| Neon connection fails / times out | Use the **pooled** connection string (`...-pooler...`), not the unpooled one |
 
 ### Future improvements
 
-Real authentication, PostgreSQL, persistent disk, rate limiting, custom
-domain — see the full list in `websitehosting.md`, "Future improvements".
+Real authentication, persistent disk (for the RAG index), rate limiting,
+custom domain — see the full list in `websitehosting.md`,
+"Future improvements". (The Postgres migration is done — see the Database
+section above.)

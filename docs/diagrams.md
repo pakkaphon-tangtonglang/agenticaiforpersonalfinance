@@ -73,7 +73,7 @@ sequenceDiagram
     participant Router as Router Agent
     participant Agent as Specialist Agent
     participant Tools as Tool Layer
-    participant DB as SQLite
+    participant DB as PostgreSQL (Neon)
 
     User->>API: POST /chat {query, user_id, conversation_id}
     API->>Conv: load recent history
