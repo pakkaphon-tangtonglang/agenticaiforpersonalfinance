@@ -1,5 +1,6 @@
 """Pydantic models for evaluation datasets and results."""
 
+from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 
@@ -382,6 +383,44 @@ class PerformanceAggregateResult(BaseModel):
     total_estimated_cost_usd: Decimal
     per_agent_latency: dict[str, float]
     results: list[PerformanceResult]
+
+
+class ModelComparisonEntry(BaseModel):
+    """One candidate model's result on the comparison dimension.
+
+    Attributes:
+        provider: LLM provider (ollama, google, openrouter).
+        model_name: Model identifier as passed to the provider.
+        status: 'ok', 'skipped' (missing credentials), or 'error'.
+        error_message: Reason for a skipped/failed entry; empty when ok.
+        routing_accuracy: Routing accuracy 0-1; None when not run.
+        mean_latency_seconds: Mean routing latency; None when not run.
+        total_cases: Number of routing dataset cases evaluated.
+        correct_count: Correctly routed cases.
+    """
+
+    provider: str
+    model_name: str
+    status: str
+    error_message: str = ""
+    routing_accuracy: Decimal | None = None
+    mean_latency_seconds: float | None = None
+    total_cases: int = 0
+    correct_count: int = 0
+
+
+class ModelComparisonResult(BaseModel):
+    """Aggregated multi-model comparison on one dimension.
+
+    Attributes:
+        dimension: Eval dimension name (currently 'routing').
+        generated_at: Timezone-aware timestamp of the run.
+        entries: One entry per candidate model, in run order.
+    """
+
+    dimension: str
+    generated_at: datetime
+    entries: list[ModelComparisonEntry]
 
 
 class EvaluationReport(BaseModel):

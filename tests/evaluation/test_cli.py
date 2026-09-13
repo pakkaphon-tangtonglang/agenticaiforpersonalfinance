@@ -1,6 +1,8 @@
 """Tests for evaluation CLI helpers."""
 
-from typing import cast
+import json
+from datetime import datetime, timezone
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 from finance_ai.evaluation.cli import (
@@ -141,3 +143,63 @@ class TestRunSelectedEvaluation:
         report = _run_selected_evaluation(runner, "accuracy-forced")
         runner.run_tax_accuracy_forced.assert_called_once_with()
         assert report.tax_accuracy is runner.run_tax_accuracy_forced.return_value
+
+
+class TestModelComparisonCli:
+    """Tests for the --compare / --models CLI surface."""
+
+    def test_parse_args_compare_flag(self) -> None:
+        """--compare selects comparison mode with an empty default list."""
+        args = parse_args(["--compare"])
+        assert args.compare is True
+        assert args.models == []
+
+    def test_parse_args_models_override(self) -> None:
+        """--models accepts provider:model strings (colons inside names)."""
+        args = parse_args(
+            [
+                "--compare",
+                "--models",
+                "ollama:minimax-m3",
+                "ollama:qwen3.5:397b",
+                "google:gemini-3.5",
+            ],
+        )
+        assert args.models == [
+            "ollama:minimax-m3",
+            "ollama:qwen3.5:397b",
+            "google:gemini-3.5",
+        ]
+
+    def test_main_compare_dispatches_to_comparison(self, tmp_path: Any, monkeypatch: Any) -> None:
+        """main() with --compare runs the comparison and saves reports."""
+        from finance_ai.evaluation import model_comparison  # noqa: PLC0415
+        from finance_ai.evaluation.cli import main  # noqa: PLC0415
+        from finance_ai.evaluation.models import (  # noqa: PLC0415
+            ModelComparisonEntry,
+            ModelComparisonResult,
+        )
+
+        fake_result = ModelComparisonResult(
+            dimension="routing",
+            generated_at=datetime.now(timezone.utc),
+            entries=[
+                ModelComparisonEntry(
+                    provider="ollama",
+                    model_name="minimax-m3",
+                    status="ok",
+                )
+            ],
+        )
+
+        def _fake_comparison(specs: object, data_dir: str = "data/evaluation") -> object:
+            return fake_result
+
+        monkeypatch.setattr(model_comparison, "run_model_comparison", _fake_comparison)
+        out_dir = tmp_path / "results"
+        main(["--compare", "--output-dir", str(out_dir)])
+
+        saved = list(out_dir.glob("model_comparison_*.json"))
+        assert len(saved) == 1
+        data = json.loads(saved[0].read_text(encoding="utf-8"))
+        assert data["entries"][0]["model_name"] == "minimax-m3"
