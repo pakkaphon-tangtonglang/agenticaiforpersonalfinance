@@ -192,7 +192,11 @@ class TestModelComparisonCli:
             ],
         )
 
-        def _fake_comparison(specs: object, data_dir: str = "data/evaluation") -> object:
+        def _fake_comparison(
+            specs: object,
+            data_dir: str = "data/evaluation",
+            max_workers: int = 1,
+        ) -> object:
             return fake_result
 
         monkeypatch.setattr(model_comparison, "run_model_comparison", _fake_comparison)
@@ -203,3 +207,8 @@ class TestModelComparisonCli:
         assert len(saved) == 1
         data = json.loads(saved[0].read_text(encoding="utf-8"))
         assert data["entries"][0]["model_name"] == "minimax-m3"
+
+    def test_parse_args_workers_default(self) -> None:
+        """--workers defaults to concurrent comparison."""
+        args = parse_args(["--compare"])
+        assert args.workers == 4

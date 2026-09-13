@@ -10,6 +10,7 @@ GOOGLE_API_KEY is configured) are reported as 'skipped' rather than
 aborting the whole comparison.
 """
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Callable
@@ -90,6 +91,7 @@ def run_model_comparison(
     data_dir: str = "data/evaluation",
     model_factory: ModelFactory | None = None,
     runner_factory: RunnerFactory | None = None,
+    max_workers: int = 1,
 ) -> ModelComparisonResult:
     """Run the routing dimension for every candidate model.
 
@@ -100,18 +102,52 @@ def run_model_comparison(
             (defaults to the provider-aware factory in the CLI module).
         runner_factory: Callable building an EvaluationRunner from
             (model, spec); defaults to the real runner.
+        max_workers: When >1, candidates are evaluated concurrently
+            (LLM calls are HTTP I/O-bound); results keep spec order.
 
     Returns:
         ModelComparisonResult with one entry per candidate.
     """
-    entries = [
-        _compare_single_model(spec, data_dir, model_factory, runner_factory) for spec in specs
-    ]
+    if max_workers > 1:
+        entries = _compare_models_concurrently(
+            specs, data_dir, model_factory, runner_factory, max_workers
+        )
+    else:
+        entries = [
+            _compare_single_model(spec, data_dir, model_factory, runner_factory) for spec in specs
+        ]
     return ModelComparisonResult(
         dimension="routing",
         generated_at=datetime.now(timezone.utc),
         entries=entries,
     )
+
+
+def _compare_models_concurrently(
+    specs: list[ModelSpec],
+    data_dir: str,
+    model_factory: ModelFactory | None,
+    runner_factory: RunnerFactory | None,
+    max_workers: int,
+) -> list[ModelComparisonEntry]:
+    """Evaluate candidates concurrently, preserving the spec order.
+
+    Args:
+        specs: Candidate models, in run order.
+        data_dir: Evaluation dataset directory.
+        model_factory: Optional injected model factory.
+        runner_factory: Optional injected runner factory.
+        max_workers: Thread pool size.
+
+    Returns:
+        Entries in the same order as specs.
+    """
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(_compare_single_model, spec, data_dir, model_factory, runner_factory)
+            for spec in specs
+        ]
+        return [future.result() for future in futures]
 
 
 def _compare_single_model(

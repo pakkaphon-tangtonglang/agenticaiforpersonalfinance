@@ -112,6 +112,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--workers",
+        type=int,
+        default=4,
+        help="With --compare: number of candidate models evaluated concurrently.",
+    )
+    parser.add_argument(
         "--reuse-index",
         action="store_true",
         help="Reuse existing ChromaDB index instead of re-indexing.",
@@ -192,7 +198,7 @@ def _run_model_comparison(args: argparse.Namespace) -> None:
 
     specs = [parse_model_spec(text) for text in args.models] or DEFAULT_COMPARISON_MODELS
     print(f"[Eval] Comparing {len(specs)} models on the routing dimension...")
-    result = run_model_comparison(specs, data_dir=args.data_dir)
+    result = run_model_comparison(specs, data_dir=args.data_dir, max_workers=args.workers)
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
