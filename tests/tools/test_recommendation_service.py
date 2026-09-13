@@ -5,12 +5,14 @@ from typing import Any
 
 import pytest
 
+from finance_ai.tools.recommendation_constants import LOW_RISK_LEVEL_THRESHOLD
 from finance_ai.tools.recommendation_service import (
     Recommendation,
     RecommendationReport,
     analyze_expense_patterns,
     analyze_goal_progress,
     analyze_investment_risk,
+    analyze_risk_profile_alignment,
     analyze_savings_rate,
     analyze_tax_optimization,
     calculate_health_score,
@@ -231,6 +233,63 @@ class TestAnalyzeInvestmentRisk:
         )
         result = analyze_investment_risk(portfolio)
         assert any(r.title == "พอร์ตขาดทุน" for r in result)
+
+    def test_low_risk_user_gets_lower_risk_asset_advice(self) -> None:
+        """Level-1 users get advice to shift to lower-risk assets."""
+        portfolio = _make_portfolio_data(
+            total_value="100000",
+            holdings=[
+                {"symbol": "PTT.BK", "current_value": "80000", "gain_loss": "0"},
+            ],
+        )
+        result = analyze_investment_risk(portfolio, risk_level=1)
+        assert any("ตราสารหนี้" in item for r in result for item in r.action_items)
+
+    def test_no_risk_level_gets_generic_advice(self) -> None:
+        """Without a risk level, concentration advice stays generic."""
+        portfolio = _make_portfolio_data(
+            total_value="100000",
+            holdings=[
+                {"symbol": "PTT.BK", "current_value": "80000", "gain_loss": "0"},
+            ],
+        )
+        result = analyze_investment_risk(portfolio)
+        assert any("กระจายการลงทุนไปสินทรัพย์อื่น" in r.action_items for r in result)
+
+
+# -- TestAnalyzeRiskProfileAlignment --
+
+
+class TestAnalyzeRiskProfileAlignment:
+    """Tests for analyze_risk_profile_alignment function."""
+
+    def test_none_risk_level_returns_empty(self) -> None:
+        """Without a questionnaire there is no alignment check."""
+        portfolio = _make_portfolio_data(
+            total_value="100000", holdings=[{"symbol": "PTT.BK", "current_value": "100000"}]
+        )
+        assert analyze_risk_profile_alignment(portfolio, None) == []
+
+    def test_high_risk_level_returns_empty(self) -> None:
+        """Levels above the low-risk threshold need no alignment warning."""
+        portfolio = _make_portfolio_data(
+            total_value="100000", holdings=[{"symbol": "PTT.BK", "current_value": "100000"}]
+        )
+        assert analyze_risk_profile_alignment(portfolio, LOW_RISK_LEVEL_THRESHOLD + 1) == []
+
+    def test_low_risk_user_with_holdings_gets_warning(self) -> None:
+        """Level-1 user with investments gets a portfolio-alignment warning."""
+        portfolio = _make_portfolio_data(
+            total_value="100000", holdings=[{"symbol": "PTT.BK", "current_value": "100000"}]
+        )
+        result = analyze_risk_profile_alignment(portfolio, 1)
+        assert len(result) == 1
+        assert result[0].category == "investment_rebalancing"
+        assert result[0].priority == 3
+
+    def test_low_risk_user_without_holdings_returns_empty(self) -> None:
+        """No investments means nothing to align."""
+        assert analyze_risk_profile_alignment(_make_portfolio_data(), 1) == []
 
 
 # -- TestAnalyzeGoalProgress --
