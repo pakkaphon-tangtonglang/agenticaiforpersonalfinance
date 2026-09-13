@@ -12,6 +12,7 @@ from typing import Any
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from finance_ai.core.logging import get_logger
 from finance_ai.tools.recommendation_constants import (
     EMERGENCY_FUND_MONTHS,
     EXPENSE_CONCENTRATION_THRESHOLD,
@@ -19,9 +20,12 @@ from finance_ai.tools.recommendation_constants import (
     HEALTH_SCORE_BASE,
     HEALTH_SCORE_PENALTY_PER_PRIORITY,
     INVESTMENT_CONCENTRATION_THRESHOLD,
+    LOW_RISK_LEVEL_THRESHOLD,
     OVERSPENDING_THRESHOLD,
     SAVINGS_RATE_WARNING_THRESHOLD,
 )
+
+logger = get_logger(__name__)
 
 
 class Recommendation(BaseModel):
@@ -293,11 +297,13 @@ def _check_deduction_utilization(
 
 def analyze_investment_risk(
     portfolio_data: dict[str, Any],
+    risk_level: int | None = None,
 ) -> list[Recommendation]:
     """Detect concentration risk in investment portfolio.
 
     Args:
         portfolio_data: Portfolio summary from cross-agent service.
+        risk_level: User's questionnaire risk level (1-5), or None.
 
     Returns:
         List of investment-related recommendations.
@@ -314,7 +320,7 @@ def analyze_investment_risk(
     if total_value <= 0:
         return recommendations
 
-    recommendations.extend(_check_holding_concentration(holdings, total_value))
+    recommendations.extend(_check_holding_concentration(holdings, total_value, risk_level))
     recommendations.extend(_check_portfolio_loss(portfolio_data))
     return recommendations
 
@@ -322,6 +328,7 @@ def analyze_investment_risk(
 def _check_holding_concentration(
     holdings: list[dict[str, Any]],
     total_value: Decimal,
+    risk_level: int | None = None,
 ) -> list[Recommendation]:
     """Check if any single holding is too concentrated.
 
@@ -347,11 +354,69 @@ def _check_holding_concentration(
                     priority=3,
                     title=f"{symbol} สัดส่วนสูงเกินไป",
                     description=f"{symbol} คิดเป็น {pct}% ของพอร์ต" f" (แนะนำไม่เกิน 30%)",
-                    action_items=["กระจายการลงทุนไปสินทรัพย์อื่น"],
+                    action_items=[_diversify_action_for_risk_level(risk_level)],
                     estimated_impact="ลดความเสี่ยงจากการกระจุกตัว",
                 )
             )
     return recommendations
+
+
+def _diversify_action_for_risk_level(risk_level: int | None) -> str:
+    """Pick the diversification action item for the user's risk level.
+
+    Args:
+        risk_level: User's questionnaire risk level (1-5), or None.
+
+    Returns:
+        Thai action item appropriate to the risk level.
+    """
+    if risk_level is not None and risk_level <= LOW_RISK_LEVEL_THRESHOLD:
+        return "ย้ายบางส่วนไปลงทุนในสินทรัพย์ความเสี่ยงต่ำ เช่น ตราสารหนี้ หรือเงินฝาก"
+    return "กระจายการลงทุนไปสินทรัพย์อื่น"
+
+
+def analyze_risk_profile_alignment(
+    portfolio_data: dict[str, Any],
+    risk_level: int | None,
+) -> list[Recommendation]:
+    """Warn low-risk users whose portfolio may exceed their risk tolerance.
+
+    Uses the SEC suitability questionnaire result: users at level 1-2
+    holding investments get a recommendation to shift toward lower-risk
+    assets. High-risk users and users without a questionnaire get nothing.
+
+    Args:
+        portfolio_data: Portfolio summary from cross-agent service.
+        risk_level: User's questionnaire risk level (1-5), or None.
+
+    Returns:
+        List with an alignment recommendation when applicable.
+
+    Example:
+        >>> recs = analyze_risk_profile_alignment(portfolio, 1)
+    """
+    if risk_level is None or risk_level > LOW_RISK_LEVEL_THRESHOLD:
+        return []
+    holdings = portfolio_data.get("holdings", [])
+    total_value = Decimal(portfolio_data.get("total_value", "0"))
+    if not holdings or total_value <= 0:
+        return []
+    return [
+        Recommendation(
+            category="investment_rebalancing",
+            priority=3,
+            title="พอร์ตอาจเสี่ยงเกินระดับความเสี่ยงที่รับได้",
+            description=(
+                f"ระดับความเสี่ยงที่คุณรับได้คือระดับ {risk_level} "
+                "แต่คุณมีการลงทุนอยู่ ควรทบทวนสัดส่วนสินทรัพย์เสี่ยงสูงในพอร์ต"
+            ),
+            action_items=[
+                "ทบทวนสัดส่วนหุ้นที่มีความผันผวนสูงในพอร์ต",
+                "พิจารณาเพิ่มสัดส่วนเงินฝากหรือตราสารหนี้",
+            ],
+            estimated_impact="ลดความเสี่ยงพอร์ตให้สอดคล้องกับแบบประเมินความเหมาะสม",
+        )
+    ]
 
 
 def _check_portfolio_loss(
@@ -557,19 +622,47 @@ def generate_recommendations(
         >>> report = generate_recommendations(session, uid, 2026, 3)
     """
     data = gather_all_financial_data(session, user_id, year, month)
-    recommendations = _run_all_analyses(data)
+    risk_level = _get_user_risk_level(session, user_id)
+    recommendations = _run_all_analyses(data, risk_level)
     recommendations.sort(key=lambda r: r.priority, reverse=True)
     score = calculate_health_score(recommendations)
     return _build_report(user_id, recommendations, score)
 
 
+def _get_user_risk_level(session: Session, user_id: str) -> int | None:
+    """Load the user's latest questionnaire risk level.
+
+    Never raises: any failure is logged and None is returned so that
+    report generation keeps working without personalization.
+
+    Args:
+        session: Database session.
+        user_id: UUID of the user.
+
+    Returns:
+        Risk level (1-5) or None when unavailable.
+    """
+    from finance_ai.database.crud.risk_assessment_crud import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        RiskAssessmentCRUD,
+    )
+
+    try:
+        assessment = RiskAssessmentCRUD().get_latest_by_user(session, user_id)
+    except Exception as error:  # noqa: BLE001  # report must never crash
+        logger.warning("Failed to load risk level for user %s: %s", user_id, error)
+        return None
+    return None if assessment is None else int(assessment.risk_level)
+
+
 def _run_all_analyses(
     data: dict[str, dict[str, Any]],
+    risk_level: int | None,
 ) -> list[Recommendation]:
     """Run all analysis rules against gathered data.
 
     Args:
         data: Combined financial data from all domains.
+        risk_level: User's questionnaire risk level (1-5), or None.
 
     Returns:
         Combined list of all recommendations.
@@ -577,7 +670,8 @@ def _run_all_analyses(
     recommendations: list[Recommendation] = []
     recommendations.extend(analyze_expense_patterns(data["expense"], data["income_monthly"]))
     recommendations.extend(analyze_tax_optimization(data["tax"], data["income"]))
-    recommendations.extend(analyze_investment_risk(data["portfolio"]))
+    recommendations.extend(analyze_investment_risk(data["portfolio"], risk_level))
+    recommendations.extend(analyze_risk_profile_alignment(data["portfolio"], risk_level))
     recommendations.extend(analyze_goal_progress(data["goals"]))
     recommendations.extend(
         analyze_savings_rate(data["income_monthly"], data["expense"], data["goals"])

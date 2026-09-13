@@ -8,7 +8,7 @@ prioritized recommendations in Thai.
 from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
@@ -26,6 +26,7 @@ from finance_ai.agents.schemas import RecommendationAgentState
 from finance_ai.core.logging import get_logger
 from finance_ai.database.crud.risk_assessment_crud import RiskAssessmentCRUD
 from finance_ai.agents.session_helper import get_tool_session
+from finance_ai.tools.recommendation_guardrail import check_recommendation_response
 
 logger = get_logger(__name__)
 
@@ -70,6 +71,67 @@ def get_risk_profile_context(user_id: str, db_session_factory: Any) -> str:
     except Exception as error:  # noqa: BLE001  # chat must never crash on context
         logger.warning("Failed to load risk profile context for user %s: %s", user_id, error)
         return ""
+
+
+def get_user_risk_level(user_id: str, db_session_factory: Any) -> int | None:
+    """Load the user's latest questionnaire risk level (never raises).
+
+    Args:
+        user_id: UUID string of the user.
+        db_session_factory: Session factory used by get_tool_session.
+
+    Returns:
+        Risk level (1-5), or None when unavailable or on any error.
+
+    Example:
+        >>> get_user_risk_level("abc-123", session_factory)
+        3
+    """
+    try:
+        with get_tool_session(db_session_factory) as session:
+            assessment = RiskAssessmentCRUD().get_latest_by_user(session, user_id)
+    except Exception as error:  # noqa: BLE001  # chat must never crash on context
+        logger.warning("Failed to load risk level for user %s: %s", user_id, error)
+        return None
+    return None if assessment is None else int(assessment.risk_level)
+
+
+def create_guardrail_node() -> Any:
+    """Create the deterministic post-generation guardrail node.
+
+    Appends suitability/data-quality warnings to the agent's final
+    answer based on the user's questionnaire risk level and whether the
+    conversation used any tool results. Message id is preserved so
+    LangGraph replaces the message in place instead of appending.
+
+    Returns:
+        A callable node function for the LangGraph graph.
+
+    Example:
+        >>> node = create_guardrail_node()
+    """
+
+    def guardrail_node(state: RecommendationAgentState) -> dict[str, Any]:
+        """Append warnings to a clean final answer when needed.
+
+        Args:
+            state: Current agent state with messages and user context.
+
+        Returns:
+            Dict with a replaced final message, or empty messages.
+        """
+        last_message = state["messages"][-1]
+        if not isinstance(last_message, AIMessage) or last_message.tool_calls:
+            return {"messages": []}
+        had_tool_results = any(isinstance(m, ToolMessage) for m in state["messages"])
+        risk_level = get_user_risk_level(state["user_id"], state["db_session_factory"])
+        answer = str(last_message.content)
+        warning = check_recommendation_response(answer, risk_level, had_tool_results)
+        if not warning:
+            return {"messages": []}
+        return {"messages": [AIMessage(id=last_message.id, content=f"{answer}\n\n{warning}")]}
+
+    return guardrail_node
 
 
 def create_llm_node(
@@ -148,11 +210,13 @@ def build_recommendation_agent_graph(
     graph = StateGraph(RecommendationAgentState)
     graph.add_node("agent", create_llm_node(chat_model))
     graph.add_node("tools", ToolNode(RECOMMENDATION_AGENT_TOOLS))
+    graph.add_node("guardrail", create_guardrail_node())
     graph.set_entry_point("agent")
     graph.add_conditional_edges(
         "agent",
         should_continue,
-        {"tools": "tools", "end": END},
+        {"tools": "tools", "end": "guardrail"},
     )
     graph.add_edge("tools", "agent")
+    graph.add_edge("guardrail", END)
     return graph.compile()

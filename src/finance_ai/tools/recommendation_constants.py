@@ -4,7 +4,9 @@ Contains recommendation categories, priority levels, and threshold values
 for rule-based financial analysis.
 """
 
+import re
 from decimal import Decimal
+from typing import Final, Pattern
 
 # Recommendation categories: key -> Thai label
 RECOMMENDATION_CATEGORIES: dict[str, str] = {
@@ -56,3 +58,30 @@ HEALTH_SCORE_BASE: int = 100
 
 # Health score: penalty multiplier per priority level
 HEALTH_SCORE_PENALTY_PER_PRIORITY: int = 5
+
+# Guardrail: risk levels at or below this value count as low risk
+LOW_RISK_LEVEL_THRESHOLD: int = 2
+
+# Guardrail: high-risk instrument keywords (pre-lowercased; matched with
+# a lowercased answer) that trigger a suitability warning for low-risk users
+HIGH_RISK_INSTRUMENT_KEYWORDS: tuple[str, ...] = (
+    "คริปโต",
+    "cryptocurrency",
+    "crypto",
+    "bitcoin",
+    "บิตคอยน์",
+    "อนุพันธ์",
+    "ฟอเร็กซ์",
+    "forex",
+    "leverage",
+    "มาร์จิ้น",
+    "สินทรัพย์เสมือน",
+    "nft",
+)
+
+# Guardrail: matches answers that promise specific returns, e.g.
+# "ผลตอบแทนเฉลี่ย 15%" or "กำไรสูงสุด 25%"
+RETURN_PROMISE_PATTERN: Final[Pattern[str]] = re.compile(
+    r"(ผลตอบแทน|กำไร|return)[^.\n]{0,40}?\d+(?:\.\d+)?\s*%",
+    re.IGNORECASE,
+)

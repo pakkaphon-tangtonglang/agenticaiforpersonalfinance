@@ -4,14 +4,16 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
 from finance_ai.agents.graph_utils import should_continue
 from finance_ai.agents.recommendation_agent import (
     RECOMMENDATION_AGENT_TOOLS,
     build_recommendation_agent_graph,
+    create_guardrail_node,
     create_llm_node,
     get_risk_profile_context,
+    get_user_risk_level,
 )
 
 
@@ -183,11 +185,89 @@ class TestBuildRecommendationAgentGraph:
         assert graph is not None
 
     def test_has_agent_and_tools_nodes(self, mock_chat_model: MagicMock) -> None:
-        """Compiled graph should have 'agent' and 'tools' nodes."""
+        """Compiled graph should have 'agent', 'tools', and 'guardrail' nodes."""
         graph = build_recommendation_agent_graph(mock_chat_model)
         node_names = list(graph.get_graph().nodes.keys())
         assert "agent" in node_names
         assert "tools" in node_names
+        assert "guardrail" in node_names
+
+
+class TestGetUserRiskLevel:
+    """Tests for get_user_risk_level."""
+
+    def _make_assessment(self, level: int) -> MagicMock:
+        """Build a mock latest assessment with the given level."""
+        assessment = MagicMock()
+        assessment.risk_level = level
+        return assessment
+
+    def test_returns_level_when_profile_exists(self) -> None:
+        """A stored assessment yields its integer risk level."""
+        with patch("finance_ai.agents.recommendation_agent.RiskAssessmentCRUD") as mock_crud_class:
+            mock_crud_class.return_value.get_latest_by_user.return_value = self._make_assessment(2)
+            assert get_user_risk_level("user-1", MagicMock()) == 2
+
+    def test_returns_none_when_no_profile(self) -> None:
+        """No stored assessment yields None."""
+        with patch("finance_ai.agents.recommendation_agent.RiskAssessmentCRUD") as mock_crud_class:
+            mock_crud_class.return_value.get_latest_by_user.return_value = None
+            assert get_user_risk_level("user-1", MagicMock()) is None
+
+    def test_returns_none_on_database_error(self) -> None:
+        """A database failure must never raise; it returns None."""
+        with patch("finance_ai.agents.recommendation_agent.RiskAssessmentCRUD") as mock_crud_class:
+            mock_crud_class.return_value.get_latest_by_user.side_effect = RuntimeError("db down")
+            assert get_user_risk_level("user-1", MagicMock()) is None
+
+
+class TestGuardrailNode:
+    """Tests for the post-generation guardrail node."""
+
+    def _state(self, *messages: Any) -> dict[str, Any]:
+        """Build a minimal agent state from messages."""
+        return {"messages": list(messages), "user_id": "user-1", "db_session_factory": MagicMock()}
+
+    def test_appends_warning_to_final_answer(self) -> None:
+        """A low-risk crypto answer gets a warning appended in-place."""
+        answer = AIMessage(id="msg-1", content="แนะนำลงทุนในคริปโต")
+        with patch("finance_ai.agents.recommendation_agent.get_user_risk_level", return_value=1):
+            result = create_guardrail_node()(self._state(answer))
+        assert result["messages"][0].id == "msg-1"
+        assert "ความเสี่ยง" in result["messages"][0].content
+
+    def test_clean_answer_unchanged(self) -> None:
+        """A clean answer produces no new messages."""
+        answer = AIMessage(id="msg-1", content="ควรทบทวนงบประมาณรายเดือน")
+        with patch("finance_ai.agents.recommendation_agent.get_user_risk_level", return_value=1):
+            result = create_guardrail_node()(self._state(answer))
+        assert result["messages"] == []
+
+    def test_no_assessment_no_warning(self) -> None:
+        """Without a risk level, no mismatch warning is added."""
+        answer = AIMessage(id="msg-1", content="แนะนำลงทุนในคริปโต")
+        with patch("finance_ai.agents.recommendation_agent.get_user_risk_level", return_value=None):
+            result = create_guardrail_node()(self._state(answer))
+        assert result["messages"] == []
+
+    def test_tool_call_message_ignored(self) -> None:
+        """An intermediate AIMessage with tool_calls is not touched."""
+        answer = AIMessage(
+            id="msg-1",
+            content="",
+            tool_calls=[{"id": "c1", "name": "generate_financial_recommendations", "args": {}}],
+        )
+        with patch("finance_ai.agents.recommendation_agent.get_user_risk_level", return_value=1):
+            result = create_guardrail_node()(self._state(answer))
+        assert result["messages"] == []
+
+    def test_tool_backed_numbers_not_flagged(self) -> None:
+        """When tool results exist, % claims get no disclaimer."""
+        tool_result = ToolMessage(content="ราคา PTT 30.25 บาท", tool_call_id="c1")
+        answer = AIMessage(id="msg-2", content="หุ้น PTT ให้ผลตอบแทน 10% ต่อปี")
+        with patch("finance_ai.agents.recommendation_agent.get_user_risk_level", return_value=3):
+            result = create_guardrail_node()(self._state(tool_result, answer))
+        assert result["messages"] == []
 
 
 class TestRecommendationAgentTools:
