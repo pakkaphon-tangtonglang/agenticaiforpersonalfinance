@@ -397,6 +397,10 @@ a:hover { text-decoration: underline; }
   font-size: var(--text-caption); padding: 2px var(--sp-2);
   border-radius: var(--radius-full); margin-top: var(--sp-1);
 }
+.msg-disclaimer {
+  margin: var(--sp-1) 0 0; font-style: italic;
+  font-size: var(--text-caption); color: var(--color-ash);
+}
 .msg.typing .msg-bubble { color: var(--color-graphite); font-style: italic; }
 .msg-cursor::after {
   content: "▍"; color: var(--color-accent);
