@@ -189,7 +189,11 @@ ignore_missing_imports = true
 # fields and rejects pydantic-settings' _env_file kwarg. Tests pass
 # _env_file=None to isolate from the developer's .env file.
 [[tool.mypy.overrides]]
-module = ["tests.core.test_config", "tests.agents.test_llm_factory"]
+module = [
+    "tests.core.test_config",
+    "tests.agents.test_llm_factory",
+    "tests.agents.test_recommendation_agent",
+]
 disable_error_code = ["call-arg"]
 
 [tool.pytest.ini_options]
