@@ -1,10 +1,21 @@
 """Multi-model, multi-dimension comparison evaluation for the thesis.
 
-Runs one or more evaluation dimensions — routing (intent accuracy +
-latency) and tax-accuracy (tax-answer correctness + MAE + latency) —
-across candidate models: the production baseline plus alternatives
-from Ollama Cloud and Google Gemini. The thesis can then justify the
-production model choice with measured numbers instead of anecdote.
+Runs one or more evaluation dimensions across candidate models:
+the production baseline plus alternatives from Ollama Cloud and
+Google Gemini. Supported dimensions:
+
+- routing: intent classification accuracy + latency
+- tax-accuracy: tax-answer correctness + MAE + latency
+- tax-accuracy-forced: same, with the tax tool forced (isolates
+  tool-argument accuracy from tool-selection accuracy)
+- quality: LLM-as-judge response quality (fixed judge model, mean
+  judge score 1-5 normalized to 0-1)
+- hallucination: anti-hallucination compliance rate
+- recommendation-safety: recommendation guardrail compliance rate
+
+The thesis can then justify the production model choice with
+measured numbers instead of anecdote. RAG retrieval is excluded
+because it evaluates the vector store, not the model.
 
 Every (model, dimension) pair is an independent I/O-bound job, so
 `run_multi_dimension_comparison` can execute all of them
@@ -33,7 +44,14 @@ logger = get_logger(__name__)
 ModelFactory = Callable[["ModelSpec"], Any]
 RunnerFactory = Callable[[Any, "ModelSpec"], Any]
 
-VALID_COMPARISON_DIMENSIONS = ("routing", "tax-accuracy")
+VALID_COMPARISON_DIMENSIONS = (
+    "routing",
+    "tax-accuracy",
+    "tax-accuracy-forced",
+    "quality",
+    "hallucination",
+    "recommendation-safety",
+)
 
 # Job = (candidate model, dimension to evaluate it on).
 ComparisonJob = tuple["ModelSpec", str]
@@ -140,6 +158,7 @@ def run_multi_dimension_comparison(
     model_factory: ModelFactory | None = None,
     runner_factory: RunnerFactory | None = None,
     max_workers: int = 1,
+    judge_spec: ModelSpec | None = None,
 ) -> list[ModelComparisonResult]:
     """Run every (model, dimension) pair, optionally all at once.
 
@@ -151,6 +170,9 @@ def run_multi_dimension_comparison(
         runner_factory: Optional injected runner factory (tests).
         max_workers: When >1, all model x dimension pairs are
             evaluated concurrently in one shared thread pool.
+        judge_spec: Optional fixed judge model for LLM-as-judge
+            dimensions (quality). The same judge scores every
+            candidate, so comparisons stay fair.
 
     Returns:
         One ModelComparisonResult per requested dimension, in the
@@ -160,12 +182,41 @@ def run_multi_dimension_comparison(
         ValueError: If any dimension is not supported.
     """
     _validate_dimensions(dimensions)
+    judge_model = _build_judge_model(judge_spec, model_factory)
     jobs: list[ComparisonJob] = [(spec, dimension) for dimension in dimensions for spec in specs]
     if max_workers > 1:
-        pairs = _run_jobs_concurrently(jobs, data_dir, model_factory, runner_factory, max_workers)
+        pairs = _run_jobs_concurrently(
+            jobs, data_dir, model_factory, runner_factory, max_workers, judge_model
+        )
     else:
-        pairs = [_evaluate_job(job, data_dir, model_factory, runner_factory) for job in jobs]
+        pairs = [
+            _evaluate_job(job, data_dir, model_factory, runner_factory, judge_model) for job in jobs
+        ]
     return [_assemble_dimension_result(dimension, pairs) for dimension in dimensions]
+
+
+def _build_judge_model(
+    judge_spec: ModelSpec | None,
+    model_factory: ModelFactory | None,
+) -> Any:
+    """Build the shared judge model once per comparison run.
+
+    Args:
+        judge_spec: Judge model spec, or None to run without a judge.
+        model_factory: Model factory (defaults to the CLI factory).
+
+    Returns:
+        A chat model, or None when no judge was requested or it
+        could not be built (quality jobs then report 'skipped').
+    """
+    if judge_spec is None:
+        return None
+    factory = model_factory or _default_model_factory
+    try:
+        return factory(judge_spec)
+    except ValueError as exc:
+        logger.warning("Judge model unavailable, LLM-judge dims skip: %s", exc)
+        return None
 
 
 def _validate_dimensions(dimensions: list[str]) -> None:
@@ -212,6 +263,7 @@ def _run_jobs_concurrently(
     model_factory: ModelFactory | None,
     runner_factory: RunnerFactory | None,
     max_workers: int,
+    judge_model: Any,
 ) -> list[tuple[str, ModelComparisonEntry]]:
     """Evaluate all jobs concurrently, preserving submission order.
 
@@ -221,13 +273,16 @@ def _run_jobs_concurrently(
         model_factory: Optional injected model factory.
         runner_factory: Optional injected runner factory.
         max_workers: Thread pool size.
+        judge_model: Shared judge model (None to run without one).
 
     Returns:
         (dimension, entry) pairs in the same order as jobs.
     """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [
-            executor.submit(_evaluate_job, job, data_dir, model_factory, runner_factory)
+            executor.submit(
+                _evaluate_job, job, data_dir, model_factory, runner_factory, judge_model
+            )
             for job in jobs
         ]
         return [future.result() for future in futures]
@@ -238,6 +293,7 @@ def _evaluate_job(
     data_dir: str,
     model_factory: ModelFactory | None,
     runner_factory: RunnerFactory | None,
+    judge_model: Any,
 ) -> tuple[str, ModelComparisonEntry]:
     """Evaluate one (model, dimension) job.
 
@@ -246,12 +302,15 @@ def _evaluate_job(
         data_dir: Evaluation dataset directory.
         model_factory: Optional injected model factory.
         runner_factory: Optional injected runner factory.
+        judge_model: Shared judge model (None to run without one).
 
     Returns:
         The evaluated dimension and its comparison entry.
     """
     spec, dimension = job
-    entry = _compare_single_model(spec, data_dir, model_factory, runner_factory, dimension)
+    entry = _compare_single_model(
+        spec, data_dir, model_factory, runner_factory, dimension, judge_model
+    )
     return dimension, entry
 
 
@@ -261,6 +320,7 @@ def _compare_single_model(
     model_factory: ModelFactory | None,
     runner_factory: RunnerFactory | None,
     dimension: str,
+    judge_model: Any,
 ) -> ModelComparisonEntry:
     """Evaluate one candidate model on one dimension.
 
@@ -270,6 +330,7 @@ def _compare_single_model(
         model_factory: Optional injected model factory.
         runner_factory: Optional injected runner factory.
         dimension: Comparison dimension to run.
+        judge_model: Shared judge model (None to run without one).
 
     Returns:
         Entry with dimension metrics, or a skipped/error status.
@@ -278,7 +339,7 @@ def _compare_single_model(
     try:
         factory = model_factory or _default_model_factory
         model = factory(spec)
-        runner = _build_runner(model, spec, data_dir, runner_factory)
+        runner = _build_runner(model, spec, data_dir, runner_factory, judge_model)
         aggregate = _run_dimension(runner, dimension)
     except ValidationError as exc:
         # Dataset/config problems are real failures — not missing
@@ -319,9 +380,15 @@ def _run_dimension(runner: Any, dimension: str) -> Any:
     Returns:
         The aggregate result for that dimension.
     """
-    if dimension == "routing":
-        return runner.run_routing()
-    return runner.run_tax_accuracy()
+    method_by_dimension = {
+        "routing": runner.run_routing,
+        "tax-accuracy": runner.run_tax_accuracy,
+        "tax-accuracy-forced": runner.run_tax_accuracy_forced,
+        "quality": runner.run_quality,
+        "hallucination": runner.run_hallucination,
+        "recommendation-safety": runner.run_recommendation_safety,
+    }
+    return method_by_dimension[dimension]()
 
 
 def _ok_entry(
@@ -357,17 +424,64 @@ def _extract_metrics(aggregate: Any, dimension: str) -> dict[str, Any]:
     Returns:
         kwargs for ModelComparisonEntry (accuracy, latency, counts).
     """
-    metrics: dict[str, Any] = {
-        "accuracy": aggregate.accuracy if dimension == "routing" else aggregate.accuracy_rate,
+    if dimension == "routing":
+        return _routing_metrics(aggregate)
+    if dimension in ("tax-accuracy", "tax-accuracy-forced"):
+        return _tax_metrics(aggregate)
+    if dimension == "quality":
+        return _quality_metrics(aggregate)
+    if dimension == "hallucination":
+        return _hallucination_metrics(aggregate)
+    return _recommendation_safety_metrics(aggregate)
+
+
+def _routing_metrics(aggregate: Any) -> dict[str, Any]:
+    """Routing aggregate -> entry kwargs (accuracy + correct count)."""
+    return {
+        "accuracy": aggregate.accuracy,
+        "mean_latency_seconds": aggregate.mean_latency_seconds,
+        "total_cases": aggregate.total_cases,
+        "correct_count": aggregate.correct_count,
+    }
+
+
+def _tax_metrics(aggregate: Any) -> dict[str, Any]:
+    """Tax aggregate -> entry kwargs (accuracy rate + MAE)."""
+    return {
+        "accuracy": aggregate.accuracy_rate,
+        "mean_latency_seconds": aggregate.mean_latency_seconds,
+        "total_cases": aggregate.total_cases,
+        "correct_count": aggregate.within_tolerance_count,
+        "mean_absolute_error_thb": aggregate.mean_absolute_error_thb,
+    }
+
+
+def _quality_metrics(aggregate: Any) -> dict[str, Any]:
+    """Quality aggregate -> entry kwargs (judge mean 1-5 -> 0-1)."""
+    return {
+        "accuracy": aggregate.mean_overall / Decimal("5"),
         "mean_latency_seconds": aggregate.mean_latency_seconds,
         "total_cases": aggregate.total_cases,
     }
-    if dimension == "routing":
-        metrics["correct_count"] = aggregate.correct_count
-    else:
-        metrics["correct_count"] = aggregate.within_tolerance_count
-        metrics["mean_absolute_error_thb"] = aggregate.mean_absolute_error_thb
-    return metrics
+
+
+def _hallucination_metrics(aggregate: Any) -> dict[str, Any]:
+    """Hallucination aggregate -> entry kwargs (compliance rate)."""
+    return {
+        "accuracy": aggregate.compliance_rate,
+        "mean_latency_seconds": aggregate.mean_latency_seconds,
+        "total_cases": aggregate.total_cases,
+        "correct_count": aggregate.compliant_count,
+    }
+
+
+def _recommendation_safety_metrics(aggregate: Any) -> dict[str, Any]:
+    """Recommendation safety aggregate -> entry kwargs (compliance)."""
+    return {
+        "accuracy": aggregate.compliance_rate,
+        "total_cases": aggregate.total_cases,
+        "correct_count": aggregate.passed_count,
+    }
 
 
 def _default_model_factory(spec: ModelSpec) -> Any:
@@ -391,6 +505,7 @@ def _build_runner(
     spec: ModelSpec,
     data_dir: str,
     runner_factory: RunnerFactory | None,
+    judge_model: Any,
 ) -> Any:
     """Build an EvaluationRunner for the given model.
 
@@ -399,6 +514,7 @@ def _build_runner(
         spec: Candidate model spec.
         data_dir: Evaluation dataset directory.
         runner_factory: Optional injected factory (tests).
+        judge_model: Shared judge model for LLM-judge dimensions.
 
     Returns:
         An EvaluationRunner (or test double).
@@ -412,6 +528,7 @@ def _build_runner(
         vector_store=None,
         llm_provider=spec.provider,
         llm_model=spec.model_name,
+        judge_model=judge_model,
         data_dir=data_dir,
     )
 

@@ -403,3 +403,149 @@ class TestMultiDimensionComparison:
                 [ModelSpec(provider="ollama", model_name="minimax-m3")],
                 ["routing", "bogus"],
             )
+
+
+class TestQualityDimension:
+    """Tests for the LLM-as-judge quality comparison dimension."""
+
+    def _quality_result(self, mean_overall: str, latency: float) -> Any:
+        """Build a minimal quality aggregate (judge scores 1-5)."""
+        return MagicMock(
+            mean_overall=Decimal(mean_overall),
+            mean_latency_seconds=latency,
+            total_cases=12,
+        )
+
+    def test_quality_normalizes_mean_overall_to_unit_scale(self) -> None:
+        """Judge mean score (1-5) is normalized to 0-1 accuracy."""
+        runner = MagicMock()
+        runner.run_quality.return_value = self._quality_result("4.20", 6.5)
+        result = run_model_comparison(
+            [ModelSpec(provider="ollama", model_name="minimax-m3")],
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runner,
+            dimension="quality",
+        )
+
+        entry = result.entries[0]
+        assert entry.status == "ok"
+        assert entry.accuracy == Decimal("4.20") / Decimal("5")
+        assert entry.total_cases == 12
+        assert entry.mean_absolute_error_thb is None
+
+    def test_quality_without_judge_is_skipped(self) -> None:
+        """A runner without a judge model is reported as skipped."""
+        runner = MagicMock()
+        runner.run_quality.side_effect = ValueError("Judge model required for quality evaluation")
+        result = run_model_comparison(
+            [ModelSpec(provider="ollama", model_name="minimax-m3")],
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runner,
+            dimension="quality",
+        )
+
+        entry = result.entries[0]
+        assert entry.status == "skipped"
+
+    def test_judge_spec_built_once_per_run(self) -> None:
+        """The judge model is built once and shared by all quality jobs."""
+        runner = MagicMock()
+        runner.run_quality.return_value = self._quality_result("4.0", 5.0)
+        specs = [
+            ModelSpec(provider="ollama", model_name="minimax-m3"),
+            ModelSpec(provider="ollama", model_name="glm-5.3"),
+        ]
+        built: list[ModelSpec] = []
+
+        def _recording_factory(spec: ModelSpec) -> Any:
+            built.append(spec)
+            return MagicMock()
+
+        run_multi_dimension_comparison(
+            specs,
+            ["quality"],
+            model_factory=_recording_factory,
+            runner_factory=lambda model, spec: runner,
+            judge_spec=ModelSpec(provider="ollama", model_name="deepseek-v4-pro:0813"),
+        )
+
+        judge_builds = [s for s in built if "deepseek" in s.model_name]
+        assert len(judge_builds) == 1
+
+
+class TestHallucinationDimension:
+    """Tests for the anti-hallucination comparison dimension."""
+
+    def test_hallucination_uses_compliance_rate(self) -> None:
+        """Compliance rate becomes the accuracy metric."""
+        aggregate = MagicMock(
+            total_cases=16,
+            compliant_count=14,
+            compliance_rate=Decimal("0.875"),
+            mean_latency_seconds=3.1,
+        )
+        runner = MagicMock()
+        runner.run_hallucination.return_value = aggregate
+        result = run_model_comparison(
+            [ModelSpec(provider="ollama", model_name="minimax-m3")],
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runner,
+            dimension="hallucination",
+        )
+
+        entry = result.entries[0]
+        assert entry.status == "ok"
+        assert entry.accuracy == Decimal("0.875")
+        assert (entry.total_cases, entry.correct_count) == (16, 14)
+
+
+class TestRecommendationSafetyDimension:
+    """Tests for the recommendation guardrail compliance dimension."""
+
+    def test_recommendation_safety_uses_compliance_rate(self) -> None:
+        """Guardrail compliance rate becomes the accuracy metric."""
+        aggregate = MagicMock(
+            total_cases=24,
+            passed_count=22,
+            compliance_rate=Decimal("0.9167"),
+        )
+        runner = MagicMock()
+        runner.run_recommendation_safety.return_value = aggregate
+        result = run_model_comparison(
+            [ModelSpec(provider="ollama", model_name="minimax-m3")],
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runner,
+            dimension="recommendation-safety",
+        )
+
+        entry = result.entries[0]
+        assert entry.status == "ok"
+        assert entry.accuracy == Decimal("0.9167")
+        assert (entry.total_cases, entry.correct_count) == (24, 22)
+        assert entry.mean_latency_seconds is None
+
+
+class TestTaxAccuracyForcedDimension:
+    """Tests for the forced-tool tax accuracy dimension."""
+
+    def test_forced_dimension_calls_run_tax_accuracy_forced(self) -> None:
+        """dimension='tax-accuracy-forced' isolates tool-argument accuracy."""
+        runner = MagicMock()
+        runner.run_tax_accuracy_forced.return_value = MagicMock(
+            accuracy_rate=Decimal("0.95"),
+            within_tolerance_count=19,
+            total_cases=20,
+            mean_absolute_error_thb=Decimal("80.00"),
+            mean_latency_seconds=4.0,
+        )
+        result = run_model_comparison(
+            [ModelSpec(provider="ollama", model_name="minimax-m3")],
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runner,
+            dimension="tax-accuracy-forced",
+        )
+
+        entry = result.entries[0]
+        runner.run_tax_accuracy_forced.assert_called_once()
+        assert entry.accuracy == Decimal("0.95")
+        assert entry.mean_absolute_error_thb == Decimal("80.00")
