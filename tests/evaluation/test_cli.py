@@ -197,6 +197,7 @@ class TestModelComparisonCli:
             dimensions: list[str],
             data_dir: str = "data/evaluation",
             max_workers: int = 1,
+            judge_spec: object = None,
         ) -> object:
             return [fake_result]
 
@@ -218,3 +219,8 @@ class TestModelComparisonCli:
         """--dimensions accepts multiple comparison dimensions."""
         args = parse_args(["--compare", "--dimensions", "routing", "tax-accuracy"])
         assert args.dimensions == ["routing", "tax-accuracy"]
+
+    def test_parse_args_comparison_judge(self) -> None:
+        """--comparison-judge overrides the default quality-dimension judge."""
+        args = parse_args(["--compare", "--comparison-judge", "ollama:glm-5.3"])
+        assert args.comparison_judge == "ollama:glm-5.3"

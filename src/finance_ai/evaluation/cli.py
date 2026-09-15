@@ -10,6 +10,9 @@ from __future__ import annotations
 import argparse
 from typing import TYPE_CHECKING
 
+from finance_ai.core.logging import get_logger
+from finance_ai.evaluation.model_comparison import VALID_COMPARISON_DIMENSIONS
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -22,8 +25,6 @@ if TYPE_CHECKING:
     )
     from finance_ai.evaluation.runner import EvaluationRunner
     from finance_ai.rag.vector_store import FinanceVectorStore
-
-from finance_ai.core.logging import get_logger
 
 logger = get_logger(__name__)
 
@@ -120,10 +121,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--dimensions",
         nargs="+",
         default=["routing"],
-        choices=("routing", "tax-accuracy"),
+        choices=VALID_COMPARISON_DIMENSIONS,
         help=(
             "With --compare: dimensions to run per model. "
-            "Default: routing. Options: routing, tax-accuracy."
+            f"Default: routing. Options: {', '.join(VALID_COMPARISON_DIMENSIONS)}."
+        ),
+    )
+    parser.add_argument(
+        "--comparison-judge",
+        default="ollama:minimax-m3",
+        help=(
+            "With --compare: provider:model of the fixed LLM-as-judge "
+            "used for the quality dimension (same judge for all models)."
         ),
     )
     parser.add_argument(
@@ -221,6 +230,7 @@ def _run_model_comparison(args: argparse.Namespace) -> None:
         dimensions,
         data_dir=args.data_dir,
         max_workers=args.workers,
+        judge_spec=parse_model_spec(args.comparison_judge),
     )
 
     output_dir = Path(args.output_dir)
