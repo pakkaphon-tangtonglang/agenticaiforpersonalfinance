@@ -393,20 +393,23 @@ class ModelComparisonEntry(BaseModel):
         model_name: Model identifier as passed to the provider.
         status: 'ok', 'skipped' (missing credentials), or 'error'.
         error_message: Reason for a skipped/failed entry; empty when ok.
-        routing_accuracy: Routing accuracy 0-1; None when not run.
-        mean_latency_seconds: Mean routing latency; None when not run.
-        total_cases: Number of routing dataset cases evaluated.
-        correct_count: Correctly routed cases.
+        accuracy: Dimension accuracy 0-1; None when not run.
+        mean_latency_seconds: Mean per-case latency; None when not run.
+        total_cases: Number of dataset cases evaluated.
+        correct_count: Correctly handled cases.
+        mean_absolute_error_thb: Tax-answer error in THB (accuracy
+            dimension only); None otherwise.
     """
 
     provider: str
     model_name: str
     status: str
     error_message: str = ""
-    routing_accuracy: Decimal | None = None
+    accuracy: Decimal | None = None
     mean_latency_seconds: float | None = None
     total_cases: int = 0
     correct_count: int = 0
+    mean_absolute_error_thb: Decimal | None = None
 
 
 class ModelComparisonResult(BaseModel):

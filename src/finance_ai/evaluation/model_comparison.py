@@ -1,9 +1,14 @@
-"""Multi-model comparison evaluation for the thesis model selection.
+"""Multi-model, multi-dimension comparison evaluation for the thesis.
 
-Runs the routing dimension (intent accuracy + latency) across candidate
-models — the production baseline plus alternatives from Ollama Cloud
-and Google Gemini — so the thesis can justify the production model
-choice with measured numbers instead of anecdote.
+Runs one or more evaluation dimensions — routing (intent accuracy +
+latency) and tax-accuracy (tax-answer correctness + MAE + latency) —
+across candidate models: the production baseline plus alternatives
+from Ollama Cloud and Google Gemini. The thesis can then justify the
+production model choice with measured numbers instead of anecdote.
+
+Every (model, dimension) pair is an independent I/O-bound job, so
+`run_multi_dimension_comparison` can execute all of them
+concurrently in one shared thread pool.
 
 Models whose credentials are missing (e.g. Gemini before
 GOOGLE_API_KEY is configured) are reported as 'skipped' rather than
@@ -21,13 +26,17 @@ from finance_ai.core.logging import get_logger
 from finance_ai.evaluation.models import (
     ModelComparisonEntry,
     ModelComparisonResult,
-    RoutingAggregateResult,
 )
 
 logger = get_logger(__name__)
 
 ModelFactory = Callable[["ModelSpec"], Any]
 RunnerFactory = Callable[[Any, "ModelSpec"], Any]
+
+VALID_COMPARISON_DIMENSIONS = ("routing", "tax-accuracy")
+
+# Job = (candidate model, dimension to evaluate it on).
+ComparisonJob = tuple["ModelSpec", str]
 
 
 class ModelSpec(BaseModel):
@@ -92,8 +101,9 @@ def run_model_comparison(
     model_factory: ModelFactory | None = None,
     runner_factory: RunnerFactory | None = None,
     max_workers: int = 1,
+    dimension: str = "routing",
 ) -> ModelComparisonResult:
-    """Run the routing dimension for every candidate model.
+    """Run one dimension for every candidate model.
 
     Args:
         specs: Candidate models to evaluate, in run order.
@@ -104,50 +114,145 @@ def run_model_comparison(
             (model, spec); defaults to the real runner.
         max_workers: When >1, candidates are evaluated concurrently
             (LLM calls are HTTP I/O-bound); results keep spec order.
+        dimension: 'routing' or 'tax-accuracy'.
 
     Returns:
         ModelComparisonResult with one entry per candidate.
+
+    Raises:
+        ValueError: If dimension is not a supported comparison dimension.
     """
+    results = run_multi_dimension_comparison(
+        specs,
+        [dimension],
+        data_dir=data_dir,
+        model_factory=model_factory,
+        runner_factory=runner_factory,
+        max_workers=max_workers,
+    )
+    return results[0]
+
+
+def run_multi_dimension_comparison(
+    specs: list[ModelSpec],
+    dimensions: list[str],
+    data_dir: str = "data/evaluation",
+    model_factory: ModelFactory | None = None,
+    runner_factory: RunnerFactory | None = None,
+    max_workers: int = 1,
+) -> list[ModelComparisonResult]:
+    """Run every (model, dimension) pair, optionally all at once.
+
+    Args:
+        specs: Candidate models to evaluate.
+        dimensions: Comparison dimensions to run for every model.
+        data_dir: Evaluation dataset directory.
+        model_factory: Optional injected model factory (tests).
+        runner_factory: Optional injected runner factory (tests).
+        max_workers: When >1, all model x dimension pairs are
+            evaluated concurrently in one shared thread pool.
+
+    Returns:
+        One ModelComparisonResult per requested dimension, in the
+        requested dimension order.
+
+    Raises:
+        ValueError: If any dimension is not supported.
+    """
+    _validate_dimensions(dimensions)
+    jobs: list[ComparisonJob] = [(spec, dimension) for dimension in dimensions for spec in specs]
     if max_workers > 1:
-        entries = _compare_models_concurrently(
-            specs, data_dir, model_factory, runner_factory, max_workers
-        )
+        pairs = _run_jobs_concurrently(jobs, data_dir, model_factory, runner_factory, max_workers)
     else:
-        entries = [
-            _compare_single_model(spec, data_dir, model_factory, runner_factory) for spec in specs
-        ]
+        pairs = [_evaluate_job(job, data_dir, model_factory, runner_factory) for job in jobs]
+    return [_assemble_dimension_result(dimension, pairs) for dimension in dimensions]
+
+
+def _validate_dimensions(dimensions: list[str]) -> None:
+    """Reject unsupported dimension names with an actionable message.
+
+    Args:
+        dimensions: Requested dimension names.
+
+    Raises:
+        ValueError: If any name is not a supported dimension.
+    """
+    invalid = [name for name in dimensions if name not in VALID_COMPARISON_DIMENSIONS]
+    if invalid:
+        raise ValueError(
+            f"Unsupported comparison dimension(s): {', '.join(invalid)}. "
+            f"Expected one of: {', '.join(VALID_COMPARISON_DIMENSIONS)}."
+        )
+
+
+def _assemble_dimension_result(
+    dimension: str,
+    pairs: list[tuple[str, ModelComparisonEntry]],
+) -> ModelComparisonResult:
+    """Group evaluated jobs into one result per dimension.
+
+    Args:
+        dimension: Dimension to assemble.
+        pairs: (dimension, entry) pairs from every evaluated job.
+
+    Returns:
+        A result holding that dimension's entries in job order.
+    """
+    entries = [entry for dim, entry in pairs if dim == dimension]
     return ModelComparisonResult(
-        dimension="routing",
+        dimension=dimension,
         generated_at=datetime.now(timezone.utc),
         entries=entries,
     )
 
 
-def _compare_models_concurrently(
-    specs: list[ModelSpec],
+def _run_jobs_concurrently(
+    jobs: list[ComparisonJob],
     data_dir: str,
     model_factory: ModelFactory | None,
     runner_factory: RunnerFactory | None,
     max_workers: int,
-) -> list[ModelComparisonEntry]:
-    """Evaluate candidates concurrently, preserving the spec order.
+) -> list[tuple[str, ModelComparisonEntry]]:
+    """Evaluate all jobs concurrently, preserving submission order.
 
     Args:
-        specs: Candidate models, in run order.
+        jobs: (model, dimension) pairs to evaluate.
         data_dir: Evaluation dataset directory.
         model_factory: Optional injected model factory.
         runner_factory: Optional injected runner factory.
         max_workers: Thread pool size.
 
     Returns:
-        Entries in the same order as specs.
+        (dimension, entry) pairs in the same order as jobs.
     """
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [
-            executor.submit(_compare_single_model, spec, data_dir, model_factory, runner_factory)
-            for spec in specs
+            executor.submit(_evaluate_job, job, data_dir, model_factory, runner_factory)
+            for job in jobs
         ]
         return [future.result() for future in futures]
+
+
+def _evaluate_job(
+    job: ComparisonJob,
+    data_dir: str,
+    model_factory: ModelFactory | None,
+    runner_factory: RunnerFactory | None,
+) -> tuple[str, ModelComparisonEntry]:
+    """Evaluate one (model, dimension) job.
+
+    Args:
+        job: Candidate model and dimension to evaluate.
+        data_dir: Evaluation dataset directory.
+        model_factory: Optional injected model factory.
+        runner_factory: Optional injected runner factory.
+
+    Returns:
+        The evaluated dimension and its comparison entry.
+    """
+    spec, dimension = job
+    entry = _compare_single_model(spec, data_dir, model_factory, runner_factory, dimension)
+    return dimension, entry
 
 
 def _compare_single_model(
@@ -155,43 +260,114 @@ def _compare_single_model(
     data_dir: str,
     model_factory: ModelFactory | None,
     runner_factory: RunnerFactory | None,
+    dimension: str,
 ) -> ModelComparisonEntry:
-    """Evaluate one candidate model on the routing dimension.
+    """Evaluate one candidate model on one dimension.
 
     Args:
         spec: Candidate model.
         data_dir: Evaluation dataset directory.
         model_factory: Optional injected model factory.
         runner_factory: Optional injected runner factory.
+        dimension: Comparison dimension to run.
 
     Returns:
-        Entry with routing metrics, or a skipped/error status.
+        Entry with dimension metrics, or a skipped/error status.
     """
-    logger.info("Comparing model %s:%s", spec.provider, spec.model_name)
+    logger.info("Comparing %s:%s on %s", spec.provider, spec.model_name, dimension)
     try:
         factory = model_factory or _default_model_factory
         model = factory(spec)
         runner = _build_runner(model, spec, data_dir, runner_factory)
-        routing = runner.run_routing()
+        aggregate = _run_dimension(runner, dimension)
     except ValidationError as exc:
         # Dataset/config problems are real failures — not missing
         # credentials (ValidationError subclasses ValueError).
-        return ModelComparisonEntry(
-            provider=spec.provider,
-            model_name=spec.model_name,
-            status="error",
-            error_message=str(exc),
-        )
+        return _entry_with_error(spec, str(exc))
     except ValueError as exc:
         return _skipped_entry(spec, exc)
     except Exception as exc:  # pylint: disable=broad-exception-caught
-        return ModelComparisonEntry(
-            provider=spec.provider,
-            model_name=spec.model_name,
-            status="error",
-            error_message=str(exc),
-        )
-    return _ok_entry(spec, routing)
+        return _entry_with_error(spec, str(exc))
+    return _ok_entry(spec, aggregate, dimension)
+
+
+def _entry_with_error(spec: ModelSpec, message: str) -> ModelComparisonEntry:
+    """Build an error entry for a model that failed to evaluate.
+
+    Args:
+        spec: Candidate model.
+        message: Failure reason.
+
+    Returns:
+        Entry with status 'error'.
+    """
+    return ModelComparisonEntry(
+        provider=spec.provider,
+        model_name=spec.model_name,
+        status="error",
+        error_message=message,
+    )
+
+
+def _run_dimension(runner: Any, dimension: str) -> Any:
+    """Run the requested dimension on an evaluation runner.
+
+    Args:
+        runner: EvaluationRunner (or test double).
+        dimension: Comparison dimension to run.
+
+    Returns:
+        The aggregate result for that dimension.
+    """
+    if dimension == "routing":
+        return runner.run_routing()
+    return runner.run_tax_accuracy()
+
+
+def _ok_entry(
+    spec: ModelSpec,
+    aggregate: Any,
+    dimension: str,
+) -> ModelComparisonEntry:
+    """Build a successful entry from a dimension aggregate result.
+
+    Args:
+        spec: Candidate model.
+        aggregate: Aggregated metrics for the dimension.
+        dimension: Comparison dimension that was run.
+
+    Returns:
+        Entry with status 'ok' and the dimension metrics.
+    """
+    return ModelComparisonEntry(
+        provider=spec.provider,
+        model_name=spec.model_name,
+        status="ok",
+        **_extract_metrics(aggregate, dimension),
+    )
+
+
+def _extract_metrics(aggregate: Any, dimension: str) -> dict[str, Any]:
+    """Normalize a dimension aggregate into entry metric kwargs.
+
+    Args:
+        aggregate: Aggregated metrics for the dimension.
+        dimension: Comparison dimension that was run.
+
+    Returns:
+        kwargs for ModelComparisonEntry (accuracy, latency, counts).
+    """
+    metrics: dict[str, Any] = {
+        "accuracy": aggregate.accuracy if dimension == "routing" else aggregate.accuracy_rate,
+        "mean_latency_seconds": aggregate.mean_latency_seconds,
+        "total_cases": aggregate.total_cases,
+    }
+    if dimension == "routing":
+        metrics["correct_count"] = aggregate.correct_count
+    else:
+        metrics["correct_count"] = aggregate.within_tolerance_count
+        metrics["mean_absolute_error_thb"] = aggregate.mean_absolute_error_thb
+    return metrics
 
 
 def _default_model_factory(spec: ModelSpec) -> Any:
@@ -258,27 +434,6 @@ def _skipped_entry(spec: ModelSpec, exc: ValueError) -> ModelComparisonEntry:
     )
 
 
-def _ok_entry(spec: ModelSpec, routing: RoutingAggregateResult) -> ModelComparisonEntry:
-    """Build a successful entry from a routing aggregate result.
-
-    Args:
-        spec: Candidate model.
-        routing: Aggregated routing metrics for the model.
-
-    Returns:
-        Entry with status 'ok' and the routing metrics.
-    """
-    return ModelComparisonEntry(
-        provider=spec.provider,
-        model_name=spec.model_name,
-        status="ok",
-        routing_accuracy=routing.accuracy,
-        mean_latency_seconds=routing.mean_latency_seconds,
-        total_cases=routing.total_cases,
-        correct_count=routing.correct_count,
-    )
-
-
 def format_comparison_markdown(result: ModelComparisonResult) -> str:
     """Render a comparison result as a markdown table for the thesis.
 
@@ -287,18 +442,34 @@ def format_comparison_markdown(result: ModelComparisonResult) -> str:
 
     Returns:
         Markdown string with one row per model, sorted by accuracy.
+        An extra 'MAE (THB)' column appears for accuracy dimensions.
 
     Example:
         >>> print(format_comparison_markdown(result))  # doctest: +SKIP
     """
-    header = (
-        "| Model | Provider | Status | Routing Accuracy | Mean Latency (s) |\n"
-        "|---|---|---|---|---|\n"
-    )
+    include_mae = any(entry.mean_absolute_error_thb is not None for entry in result.entries)
+    header = _table_header(include_mae)
     ranked = sorted(result.entries, key=_accuracy_sort_key, reverse=True)
-    rows = [_format_entry_row(entry) for entry in ranked]
+    rows = [_format_entry_row(entry, include_mae) for entry in ranked]
     notes = _format_skipped_notes(ranked)
     return header + "\n".join(rows) + "\n" + notes
+
+
+def _table_header(include_mae: bool) -> str:
+    """Build the markdown table header for a comparison.
+
+    Args:
+        include_mae: Whether to add the MAE (THB) column.
+
+    Returns:
+        Two-line markdown header (columns + separator row).
+    """
+    columns = "| Model | Provider | Status | Accuracy | Mean Latency (s) |"
+    separator = "|---|---|---|---|---|"
+    if include_mae:
+        columns += " MAE (THB) |"
+        separator += "---|"
+    return f"{columns}\n{separator}\n"
 
 
 def _accuracy_sort_key(entry: ModelComparisonEntry) -> Decimal:
@@ -310,21 +481,30 @@ def _accuracy_sort_key(entry: ModelComparisonEntry) -> Decimal:
     Returns:
         Accuracy, or -1 when the model did not run.
     """
-    return entry.routing_accuracy if entry.routing_accuracy is not None else Decimal(-1)
+    return entry.accuracy if entry.accuracy is not None else Decimal(-1)
 
 
-def _format_entry_row(entry: ModelComparisonEntry) -> str:
+def _format_entry_row(entry: ModelComparisonEntry, include_mae: bool) -> str:
     """Format one comparison entry as a markdown table row.
 
     Args:
         entry: Comparison entry.
+        include_mae: Whether to append the MAE (THB) column.
 
     Returns:
         Markdown row string.
     """
-    accuracy = f"{entry.routing_accuracy:.2f}" if entry.routing_accuracy is not None else "-"
+    accuracy = f"{entry.accuracy:.2f}" if entry.accuracy is not None else "-"
     latency = f"{entry.mean_latency_seconds:.2f}" if entry.mean_latency_seconds is not None else "-"
-    return f"| {entry.model_name} | {entry.provider} | {entry.status} | {accuracy} | {latency} |"
+    row = f"| {entry.model_name} | {entry.provider} | {entry.status} | {accuracy} | {latency} |"
+    if include_mae:
+        mae = (
+            f"{entry.mean_absolute_error_thb:,.2f}"
+            if entry.mean_absolute_error_thb is not None
+            else "-"
+        )
+        row += f" {mae} |"
+    return row
 
 
 def _format_skipped_notes(entries: list[ModelComparisonEntry]) -> str:
