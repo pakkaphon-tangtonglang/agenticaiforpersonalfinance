@@ -215,3 +215,23 @@ class TestProductionDatasetsValidate:
             "general",
             "unknown",
         }
+
+    def test_tax_dataset_expected_answers_match_calculator(self) -> None:
+        """Every dataset expected_total_tax equals the pure calculator result.
+
+        The accuracy evaluator scores against expected_total_tax, so the
+        dataset values must never drift from the calculator ground truth.
+        """
+        from finance_ai.evaluation.accuracy_evaluator import (  # noqa: PLC0415
+            compute_tax_ground_truth,
+        )
+
+        dataset = load_tax_accuracy_dataset("data/evaluation/tax_accuracy_dataset.yaml")
+        assert dataset is not None
+
+        mismatches = [
+            case.case_id
+            for case in dataset.cases
+            if compute_tax_ground_truth(case).total_tax != case.expected_total_tax
+        ]
+        assert mismatches == []
