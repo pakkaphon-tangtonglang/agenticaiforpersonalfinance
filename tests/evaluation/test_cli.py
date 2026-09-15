@@ -194,16 +194,17 @@ class TestModelComparisonCli:
 
         def _fake_comparison(
             specs: object,
+            dimensions: list[str],
             data_dir: str = "data/evaluation",
             max_workers: int = 1,
         ) -> object:
-            return fake_result
+            return [fake_result]
 
-        monkeypatch.setattr(model_comparison, "run_model_comparison", _fake_comparison)
+        monkeypatch.setattr(model_comparison, "run_multi_dimension_comparison", _fake_comparison)
         out_dir = tmp_path / "results"
         main(["--compare", "--output-dir", str(out_dir)])
 
-        saved = list(out_dir.glob("model_comparison_*.json"))
+        saved = list(out_dir.glob("model_comparison_routing_*.json"))
         assert len(saved) == 1
         data = json.loads(saved[0].read_text(encoding="utf-8"))
         assert data["entries"][0]["model_name"] == "minimax-m3"
@@ -212,3 +213,8 @@ class TestModelComparisonCli:
         """--workers defaults to concurrent comparison."""
         args = parse_args(["--compare"])
         assert args.workers == 4
+
+    def test_parse_args_dimensions(self) -> None:
+        """--dimensions accepts multiple comparison dimensions."""
+        args = parse_args(["--compare", "--dimensions", "routing", "tax-accuracy"])
+        assert args.dimensions == ["routing", "tax-accuracy"]

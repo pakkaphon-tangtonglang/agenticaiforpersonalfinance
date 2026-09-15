@@ -14,6 +14,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from finance_ai.evaluation.models import (
+    AccuracyAggregateResult,
     ModelComparisonEntry,
     RoutingAggregateResult,
 )
@@ -23,6 +24,7 @@ from finance_ai.evaluation.model_comparison import (
     format_comparison_markdown,
     parse_model_spec,
     run_model_comparison,
+    run_multi_dimension_comparison,
 )
 
 
@@ -98,7 +100,7 @@ class TestRunModelComparison:
         entry = result.entries[0]
         assert entry.status == "ok"
         assert entry.model_name == "minimax-m3"
-        assert entry.routing_accuracy == Decimal("0.90")
+        assert entry.accuracy == Decimal("0.90")
         assert entry.mean_latency_seconds == 1.5
         assert (entry.total_cases, entry.correct_count) == (10, 9)
 
@@ -117,7 +119,7 @@ class TestRunModelComparison:
         entry = result.entries[0]
         assert entry.status == "skipped"
         assert "google_api_key" in entry.error_message
-        assert entry.routing_accuracy is None
+        assert entry.accuracy is None
 
     def test_model_failure_recorded_and_continues(self) -> None:
         """A crashing model is recorded as an error; later models still run."""
@@ -149,7 +151,7 @@ class TestRunModelComparison:
         assert result.entries[0].status == "error"
         assert "connection refused" in result.entries[0].error_message
         assert result.entries[1].status == "ok"
-        assert result.entries[1].routing_accuracy == Decimal("0.80")
+        assert result.entries[1].accuracy == Decimal("0.80")
 
 
 class TestComparisonReport:
@@ -175,7 +177,7 @@ class TestComparisonReport:
             provider="ollama",
             model_name="minimax-m3",
             status="ok",
-            routing_accuracy=Decimal("0.90"),
+            accuracy=Decimal("0.90"),
         )
         from finance_ai.evaluation.models import ModelComparisonResult  # noqa: PLC0415
 
@@ -299,3 +301,105 @@ class TestConcurrentComparison:
 
         assert len(result.entries) == 3
         assert len(set(thread_names)) > 1
+
+
+class TestTaxAccuracyDimension:
+    """Tests for comparing models on the tax-accuracy dimension."""
+
+    def _tax_result(self, rate: str, mae: str, latency: float) -> AccuracyAggregateResult:
+        """Build a tax-accuracy aggregate for tests."""
+        return AccuracyAggregateResult(
+            agent_type="tax",
+            total_cases=20,
+            within_tolerance_count=18,
+            accuracy_rate=Decimal(rate),
+            mean_absolute_error_thb=Decimal(mae),
+            mean_latency_seconds=latency,
+            results=[],
+        )
+
+    def test_tax_dimension_records_rate_and_mae(self) -> None:
+        """dimension='tax-accuracy' scores tax-agent correctness + MAE."""
+        runner = MagicMock()
+        runner.run_tax_accuracy.return_value = self._tax_result("0.90", "150.00", 5.2)
+        result = run_model_comparison(
+            [ModelSpec(provider="ollama", model_name="minimax-m3")],
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runner,
+            dimension="tax-accuracy",
+        )
+
+        entry = result.entries[0]
+        assert result.dimension == "tax-accuracy"
+        assert entry.status == "ok"
+        assert entry.accuracy == Decimal("0.90")
+        assert entry.mean_absolute_error_thb == Decimal("150.00")
+        assert entry.mean_latency_seconds == 5.2
+        assert (entry.total_cases, entry.correct_count) == (20, 18)
+
+    def test_unknown_dimension_raises(self) -> None:
+        """An unsupported dimension name is rejected up front."""
+        with pytest.raises(ValueError, match="Unsupported comparison dimension"):
+            run_model_comparison(
+                [ModelSpec(provider="ollama", model_name="minimax-m3")],
+                dimension="bogus",
+            )
+
+    def test_markdown_includes_mae_column(self) -> None:
+        """The report shows MAE for accuracy-dimension comparisons."""
+        runner = MagicMock()
+        runner.run_tax_accuracy.return_value = self._tax_result("0.90", "150.00", 5.2)
+        result = run_model_comparison(
+            [ModelSpec(provider="ollama", model_name="minimax-m3")],
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runner,
+            dimension="tax-accuracy",
+        )
+        markdown = format_comparison_markdown(result)
+
+        assert "MAE (THB)" in markdown
+        assert "150.00" in markdown
+
+
+class TestMultiDimensionComparison:
+    """Tests for running every model x dimension pair at once."""
+
+    def test_all_pairs_run_and_group_by_dimension(self) -> None:
+        """One shared pool evaluates all pairs; results group per dimension."""
+        runner = MagicMock()
+        runner.run_routing.return_value = _routing_result("0.90", 1.5)
+        runner.run_tax_accuracy.return_value = self._tax_result("0.80", "150.00", 4.0)
+        specs = [ModelSpec(provider="ollama", model_name="minimax-m3")]
+
+        results = run_multi_dimension_comparison(
+            specs,
+            ["routing", "tax-accuracy"],
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runner,
+            max_workers=2,
+        )
+
+        assert [result.dimension for result in results] == ["routing", "tax-accuracy"]
+        assert results[0].entries[0].accuracy == Decimal("0.90")
+        assert results[1].entries[0].accuracy == Decimal("0.80")
+        assert results[1].entries[0].mean_absolute_error_thb == Decimal("150.00")
+
+    def _tax_result(self, rate: str, mae: str, latency: float) -> AccuracyAggregateResult:
+        """Build a tax-accuracy aggregate for tests."""
+        return AccuracyAggregateResult(
+            agent_type="tax",
+            total_cases=20,
+            within_tolerance_count=16,
+            accuracy_rate=Decimal(rate),
+            mean_absolute_error_thb=Decimal(mae),
+            mean_latency_seconds=latency,
+            results=[],
+        )
+
+    def test_invalid_dimension_raises_before_running(self) -> None:
+        """An unsupported dimension is rejected before any model runs."""
+        with pytest.raises(ValueError, match="Unsupported comparison dimension"):
+            run_multi_dimension_comparison(
+                [ModelSpec(provider="ollama", model_name="minimax-m3")],
+                ["routing", "bogus"],
+            )

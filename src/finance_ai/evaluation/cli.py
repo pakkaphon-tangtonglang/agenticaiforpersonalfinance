@@ -11,10 +11,15 @@ import argparse
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from langchain_core.language_models.chat_models import BaseChatModel
 
     from finance_ai.core.config import Settings
-    from finance_ai.evaluation.models import EvaluationReport
+    from finance_ai.evaluation.models import (
+        EvaluationReport,
+        ModelComparisonResult,
+    )
     from finance_ai.evaluation.runner import EvaluationRunner
     from finance_ai.rag.vector_store import FinanceVectorStore
 
@@ -112,6 +117,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--dimensions",
+        nargs="+",
+        default=["routing"],
+        choices=("routing", "tax-accuracy"),
+        help=(
+            "With --compare: dimensions to run per model. "
+            "Default: routing. Options: routing, tax-accuracy."
+        ),
+    )
+    parser.add_argument(
         "--workers",
         type=int,
         default=4,
@@ -191,22 +206,51 @@ def _run_model_comparison(args: argparse.Namespace) -> None:
 
     from finance_ai.evaluation.model_comparison import (  # noqa: PLC0415
         DEFAULT_COMPARISON_MODELS,
-        format_comparison_markdown,
         parse_model_spec,
-        run_model_comparison,
+        run_multi_dimension_comparison,
     )
 
     specs = [parse_model_spec(text) for text in args.models] or DEFAULT_COMPARISON_MODELS
-    print(f"[Eval] Comparing {len(specs)} models on the routing dimension...")
-    result = run_model_comparison(specs, data_dir=args.data_dir, max_workers=args.workers)
+    dimensions = args.dimensions
+    print(
+        f"[Eval] Comparing {len(specs)} models on {len(dimensions)} "
+        f"dimension(s): {', '.join(dimensions)}..."
+    )
+    results = run_multi_dimension_comparison(
+        specs,
+        dimensions,
+        data_dir=args.data_dir,
+        max_workers=args.workers,
+    )
 
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    json_path = output_dir / f"model_comparison_{stamp}.json"
-    md_path = output_dir / f"model_comparison_{stamp}.md"
+    for result in results:
+        _save_dimension_report(result, output_dir, stamp)
+
+
+def _save_dimension_report(
+    result: "ModelComparisonResult",
+    output_dir: "Path",
+    stamp: str,
+) -> None:
+    """Save and print one dimension's comparison report.
+
+    Args:
+        result: Comparison result for one dimension.
+        output_dir: Directory to write JSON and markdown reports to.
+        stamp: Timestamp string shared by this run's filenames.
+    """
+    from finance_ai.evaluation.model_comparison import (  # noqa: PLC0415
+        format_comparison_markdown,
+    )
+
+    json_path = output_dir / f"model_comparison_{result.dimension}_{stamp}.json"
+    md_path = output_dir / f"model_comparison_{result.dimension}_{stamp}.md"
     json_path.write_text(result.model_dump_json(indent=2), encoding="utf-8")
     md_path.write_text(format_comparison_markdown(result), encoding="utf-8")
+    print(f"\n[Eval] Dimension: {result.dimension}")
     print(format_comparison_markdown(result))
     print("[Eval] Comparison saved:")
     print(f"  JSON: {json_path}")
