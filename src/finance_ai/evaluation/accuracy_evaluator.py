@@ -78,9 +78,10 @@ def compute_tax_ground_truth(case: TaxAccuracyCase) -> TaxCalculationResult:
 def extract_tax_from_response(response: str) -> Decimal | None:
     """Extract tax amount from a Thai agent response.
 
-    Checks zero-tax patterns first, then tries extraction
-    patterns in priority order with limited gap to avoid
-    matching unrelated numbers across lines.
+    Checks explicit tax amount patterns first, then falls back to
+    zero-tax phrasing. Ordering matters: agents often explain that the
+    first 150,000 THB band is tax-free before stating a non-zero tax,
+    so zero phrasing alone must not override an explicit amount.
 
     Args:
         response: Agent response text in Thai.
@@ -92,13 +93,13 @@ def extract_tax_from_response(response: str) -> Decimal | None:
         >>> extract_tax_from_response("ภาษีที่ต้องจ่าย 29,000 บาท")
         Decimal('29000')
     """
-    for pattern in ZERO_TAX_PATTERNS:
-        if re.search(pattern, response):
-            return Decimal("0")
     for pattern in TAX_PATTERNS:
         result = extract_thai_number(response, pattern)
         if result is not None:
             return result
+    for pattern in ZERO_TAX_PATTERNS:
+        if re.search(pattern, response):
+            return Decimal("0")
     return None
 
 

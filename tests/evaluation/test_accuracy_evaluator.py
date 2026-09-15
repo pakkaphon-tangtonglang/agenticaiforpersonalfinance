@@ -120,6 +120,17 @@ class TestExtractTaxFromResponse:
         result = extract_tax_from_response(text)
         assert result == Decimal("89000")
 
+    def test_zero_phrase_with_explicit_amount_prefers_amount(self) -> None:
+        """Explicit tax amount wins over an earlier 'ไม่ต้องเสียภาษี' mention.
+
+        Agents often explain that the first 150,000 THB band is
+        tax-free before stating the final non-zero tax. The extractor
+        must not misread such explanations as a zero-tax answer.
+        """
+        text = "เงินได้ 150,000 บาทแรกไม่ต้องเสียภาษี " "ดังนั้นภาษีที่ต้องจ่ายคือ 21,500 บาท"
+        result = extract_tax_from_response(text)
+        assert result == Decimal("21500")
+
     def test_zero_tax_mai_tong_sia(self) -> None:
         """Test zero tax detection: ไม่ต้องเสียภาษี."""
         text = "เงินได้สุทธิ 15,000 บาท ซึ่งคุณไม่ต้องเสียภาษีในปีนี้"
