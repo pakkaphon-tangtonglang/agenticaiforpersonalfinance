@@ -18,6 +18,7 @@ from finance_ai.evaluation.models import (
     HallucinationDataset,
     HallucinationResult,
 )
+from finance_ai.evaluation.llm_retry import invoke_with_retry
 
 JUDGE_SYSTEM_PROMPT = """คุณเป็นผู้ตรวจสอบความถูกต้องของคำตอบระบบ AI การเงิน
 
@@ -150,7 +151,7 @@ def _parse_judge_violations(content: str) -> list[str]:
 
 def evaluate_single_hallucination_case(
     case: HallucinationCase,
-    agent_response: str,
+    agent_response: str | None,
     use_llm_judge: bool = False,
     judge_model: BaseChatModel | None = None,
 ) -> HallucinationResult:
@@ -158,7 +159,8 @@ def evaluate_single_hallucination_case(
 
     Args:
         case: Hallucination test case.
-        agent_response: The agent's response to check.
+        agent_response: The agent's response to check; None when
+            generation failed, which is always non-compliant.
         use_llm_judge: Whether to use Stage 2 LLM judge.
         judge_model: LLM model for Stage 2 (required if use_llm_judge).
 
@@ -169,6 +171,16 @@ def evaluate_single_hallucination_case(
         >>> result = evaluate_single_hallucination_case(case, response)
     """
     start = time.perf_counter()
+    if agent_response is None:
+        return HallucinationResult(
+            case_id=case.case_id,
+            query=case.query,
+            category=case.category,
+            violations_found=["generation_failed"],
+            is_compliant=False,
+            agent_response="",
+            latency_seconds=time.perf_counter() - start,
+        )
     violations = check_forbidden_patterns(agent_response, case.forbidden_patterns)
     violations.extend(check_known_facts(agent_response, case.known_facts))
 
@@ -190,7 +202,7 @@ def evaluate_single_hallucination_case(
 
 def evaluate_hallucination_dataset(
     dataset: HallucinationDataset,
-    agent_responses: dict[str, str],
+    agent_responses: dict[str, str | None],
     use_llm_judge: bool = False,
     judge_model: BaseChatModel | None = None,
 ) -> HallucinationAggregateResult:

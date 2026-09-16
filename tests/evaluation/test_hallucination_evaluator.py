@@ -189,7 +189,7 @@ class TestEvaluateHallucinationDataset:
                 ),
             ],
         )
-        responses = {
+        responses: dict[str, str | None] = {
             "hal_001": "ค่าลดหย่อน 60,000 บาท",
             "hal_002": "response text",
         }
@@ -202,3 +202,54 @@ class TestEvaluateHallucinationDataset:
         dataset = HallucinationDataset(version="1.0", cases=[])
         agg = evaluate_hallucination_dataset(dataset, {})
         assert agg.total_cases == 0
+
+
+class TestFailedGenerationHandling:
+    """A missing (None) agent response must be non-compliant."""
+
+    def test_none_response_marked_non_compliant(self) -> None:
+        """A None response fails with a generation_failed violation."""
+        case = HallucinationCase(
+            case_id="hal_010",
+            query="ค่าลดหย่อน",
+            category="fabricated_number",
+            known_facts=["ค่าลดหย่อนส่วนตัว 60,000 บาท"],
+            forbidden_patterns=[],
+        )
+        result = evaluate_single_hallucination_case(case, None)
+        assert result.is_compliant is False
+        assert "generation_failed" in result.violations_found
+
+    def test_none_response_skips_llm_judge(self) -> None:
+        """The judge is not called for a failed generation."""
+        case = HallucinationCase(
+            case_id="hal_011",
+            query="ค่าลดหย่อน",
+            category="fabricated_number",
+            known_facts=["60,000"],
+            forbidden_patterns=[],
+        )
+        judge = MagicMock()
+        result = evaluate_single_hallucination_case(
+            case, None, use_llm_judge=True, judge_model=judge
+        )
+        assert result.is_compliant is False
+        judge.invoke.assert_not_called()
+
+    def test_dataset_treats_missing_response_as_non_compliant(self) -> None:
+        """Dataset evaluation counts a None response as non-compliant."""
+        dataset = HallucinationDataset(
+            version="1.0",
+            cases=[
+                HallucinationCase(
+                    case_id="hal_012",
+                    query="ค่าลดหย่อน",
+                    category="fabricated_number",
+                    known_facts=["60,000"],
+                    forbidden_patterns=[],
+                )
+            ],
+        )
+        aggregate = evaluate_hallucination_dataset(dataset, {"hal_012": None})
+        assert aggregate.compliance_rate == 0
+        assert aggregate.compliant_count == 0

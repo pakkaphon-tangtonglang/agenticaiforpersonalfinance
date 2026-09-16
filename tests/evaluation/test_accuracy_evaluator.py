@@ -443,3 +443,44 @@ class TestExpenseDeductionIntegration:
         assert agg.total_cases == 2
         assert agg.within_tolerance_count == 2
         assert agg.accuracy_rate == Decimal("1.0000")
+
+
+class TestPerCaseFailureIsolation:
+    """One failing agent call must not kill the whole dataset cell."""
+
+    @patch("finance_ai.evaluation.accuracy_evaluator.execute_tax_agent")
+    def test_agent_error_counts_as_incorrect(self, mock_execute: MagicMock) -> None:
+        """An exception on one case counts as incorrect, others unaffected."""
+        mock_execute.side_effect = [
+            Exception("google_api_key is required"),
+            {"response": "ภาษีที่ต้องจ่าย 21,500 บาท"},
+        ]
+        dataset = TaxAccuracyDataset(version="1.0", cases=[_make_tax_case(), _make_tax_case()])
+        agg = evaluate_tax_accuracy_dataset(MagicMock(), dataset)
+        assert agg.total_cases == 2
+        assert agg.within_tolerance_count == 1
+        assert agg.accuracy_rate == Decimal("0.5000")
+
+    @patch("finance_ai.evaluation.accuracy_evaluator.execute_tax_agent")
+    def test_agent_error_not_counted_within_tolerance(self, mock_execute: MagicMock) -> None:
+        """Every case failing means 0 accuracy and no crash."""
+        mock_execute.side_effect = Exception("429")
+        dataset = TaxAccuracyDataset(version="1.0", cases=[_make_tax_case()])
+        agg = evaluate_tax_accuracy_dataset(MagicMock(), dataset)
+        assert agg.total_cases == 1
+        assert agg.within_tolerance_count == 0
+        assert agg.accuracy_rate == Decimal("0.0000")
+
+    @patch("finance_ai.evaluation.llm_retry.time.sleep")
+    @patch("finance_ai.evaluation.accuracy_evaluator.execute_tax_agent")
+    def test_rate_limit_is_retried(self, mock_execute: MagicMock, mock_sleep: MagicMock) -> None:
+        """A transient 429 is retried before marking the case failed."""
+        mock_execute.side_effect = [
+            Exception("too many concurrent requests (status code: 429)"),
+            {"response": "ภาษีที่ต้องจ่าย 21,500 บาท"},
+        ]
+        dataset = TaxAccuracyDataset(version="1.0", cases=[_make_tax_case()])
+        agg = evaluate_tax_accuracy_dataset(MagicMock(), dataset)
+        assert agg.within_tolerance_count == 1
+        assert agg.accuracy_rate == Decimal("1.0000")
+        mock_execute.call_count == 2

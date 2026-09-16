@@ -2,7 +2,7 @@
 
 import json
 from decimal import Decimal
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 from finance_ai.evaluation.models import QualityCase, QualityDataset
 from finance_ai.evaluation.quality_evaluator import (
@@ -161,3 +161,32 @@ class TestEvaluateQualityDataset:
         agg = evaluate_quality_dataset(agent, judge, dataset)
         assert agg.total_cases == 0
         assert agg.mean_overall == Decimal("0.0000")
+
+
+class TestGenerationFailureHandling:
+    """A failed agent generation must floor the scores, not crash."""
+
+    def test_agent_failure_floors_scores(self) -> None:
+        """An agent exception yields minimum scores for the case."""
+        agent = MagicMock()
+        agent.invoke.side_effect = Exception("too many concurrent requests (status code: 429)")
+        judge = _make_mock_judge(_make_judge_response())
+        case = QualityCase(case_id="q_fail", query="test", expected_agent="tax")
+        with patch("finance_ai.evaluation.llm_retry.time.sleep"):
+            result = evaluate_single_quality_case(agent, judge, case)
+        assert result.scores.overall == Decimal("1")
+        assert "generation_failed" in result.scores.judge_reasoning
+
+    def test_agent_failure_retried_once(self) -> None:
+        """Transient 429 is retried before flooring scores."""
+        agent = MagicMock()
+        agent.invoke.side_effect = [
+            Exception("too many concurrent requests (status code: 429)"),
+            MagicMock(content="ok response"),
+        ]
+        judge = _make_mock_judge(_make_judge_response())
+        case = QualityCase(case_id="q_retry", query="test", expected_agent="tax")
+        with patch("finance_ai.evaluation.llm_retry.time.sleep"):
+            result = evaluate_single_quality_case(agent, judge, case)
+        assert result.agent_response == "ok response"
+        assert agent.invoke.call_count == 2

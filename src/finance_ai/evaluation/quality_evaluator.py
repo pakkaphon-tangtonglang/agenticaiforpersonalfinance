@@ -11,6 +11,8 @@ from decimal import Decimal
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from finance_ai.core.logging import get_logger
+from finance_ai.evaluation.llm_retry import invoke_with_retry
 from finance_ai.evaluation.metrics import compute_mean_decimal
 from finance_ai.evaluation.models import (
     QualityAggregateResult,
@@ -19,6 +21,8 @@ from finance_ai.evaluation.models import (
     QualityResult,
     QualityScore,
 )
+
+logger = get_logger(__name__)
 
 JUDGE_PROMPT_TEMPLATE = """คุณเป็นผู้ตัดสินคุณภาพคำตอบระบบ AI การเงินส่วนบุคคล
 
@@ -116,8 +120,20 @@ def evaluate_single_quality_case(
     start = time.perf_counter()
 
     if agent_response is None:
-        agent_result = agent_model.invoke([HumanMessage(content=case.query)])
-        agent_response = str(agent_result.content)
+        try:
+            agent_result = invoke_with_retry(
+                lambda: agent_model.invoke([HumanMessage(content=case.query)])
+            )
+            agent_response = str(agent_result.content)
+        except Exception as error:  # noqa: BLE001  # failed generation floors scores
+            logger.warning("Quality case %s failed: %s", case.case_id, error)
+            return QualityResult(
+                case_id=case.case_id,
+                query=case.query,
+                agent_response="",
+                scores=_floor_scores(str(error)),
+                latency_seconds=time.perf_counter() - start,
+            )
 
     scores = _get_judge_scores(judge_model, case.query, agent_response)
     latency = time.perf_counter() - start
@@ -128,6 +144,28 @@ def evaluate_single_quality_case(
         agent_response=agent_response,
         scores=scores,
         latency_seconds=latency,
+    )
+
+
+def _floor_scores(error: str) -> QualityScore:
+    """Build minimum scores for a case whose generation failed.
+
+    QualityScore enforces a 1-5 range, so the floor is used to mark a
+    failed generation instead of fabricating judge output.
+
+    Args:
+        error: The error message to record as judge reasoning.
+
+    Returns:
+        QualityScore with every dimension at the minimum value.
+    """
+    return QualityScore(
+        relevance=Decimal("1"),
+        completeness=Decimal("1"),
+        accuracy=Decimal("1"),
+        thai_language_quality=Decimal("1"),
+        overall=Decimal("1"),
+        judge_reasoning=f"generation_failed: {error}",
     )
 
 
@@ -147,11 +185,13 @@ def _get_judge_scores(
         QualityScore from the judge.
     """
     prompt = build_judge_prompt(query, response)
-    result = judge_model.invoke(
-        [
-            SystemMessage(content="You are a quality evaluation judge."),
-            HumanMessage(content=prompt),
-        ]
+    result = invoke_with_retry(
+        lambda: judge_model.invoke(
+            [
+                SystemMessage(content="You are a quality evaluation judge."),
+                HumanMessage(content=prompt),
+            ]
+        )
     )
     return parse_judge_response(str(result.content))
 

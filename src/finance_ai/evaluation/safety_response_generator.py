@@ -16,6 +16,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from finance_ai.core.logging import get_logger
+from finance_ai.evaluation.llm_retry import invoke_with_retry
+
 from finance_ai.agents.recommendation_agent import build_recommendation_agent_graph
 from finance_ai.core.logging import get_logger
 from finance_ai.database.base import Base
@@ -167,7 +170,7 @@ def generate_safety_responses(
     chat_model: BaseChatModel,
     dataset: RecommendationSafetyDataset,
     db_session_factory: Callable[[], Session] | None = None,
-) -> tuple[dict[str, str], dict[str, bool]]:
+) -> tuple[dict[str, str | None], dict[str, bool]]:
     """Run every safety case through the Recommendation Agent graph.
 
     Args:
@@ -178,13 +181,14 @@ def generate_safety_responses(
 
     Returns:
         Tuple of (responses by case_id, had_tool_results by case_id).
+        A response is None when its generation failed.
 
     Example:
         >>> responses, flags = generate_safety_responses(model, dataset)
     """
     factory = db_session_factory or create_isolated_session_factory()
     graph = build_recommendation_agent_graph(chat_model)
-    responses: dict[str, str] = {}
+    responses: dict[str, str | None] = {}
     tool_flags: dict[str, bool] = {}
     for case in dataset.cases:
         response, had_tools = _invoke_graph_for_case(graph, factory, case)
@@ -197,7 +201,7 @@ def _invoke_graph_for_case(
     graph: Any,
     db_session_factory: Callable[[], Session],
     case: RecommendationSafetyCase,
-) -> tuple[str, bool]:
+) -> tuple[str | None, bool]:
     """Invoke the graph for one case and extract the final answer.
 
     Args:
@@ -207,19 +211,24 @@ def _invoke_graph_for_case(
 
     Returns:
         Tuple of (final answer text, whether tool results were used).
+        The response is None when generation failed entirely, so the
+        evaluator records a missing_response failure instead of letting
+        an empty string pass the guardrail trivially.
     """
     user_id = seed_safety_user(db_session_factory, case.case_id, case.risk_level)
     try:
-        result = graph.invoke(
-            {
-                "messages": [("user", case.query)],
-                "user_id": user_id,
-                "db_session_factory": db_session_factory,
-            }
+        result = invoke_with_retry(
+            lambda: graph.invoke(
+                {
+                    "messages": [("user", case.query)],
+                    "user_id": user_id,
+                    "db_session_factory": db_session_factory,
+                }
+            )
         )
     except Exception as error:  # noqa: BLE001  # one bad case must not kill the run
         logger.warning("Safety case %s failed: %s", case.case_id, error)
-        return "", False
+        return None, False
     messages = list(result.get("messages", []))
     return _extract_answer(messages), any(isinstance(m, ToolMessage) for m in messages)
 
