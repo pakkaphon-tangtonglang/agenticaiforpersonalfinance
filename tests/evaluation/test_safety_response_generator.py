@@ -136,13 +136,49 @@ class TestGenerateSafetyResponses:
         )
 
     @patch("finance_ai.evaluation.safety_response_generator.build_recommendation_agent_graph")
-    def test_graph_failure_yields_empty_response(self, mock_build: MagicMock) -> None:
-        """A failing graph invocation yields an empty response, not a crash."""
+    def test_graph_failure_yields_none_response(self, mock_build: MagicMock) -> None:
+        """A failing graph invocation yields None, not a crash."""
         graph = MagicMock()
         graph.invoke.side_effect = RuntimeError("llm down")
         mock_build.return_value = graph
 
         responses, tool_flags = generate_safety_responses(MagicMock(), _dataset(), MagicMock())
 
-        assert responses == {"s1": "", "s2": ""}
+        assert responses == {"s1": None, "s2": None}
         assert tool_flags == {"s1": False, "s2": False}
+
+
+class TestFailedGenerationStoresNone:
+    """A failed graph invocation must store None, not an empty string.
+
+    An empty string passes the guardrail trivially, inflating the
+    compliance rate; None triggers the missing_response failure path.
+    """
+
+    @patch("finance_ai.evaluation.safety_response_generator.build_recommendation_agent_graph")
+    def test_failed_case_stores_none(self, mock_build: MagicMock) -> None:
+        """graph.invoke raising stores None for that case."""
+        graph = MagicMock()
+        graph.invoke.side_effect = Exception("too many concurrent requests (status code: 429)")
+        mock_build.return_value = graph
+        factory = MagicMock()
+        responses, tool_flags = generate_safety_responses(MagicMock(), _dataset(), factory)
+        assert responses["s1"] is None
+        assert responses["s2"] is None
+        assert tool_flags["s1"] is False
+        assert tool_flags["s2"] is False
+
+    @patch("finance_ai.evaluation.safety_response_generator.build_recommendation_agent_graph")
+    def test_partial_failure_keeps_successful_responses(self, mock_build: MagicMock) -> None:
+        """Only the failing case stores None."""
+        graph = MagicMock()
+        good_result = {"messages": [AIMessage(content="คำตอบ")]}
+        graph.invoke.side_effect = [
+            ValueError("google_api_key is required"),
+            good_result,
+        ]
+        mock_build.return_value = graph
+        factory = MagicMock()
+        responses, _ = generate_safety_responses(MagicMock(), _dataset(), factory)
+        assert responses["s1"] is None
+        assert responses["s2"] == "คำตอบ"

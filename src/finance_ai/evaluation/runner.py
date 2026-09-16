@@ -39,6 +39,7 @@ from finance_ai.evaluation.rag_evaluator import evaluate_rag_dataset
 from finance_ai.evaluation.recommendation_safety_evaluator import evaluate_safety_dataset
 from finance_ai.evaluation.routing_evaluator import evaluate_routing_dataset
 from finance_ai.evaluation.safety_response_generator import generate_safety_responses
+from finance_ai.evaluation.llm_retry import invoke_with_retry
 from finance_ai.rag.vector_store import FinanceVectorStore
 from finance_ai.core.logging import get_logger
 
@@ -245,7 +246,7 @@ def _generate_agent_responses(
     model: BaseChatModel,
     dataset: HallucinationDataset,
     db_session_factory: Callable[[], Session] | None = None,
-) -> dict[str, str]:
+) -> dict[str, str | None]:
     """Generate agent responses for each hallucination case.
 
     Args:
@@ -254,20 +255,24 @@ def _generate_agent_responses(
         db_session_factory: Optional DB session factory.
 
     Returns:
-        Dict mapping case_id to agent response text.
+        Dict mapping case_id to agent response text; None when the
+        generation failed after retries, so the evaluator marks the
+        case non-compliant instead of judging an empty string.
     """
-    responses: dict[str, str] = {}
+    responses: dict[str, str | None] = {}
     for case in dataset.cases:
         try:
-            result = orchestrate_query(
-                query=case.query,
-                chat_model=model,
-                db_session_factory=db_session_factory,
+            result = invoke_with_retry(
+                lambda: orchestrate_query(
+                    query=case.query,
+                    chat_model=model,
+                    db_session_factory=db_session_factory,
+                )
             )
             responses[case.case_id] = result.get("response", "")
         except Exception as exc:  # noqa: BLE001
             logger.warning("Failed to generate response for %s: %s", case.case_id, exc)
-            responses[case.case_id] = ""
+            responses[case.case_id] = None
     return responses
 
 

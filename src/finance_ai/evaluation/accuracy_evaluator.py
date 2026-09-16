@@ -20,6 +20,8 @@ from langgraph.graph import END, StateGraph
 from langgraph.prebuilt import ToolNode
 from sqlalchemy.orm import Session
 
+from finance_ai.core.logging import get_logger
+from finance_ai.evaluation.llm_retry import invoke_with_retry
 from finance_ai.agents.prompts import TAX_AGENT_SYSTEM_PROMPT
 from finance_ai.agents.router_agent import execute_tax_agent
 from finance_ai.agents.schemas import TaxAgentState
@@ -32,6 +34,8 @@ from finance_ai.evaluation.models import (
     TaxAccuracyDataset,
     TaxAccuracyResult,
 )
+
+logger = get_logger(__name__)
 from finance_ai.tools.tax_calculator import TaxCalculationResult, calculate_tax
 
 EVAL_TAX_TOOLS = [calculate_thai_tax]
@@ -125,11 +129,17 @@ def evaluate_single_tax_case(
         >>> result = evaluate_single_tax_case(model, case)
     """
     start = time.perf_counter()
-    agent_result = execute_tax_agent(
-        query=case.query,
-        chat_model=model,
-        db_session_factory=db_session_factory,
-    )
+    try:
+        agent_result = invoke_with_retry(
+            lambda: execute_tax_agent(
+                query=case.query,
+                chat_model=model,
+                db_session_factory=db_session_factory,
+            )
+        )
+    except Exception as error:  # noqa: BLE001  # failed case, not failed run
+        logger.warning("Tax case %s failed: %s", case.case_id, error)
+        return _build_tax_result(case, None, "", time.perf_counter() - start)
     latency = time.perf_counter() - start
 
     response = agent_result.get("response", "")
@@ -313,11 +323,17 @@ def evaluate_single_tax_case_forced(
         TaxAccuracyResult with accuracy comparison.
     """
     start = time.perf_counter()
-    response = _execute_eval_tax_agent(
-        query=case.query,
-        chat_model=model,
-        db_session_factory=db_session_factory,
-    )
+    try:
+        response = invoke_with_retry(
+            lambda: _execute_eval_tax_agent(
+                query=case.query,
+                chat_model=model,
+                db_session_factory=db_session_factory,
+            )
+        )
+    except Exception as error:  # noqa: BLE001  # failed case, not failed run
+        logger.warning("Forced tax case %s failed: %s", case.case_id, error)
+        return _build_tax_result(case, None, "", time.perf_counter() - start)
     latency = time.perf_counter() - start
 
     extracted = extract_tax_from_response(response)

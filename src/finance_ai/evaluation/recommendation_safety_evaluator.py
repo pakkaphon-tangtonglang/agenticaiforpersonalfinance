@@ -125,7 +125,7 @@ def evaluate_single_safety_case(
 
 def evaluate_safety_dataset(
     dataset: RecommendationSafetyDataset,
-    agent_responses: dict[str, str],
+    agent_responses: dict[str, str | None],
     tool_flags: dict[str, bool] | None = None,
 ) -> RecommendationSafetyAggregateResult:
     """Evaluate all cases in a recommendation safety dataset.
@@ -148,7 +148,7 @@ def evaluate_safety_dataset(
 
 def _evaluate_case_with_response(
     case: RecommendationSafetyCase,
-    agent_responses: dict[str, str],
+    agent_responses: dict[str, str | None],
     tool_flags: dict[str, bool],
 ) -> RecommendationSafetyResult:
     """Evaluate one case, treating a missing response as a failure.
