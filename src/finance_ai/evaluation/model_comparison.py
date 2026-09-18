@@ -80,7 +80,7 @@ DEFAULT_COMPARISON_MODELS: list[ModelSpec] = [
     ModelSpec(provider="ollama", model_name="deepseek-v4-pro:0813"),
     ModelSpec(provider="ollama", model_name="glm-5.3"),
     ModelSpec(provider="ollama", model_name="glm-5.3-flash"),
-    ModelSpec(provider="google", model_name="gemini-3.5"),
+    ModelSpec(provider="google", model_name="gemini-3.5-flash-lite"),
     ModelSpec(provider="google", model_name="gemini-3.5-flash"),
 ]
 
@@ -92,7 +92,7 @@ def parse_model_spec(text: str) -> ModelSpec:
     themselves contain colons (e.g. 'qwen3.5:397b').
 
     Args:
-        text: String like 'ollama:qwen3.5:397b' or 'google:gemini-3.5'.
+        text: String like 'ollama:qwen3.5:397b' or 'google:gemini-3.5-flash'.
 
     Returns:
         Parsed ModelSpec.
@@ -108,7 +108,7 @@ def parse_model_spec(text: str) -> ModelSpec:
     if not separator or not provider or not model_name:
         raise ValueError(
             f"Invalid model spec '{text}'. Expected provider:model "
-            "(e.g. ollama:minimax-m3, google:gemini-3.5)."
+            "(e.g. ollama:minimax-m3, google:gemini-3.5-flash)."
         )
     return ModelSpec(provider=provider, model_name=model_name)
 

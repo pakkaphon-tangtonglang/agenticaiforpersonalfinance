@@ -9,6 +9,7 @@ from finance_ai.agents.router_agent import (
     ROUTER_CONFIDENCE_THRESHOLD,
     _build_clarify_response,
     _build_messages,
+    _content_to_text,
     _resolve_asset_hint,
     build_unsupported_response,
     classify_query,
@@ -76,6 +77,37 @@ class TestParseRouterResponse:
         """Handles non-string content by converting to string."""
         result = parse_orchestrator_response(12345)
         assert result.intent == "unknown"
+
+    def test_gemini_content_block_list(self) -> None:
+        """Parses JSON inside Gemini 3+ content-block lists."""
+        content = [
+            {
+                "type": "text",
+                "text": '{"intent": "tax", "confidence": 0.95}',
+                "extras": {"signature": "abc"},
+            }
+        ]
+        result = parse_orchestrator_response(content)
+        assert result.intent == "tax"
+        assert result.confidence == Decimal("0.95")
+
+    def test_gemini_multiple_blocks_joined(self) -> None:
+        """Multiple text blocks are concatenated before parsing."""
+        content = [
+            {"type": "text", "text": '{"intent": "tax", '},
+            {"type": "text", "text": '"confidence": 0.9}'},
+        ]
+        result = parse_orchestrator_response(content)
+        assert result.intent == "tax"
+        assert result.confidence == Decimal("0.9")
+
+    def test_content_to_text_string_passthrough(self) -> None:
+        """String content is returned unchanged."""
+        assert _content_to_text("hello") == "hello"
+
+    def test_content_to_text_non_list_fallback(self) -> None:
+        """Non-string, non-list content falls back to str()."""
+        assert _content_to_text(42) == "42"
 
 
 class TestClassifyQuery:

@@ -42,9 +42,11 @@ def test_settings_invalid_provider() -> None:
         Settings(llm_provider="invalid")  # type: ignore[arg-type]
 
 
-def test_settings_allows_missing_google_key() -> None:
+def test_settings_allows_missing_google_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test Settings allows creation without key (validation in factory)."""
-    settings = Settings(llm_provider="google")
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setenv("GOOGLE_API_KEY", "")
+    settings = Settings(llm_provider="google", google_api_key="")
 
     assert settings.llm_provider == "google"
     assert not settings.google_api_key  # None or empty string

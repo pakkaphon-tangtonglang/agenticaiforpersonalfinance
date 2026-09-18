@@ -71,11 +71,11 @@ class TestDefaultComparisonModels:
         assert ModelSpec(provider="ollama", model_name="minimax-m3") in DEFAULT_COMPARISON_MODELS
 
     def test_includes_gemini_candidates(self) -> None:
-        """Gemini 3.5 and 3.5 Flash are included as candidates."""
+        """Gemini 3.5 Flash and Flash Lite are included as candidates."""
         names = [(s.provider, s.model_name) for s in DEFAULT_COMPARISON_MODELS]
 
-        assert ("google", "gemini-3.5") in names
         assert ("google", "gemini-3.5-flash") in names
+        assert ("google", "gemini-3.5-flash-lite") in names
 
     def test_all_specs_use_valid_providers(self) -> None:
         """Every default spec uses a provider the CLI supports."""
