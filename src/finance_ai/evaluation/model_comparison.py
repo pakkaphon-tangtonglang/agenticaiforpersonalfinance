@@ -410,8 +410,36 @@ def _ok_entry(
         provider=spec.provider,
         model_name=spec.model_name,
         status="ok",
+        per_case_results=_extract_per_case_results(aggregate),
         **_extract_metrics(aggregate, dimension),
     )
+
+
+def _extract_per_case_results(aggregate: Any) -> list[dict[str, Any]]:
+    """Pull per-case detail rows out of a dimension aggregate.
+
+    Aggregates that keep per-case results (quality, hallucination,
+    recommendation safety) expose them as a 'results' list of pydantic
+    models; the rows are serialized so the comparison JSON preserves the
+    agent responses for offline re-judging. Aggregates without detail
+    rows (routing, tax) yield an empty list.
+
+    Args:
+        aggregate: Aggregated metrics for the dimension.
+
+    Returns:
+        List of serialized per-case rows; empty when unavailable.
+    """
+    raw = getattr(aggregate, "results", None)
+    if not isinstance(raw, list):
+        return []
+    rows: list[dict[str, Any]] = []
+    for item in raw:
+        if isinstance(item, BaseModel):
+            rows.append(item.model_dump(mode="json"))
+        elif isinstance(item, dict):
+            rows.append(item)
+    return rows
 
 
 def _extract_metrics(aggregate: Any, dimension: str) -> dict[str, Any]:
