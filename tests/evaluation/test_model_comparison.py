@@ -9,6 +9,8 @@ configured) are reported as skipped, not crashes.
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
+import json
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -549,3 +551,79 @@ class TestTaxAccuracyForcedDimension:
         runner.run_tax_accuracy_forced.assert_called_once()
         assert entry.accuracy == Decimal("0.95")
         assert entry.mean_absolute_error_thb == Decimal("80.00")
+
+
+class TestPerCasePersistence:
+    """Per-case detail rows are preserved in comparison entries."""
+
+    def _quality_like_result(self) -> Any:
+        """Aggregate whose results are pydantic rows with responses."""
+        from finance_ai.evaluation.models import QualityResult, QualityScore
+
+        return SimpleNamespace(
+            mean_overall=Decimal("4.5"),
+            mean_latency_seconds=5.0,
+            total_cases=10,
+            results=[
+                QualityResult(
+                    case_id="q_001",
+                    query="คำถาม",
+                    agent_response="คำตอบที่บันทึกไว้",
+                    scores=QualityScore(
+                        relevance=Decimal("4"),
+                        completeness=Decimal("4"),
+                        accuracy=Decimal("4"),
+                        thai_language_quality=Decimal("4"),
+                        overall=Decimal("4"),
+                        judge_reasoning="test",
+                    ),
+                    latency_seconds=1.5,
+                )
+            ],
+        )
+
+    def test_ok_entry_persists_per_case_results(self) -> None:
+        """Aggregates exposing 'results' serialize rows into the entry."""
+        runner = MagicMock()
+        runner.run_quality.return_value = self._quality_like_result()
+        result = run_model_comparison(
+            [ModelSpec(provider="ollama", model_name="minimax-m3")],
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runner,
+            dimension="quality",
+        )
+        entry = result.entries[0]
+        assert len(entry.per_case_results) == 1
+        assert entry.per_case_results[0]["agent_response"] == "คำตอบที่บันทึกไว้"
+        assert entry.per_case_results[0]["case_id"] == "q_001"
+
+    def test_ok_entry_without_results_yields_empty_list(self) -> None:
+        """Aggregates without a results list produce no per-case rows."""
+        aggregate = SimpleNamespace(
+            mean_overall=Decimal("5"),
+            mean_latency_seconds=2.0,
+            total_cases=5,
+        )
+        runner = MagicMock()
+        runner.run_quality.return_value = aggregate
+        result = run_model_comparison(
+            [ModelSpec(provider="ollama", model_name="minimax-m3")],
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runner,
+            dimension="quality",
+        )
+        assert result.entries[0].per_case_results == []
+
+    def test_per_case_results_survive_json_roundtrip(self) -> None:
+        """model_dump_json includes agent responses for offline re-judging."""
+        runner = MagicMock()
+        runner.run_quality.return_value = self._quality_like_result()
+        result = run_model_comparison(
+            [ModelSpec(provider="ollama", model_name="minimax-m3")],
+            model_factory=lambda spec: MagicMock(),
+            runner_factory=lambda model, spec: runner,
+            dimension="quality",
+        )
+        restored = json.loads(result.model_dump_json())
+        row = restored["entries"][0]["per_case_results"][0]
+        assert row["agent_response"] == "คำตอบที่บันทึกไว้"

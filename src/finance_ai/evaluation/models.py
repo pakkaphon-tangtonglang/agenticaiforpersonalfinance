@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -410,6 +410,10 @@ class ModelComparisonEntry(BaseModel):
     total_cases: int = 0
     correct_count: int = 0
     mean_absolute_error_thb: Decimal | None = None
+    per_case_results: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Per-case detail rows when the aggregate exposes them",
+    )
 
 
 class ModelComparisonResult(BaseModel):
