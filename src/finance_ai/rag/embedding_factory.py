@@ -5,6 +5,7 @@ Follows the same factory pattern as llm_factory.py.
 """
 
 import importlib
+from typing import Any, cast
 
 from langchain_core.embeddings import Embeddings
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -52,9 +53,15 @@ def create_google_embeddings(settings: Settings) -> Embeddings:
     if not settings.google_api_key:
         raise ValueError("google_api_key is required when rag_embedding_provider is 'google'.")
     logger.info("Creating Google Embeddings with model=%s", settings.rag_embedding_model)
-    return GoogleGenerativeAIEmbeddings(  # type: ignore[no-any-return]
-        model=settings.rag_embedding_model,
-        google_api_key=settings.google_api_key,
+    # Call through Any + cast: langchain-google-genai versions disagree on
+    # the constructor's typing (str vs SecretStr vs dynamic pydantic fields).
+    embeddings_factory: Any = GoogleGenerativeAIEmbeddings
+    return cast(
+        Embeddings,
+        embeddings_factory(
+            model=settings.rag_embedding_model,
+            google_api_key=settings.google_api_key,
+        ),
     )
 
 

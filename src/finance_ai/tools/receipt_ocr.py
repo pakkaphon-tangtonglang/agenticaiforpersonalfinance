@@ -14,6 +14,7 @@ the input image, so shrinking a multi-megabyte phone photo to a
 """
 
 import base64
+import importlib
 import io
 import json
 from datetime import date
@@ -218,7 +219,9 @@ def _render_pdf_first_page(
         Tuple of (jpeg_bytes, "image/jpeg") or the original on failure.
     """
     try:
-        import pypdfium2 as pdfium
+        # import_module avoids an import-untyped ignore that flips to
+        # unused-ignore in mypy envs where pypdfium2 ships stubs.
+        pdfium: Any = importlib.import_module("pypdfium2")
     except ImportError:
         return pdf_bytes, "application/pdf"
     try:
