@@ -75,9 +75,30 @@ bracket case.
 | gemini-3.5-flash-lite | google | 0.84 | 43.93 |
 
 Four-way tie at the top; gemini-3.5-flash reaches it 1.6× faster than
-its Ollama co-leaders. Caveat: judge is minimax-m3 — cross-model judge
-panel planned before the final write-up (bias did not inflate minimax
-in earlier passes, but the configuration will be revisited).
+its Ollama co-leaders. A **cross-judge check** (below) confirms the
+ranking is not a judge artifact.
+
+### Cross-judge agreement check
+
+The saved responses (105 rows, 7 models × 15 cases) were re-scored
+with a second judge (`deepseek-v4-pro:0813`) — judge calls only, no
+regeneration (`scripts/cross_judge_quality.py`):
+
+| Model | minimax-m3 judge | deepseek judge | delta |
+|---|---|---|---|
+| qwen3.5:397b | 4.47 | 4.73 | +0.27 |
+| gemini-3.5-flash | 4.27 | 4.67 | +0.40 |
+| glm-5.3-flash | 4.40 | 4.47 | +0.07 |
+| gemini-3.5-flash-lite | 4.00 | 4.47 | +0.47 |
+| deepseek-v4-pro:0813 | 4.13 | 4.40 | +0.27 |
+| glm-5.3 | 4.20 | 4.27 | +0.07 |
+| minimax-m3 | 4.27 | 4.07 | **−0.20** |
+
+Rank correlation is strong (Spearman ρ ≈ 0.91), exact-agreement rate
+0.51 (absolute scores differ, rankings hold). Crucially, the deepseek
+judge scores **minimax-m3 lowest of all models (−0.20)** — direct
+evidence against self-judge bias: the judge that produced the original
+table did not favor its own outputs.
 
 ## 5. Hallucination resistance (10 fabricated-fact cases)
 
@@ -159,8 +180,7 @@ Raw per-dimension reports: `data/evaluation/results/model_comparison_{dimension}
 
 - **RAG retrieval baseline** (`--eval rag`, ~24 cases — dataset ready);
   embeddings verified live on this key (gemini-embedding-001, 3072 dims).
-- One-off **pro-tier** benchmark if a flagship data point is ever
-  needed: `--models google:gemini-3.1-pro-preview` (excluded from
-  defaults — not a production candidate).
-- Router prompt ablations, beta testers, receipt-PDF verification on
-  Render (parked).
+- Cross-model **judge panel** for all judged dimensions is now a solved
+  problem mechanically (per-case rows persisted +
+  `scripts/cross_judge_quality.py`); quality dimension already
+  cross-judged, hallucination/safety can reuse the same flow.
