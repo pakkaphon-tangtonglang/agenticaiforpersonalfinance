@@ -42,7 +42,7 @@ def test_get_llm_client_unsupported_raises() -> None:
 
 
 def test_get_llm_client_google() -> None:
-    """Test factory creates Google client."""
+    """Test factory creates Google client with default model."""
     settings = Settings(
         llm_provider="google",
         google_api_key="test-key",
@@ -51,7 +51,7 @@ def test_get_llm_client_google() -> None:
     client = get_llm_client(settings)
 
     assert isinstance(client, GoogleClient)
-    assert client.model_name == "gemini-2.5-flash"
+    assert client.model_name == settings.google_model
 
 
 def test_get_llm_client_ollama() -> None:
@@ -64,9 +64,11 @@ def test_get_llm_client_ollama() -> None:
     assert client.model == "minimax-m3"
 
 
-def test_get_llm_client_missing_google_key() -> None:
+def test_get_llm_client_missing_google_key(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test factory raises error for missing Google key."""
-    settings = Settings(llm_provider="google")
+    monkeypatch.delenv("GOOGLE_API_KEY", raising=False)
+    monkeypatch.setenv("GOOGLE_API_KEY", "")
+    settings = Settings(llm_provider="google", google_api_key="")
 
     with pytest.raises(ValueError, match="Google API key is required"):
         get_llm_client(settings)

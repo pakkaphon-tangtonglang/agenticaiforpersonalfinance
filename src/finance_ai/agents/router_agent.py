@@ -40,10 +40,35 @@ _ASSET_TOKEN_PATTERN = re.compile(r"^[A-Z][A-Z0-9.\-]{1,9}$")
 _NON_ASSET_TOKENS = {"USD", "THB", "OK", "ATM", "SMS", "HTTP", "WWW"}
 
 
+def _content_to_text(content: Any) -> str:
+    """Convert LLM message content into plain text.
+
+    Handles string content plus Gemini-style content-block lists
+    ([{'type': 'text', 'text': '...'}, ...]) returned by Gemini 3+.
+
+    Args:
+        content: Raw response content from the LLM.
+
+    Returns:
+        Concatenated text blocks, or str(content) as fallback.
+    """
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = [
+            str(block.get("text", ""))
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        ]
+        if parts:
+            return "".join(parts)
+    return str(content)
+
+
 def parse_orchestrator_response(content: Any) -> OrchestratorDecision:
     """Parse the LLM's JSON response into a OrchestratorDecision.
 
-    Handles markdown code fences that LLMs sometimes wrap JSON in.
+    Handles markdown code fences and Gemini-style content-block lists.
 
     Args:
         content: Raw response content from the LLM.
@@ -56,7 +81,7 @@ def parse_orchestrator_response(content: Any) -> OrchestratorDecision:
         OrchestratorDecision(intent='tax', confidence=Decimal('0.95'))
     """
     try:
-        text = str(content).strip()
+        text = _content_to_text(content).strip()
         text = _strip_code_fence(text)
         data = json.loads(text)
         return OrchestratorDecision(**data)
@@ -553,4 +578,6 @@ def orchestrate_query(
     agent_map = _build_agent_map()
     default_fn: Callable[..., dict[str, Any]] = execute_general_chat
     agent_fn = agent_map.get(decision.intent, default_fn)
-    return agent_fn(query, chat_model, user_id, db_session_factory, chat_history)
+    result = agent_fn(query, chat_model, user_id, db_session_factory, chat_history)
+    result["response"] = _content_to_text(result.get("response", ""))
+    return result

@@ -113,7 +113,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=[],
         help=(
             "With --compare: candidate models as provider:model strings "
-            "(e.g. ollama:minimax-m3 google:gemini-3.5). Defaults to the "
+            "(e.g. ollama:minimax-m3 google:gemini-3.5-flash). Defaults to the "
             "built-in comparison shortlist."
         ),
     )
