@@ -3,7 +3,7 @@
 Supports Google Gemini and OLLAMA providers based on application settings.
 """
 
-from typing import Any
+from typing import Any, cast
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -30,7 +30,10 @@ def import_chat_ollama() -> type:
             "langchain-ollama is required for OLLAMA provider. "
             "Install with: pip install langchain-ollama"
         ) from exc
-    return ChatOllama  # type: ignore[no-any-return]
+    # Call through Any + cast: langchain-ollama typing differs between
+    # mypy environments (typed vs untyped import).
+    chat_model_class: Any = ChatOllama
+    return cast(type, chat_model_class)
 
 
 def create_google_chat_model(settings: Settings) -> BaseChatModel:
@@ -51,11 +54,15 @@ def create_google_chat_model(settings: Settings) -> BaseChatModel:
     if not settings.google_api_key:
         raise ValueError("google_api_key is required when llm_provider is 'google'.")
     logger.info("Creating Google ChatModel with model=%s", settings.google_model)
-    return ChatGoogleGenerativeAI(  # type: ignore[no-any-return]
-        model=settings.google_model,
-        google_api_key=settings.google_api_key,
-        temperature=settings.llm_temperature,
-        max_output_tokens=settings.llm_max_tokens,
+    chat_model_factory: Any = ChatGoogleGenerativeAI
+    return cast(
+        BaseChatModel,
+        chat_model_factory(
+            model=settings.google_model,
+            google_api_key=settings.google_api_key,
+            temperature=settings.llm_temperature,
+            max_output_tokens=settings.llm_max_tokens,
+        ),
     )
 
 
@@ -208,12 +215,16 @@ def create_ocr_google_chat_model(settings: Settings) -> BaseChatModel:
     if not settings.ocr_api_key:
         raise ValueError("ocr_api_key is required when ocr_provider is 'google'.")
     logger.info("Creating Google OCR ChatModel with model=%s", settings.ocr_model)
-    return ChatGoogleGenerativeAI(  # type: ignore[no-any-return]
-        model=settings.ocr_model,
-        google_api_key=settings.ocr_api_key,
-        temperature=settings.ocr_temperature,
-        max_output_tokens=settings.ocr_max_tokens,
-        request_timeout=settings.ocr_timeout,
+    chat_model_factory: Any = ChatGoogleGenerativeAI
+    return cast(
+        BaseChatModel,
+        chat_model_factory(
+            model=settings.ocr_model,
+            google_api_key=settings.ocr_api_key,
+            temperature=settings.ocr_temperature,
+            max_output_tokens=settings.ocr_max_tokens,
+            request_timeout=settings.ocr_timeout,
+        ),
     )
 
 
