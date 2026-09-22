@@ -59,15 +59,14 @@ iHost รันได้เฉพาะ PHP จึงใส่ FastAPI ลงไ
    Render กำหนด `$PORT` ให้เอง
 3. ตั้ง Environment variables ในหน้า Dashboard (ค่ามาจาก `.env` ในเครื่อง
    ห้าม commit): ตัวที่ไม่ใช่ความลับ (`APP_ENV`, `DEBUG`, `LOG_LEVEL`,
-   `LLM_PROVIDER=ollama`, `LLM_MAX_TOKENS`, `OLLAMA_BASE_URL`,
-   `OLLAMA_MODEL`, `OCR_PROVIDER`, `OCR_MODEL`, `RAG_KNOWLEDGE_BASE_DIRECTORY`)
+   `LLM_PROVIDER=google`, `LLM_MAX_TOKENS`, `GOOGLE_MODEL`,
+   `OCR_PROVIDER`, `OCR_MODEL`, `RAG_KNOWLEDGE_BASE_DIRECTORY`)
    อยู่ใน `render.yaml` อยู่แล้ว — ต้องกรอกเองในหน้า Environment:
 
    | Secret | ค่า |
    |---|---|
    | `DB_URL` | connection string ของ **Neon Postgres** (ใช้ตัว pooled จาก Neon dashboard / `DATABASE_URL` ใน `.env`) — **สำคัญที่สุด** ถ้าไม่ใส่ ข้อมูลจะหายทุกครั้งที่ deploy เพราะดิสก์ Render เป็นแบบ ephemeral |
-   | `OLLAMA_API_KEY`, `OCR_API_KEY` | Ollama Cloud key (ใช้ค่าเดียวกันได้) |
-   | `GOOGLE_API_KEY` | ทางเลือก (เปิดใช้ RAG) — ไม่มี bootstrap จะข้าม RAG แต่ API ยังทำงานปกติ |
+   | `GOOGLE_API_KEY` | จำเป็น — ใช้ทั้ง LLM/agent, router, OCR และ embedding ของ RAG (key เดียวจบ) |
    | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | จาก LINE Developers Console — ต้องมีเพื่อเปิด `/line/webhook` |
 4. ตรวจสอบการติดตั้ง:
 
@@ -113,8 +112,8 @@ Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `a
 - **CORS** ล็อกเฉพาะ `https://www.it.kmitl.ac.th` กับ `http://localhost:8080`
   และปิด `allow_credentials` (ไม่ใช้ cookies; `user_id` ส่งใน request body)
   ดู `src/finance_ai/main.py`
-- **Secrets อยู่บนเซิร์ฟเวอร์เท่านั้น** — `OLLAMA_API_KEY`, `OCR_API_KEY`
-  (และ `GOOGLE_API_KEY` ถ้าเปิด RAG)
+- **Secrets อยู่บนเซิร์ฟเวอร์เท่านั้น** — `GOOGLE_API_KEY`
+  (LLM/agent, router, OCR, RAG embeddings ใช้ key เดียวกัน)
   มีเฉพาะใน environment variables ของ Render ห้ามใส่ใน repo หรือไฟล์ frontend
 - **ไม่มีระบบ login** — `user_id` เป็น UUID ที่ browser สร้างเอง (เก็บใน localStorage)
   ใครได้ UUID นั้นไปอ่าน/แก้ข้อมูลของ user คนนั้นได้ รับได้สำหรับ demo เพราะ
@@ -133,7 +132,7 @@ Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `a
 | ข้อมูลหายหลัง deploy | `DB_URL` ไม่ได้ตั้ง (ยังใช้ SQLite บนดิสก์ ephemeral) — ใส่ connection string ของ Neon |
 | เชื่อมต่อ Neon ไม่ได้ / connection timeout | ใช้ connection string ตัว **pooled** (`...-pooler...`) ไม่ใช่ตัว unpooled |
 | ส่ง/บันทึกข้อมูลไม่ได้ (500 เฉพาะ endpoint ที่เขียน, อ่านได้ปกติ) | บน Postgres FK ถูกบังคับจริง (ต่างจาก SQLite) — ระบบจะ auto-create user ให้เองตั้งแต่ `4ac76c0`; ถ้ายังพังดู release log ว่า deploy ล่าสุดรวมโค้ดนี้แล้ว |
-| `/chat` ตอบ 500 ทันที (อ่าน DB ได้ปกติ) | LLM call พัง — เช็ค `OLLAMA_API_KEY` ใน Render dashboard (key หาย/หมดอายุ), ทดสอบ key เดียวกันจากเครื่อง local ก่อน |
+| `/chat` ตอบ 500 ทันที (อ่าน DB ได้ปกติ) | LLM call พัง — เช็ค `GOOGLE_API_KEY` ใน Render dashboard (key หาย/หมดอายุ), ทดสอบ key เดียวกันจากเครื่อง local ก่อน |
 
 ### การพัฒนาต่อในอนาคต
 
