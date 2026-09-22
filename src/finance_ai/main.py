@@ -26,6 +26,7 @@ from sqlalchemy.orm import Session
 from finance_ai.agents.llm_factory import create_chat_model, create_ocr_chat_model
 from finance_ai.agents.router_agent import orchestrate_query
 from finance_ai.agents.stream_utils import StreamEvent, orchestrate_query_stream
+from finance_ai.core.api_security import install_api_security
 from finance_ai.core.config import get_settings
 from finance_ai.core.logging import get_logger
 from finance_ai.database.crud.watched_asset_crud import WatchedAssetCRUD
@@ -80,6 +81,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+install_api_security(app)
 
 _engine = create_database_engine()
 _session_factory = create_session_factory(_engine)

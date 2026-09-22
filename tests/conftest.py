@@ -13,10 +13,23 @@ from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from finance_ai.core import api_security
 from finance_ai.core.config import Settings
 from finance_ai.core.llm.base import LLMResponse
 from finance_ai.database.base import Base
 from finance_ai.database.models.user import User
+
+
+@pytest.fixture(autouse=True)
+def _isolate_api_security(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep API security middleware out of other tests' way.
+
+    Resets the global rate-limiter state between tests and disables
+    rate limiting entirely (test suites send many requests from one
+    client, which would otherwise trip the shared 429 counter).
+    """
+    api_security.reset_rate_limiter()
+    monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "0")
 
 
 @pytest.fixture
