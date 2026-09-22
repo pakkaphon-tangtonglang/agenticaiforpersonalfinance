@@ -14,6 +14,10 @@ def compute_precision_at_k(
 ) -> float:
     """Compute Precision@k for retrieval results.
 
+    Duplicate retrieved identifiers count once — retrieval can return
+    multiple chunks from the same source file, which must not inflate
+    the hit count.
+
     Args:
         retrieved: List of retrieved item identifiers.
         relevant: List of relevant (ground truth) item identifiers.
@@ -25,10 +29,12 @@ def compute_precision_at_k(
     Example:
         >>> compute_precision_at_k(["a", "b", "c"], ["a", "d"], 3)
         0.3333333333333333
+        >>> compute_precision_at_k(["a", "a", "b"], ["a", "b"], 3)
+        0.6666666666666666
     """
     if k <= 0:
         return 0.0
-    top_k = retrieved[:k]
+    top_k = list(dict.fromkeys(retrieved[:k]))
     relevant_set = set(relevant)
     hits = sum(1 for item in top_k if item in relevant_set)
     return hits / k
@@ -41,6 +47,10 @@ def compute_recall_at_k(
 ) -> float:
     """Compute Recall@k for retrieval results.
 
+    Duplicate retrieved identifiers count once — retrieval can return
+    multiple chunks from the same source file, so recall is capped at
+    the fraction of distinct relevant items found.
+
     Args:
         retrieved: List of retrieved item identifiers.
         relevant: List of relevant (ground truth) item identifiers.
@@ -52,13 +62,15 @@ def compute_recall_at_k(
     Example:
         >>> compute_recall_at_k(["a", "b"], ["a", "c"], 2)
         0.5
+        >>> compute_recall_at_k(["a", "a", "a"], ["a"], 3)
+        1.0
     """
     if not relevant:
         return 0.0
-    top_k = retrieved[:k]
+    top_k = list(dict.fromkeys(retrieved[:k]))
     relevant_set = set(relevant)
     hits = sum(1 for item in top_k if item in relevant_set)
-    return hits / len(relevant)
+    return hits / len(relevant_set)
 
 
 def compute_mrr(retrieved: list[str], relevant: list[str]) -> float:

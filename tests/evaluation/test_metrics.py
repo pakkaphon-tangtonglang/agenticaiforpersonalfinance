@@ -47,6 +47,15 @@ class TestPrecisionAtK:
         result = compute_precision_at_k(["a"], ["a"], 0)
         assert result == 0.0
 
+    def test_duplicate_retrieved_counted_once(self) -> None:
+        """Duplicate retrieved sources count once toward precision.
+
+        Regression guard: top-3 retrieval of chunks from the same file
+        once inflated precision beyond the distinct relevant count.
+        """
+        result = compute_precision_at_k(["a", "a", "b"], ["a", "b"], 3)
+        assert abs(result - 2 / 3) < 1e-10
+
     def test_empty_retrieved(self) -> None:
         """Test with empty retrieved list."""
         result = compute_precision_at_k([], ["a"], 3)
@@ -75,6 +84,20 @@ class TestRecallAtK:
         """Test that empty relevant list returns 0."""
         result = compute_recall_at_k(["a"], [], 1)
         assert result == 0.0
+
+    def test_duplicate_retrieved_capped_at_one(self) -> None:
+        """Recall never exceeds 1.0 when all slots hold the same source.
+
+        Regression guard: duplicated retrieved chunks from one file
+        once produced recall values of 2.0 and 3.0.
+        """
+        result = compute_recall_at_k(["a", "a", "a"], ["a"], 3)
+        assert result == 1.0
+
+    def test_duplicate_retrieved_partial_hit(self) -> None:
+        """Duplicates of one relevant file still find only that file."""
+        result = compute_recall_at_k(["a", "a", "x"], ["a", "b"], 3)
+        assert result == 0.5
 
 
 class TestMRR:
