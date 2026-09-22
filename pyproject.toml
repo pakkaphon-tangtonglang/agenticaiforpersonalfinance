@@ -39,7 +39,6 @@ dependencies = [
     # Market Data
     "yfinance>=0.2.40",
     # Visualization / Export
-    "plotly>=6.0",
     "fpdf2>=2.8",
     "openpyxl>=3.1",
     # Utilities
@@ -172,8 +171,6 @@ module = [
     "google.generativeai.*",
     "yfinance.*",
     # Third-party libs without py.typed markers / stubs.
-    "plotly.*",
-    "plotly.graph_objects.*",
     "openai.*",
     "openpyxl.*",
     "apscheduler.*",
