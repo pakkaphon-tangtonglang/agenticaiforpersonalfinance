@@ -48,6 +48,30 @@ class RoutingCase(EvaluationCase):
     difficulty: Literal["easy", "medium", "hard"] = Field(default="medium")
 
 
+class RoutingHistoryCase(EvaluationCase):
+    """Multi-turn routing case with required chat history.
+
+    Attributes:
+        chat_history: (role, text) turns preceding the final query.
+        expected_intent: Correct intent given the full context.
+        expected_clarify: True when a clarifying question is the desired
+            outcome (confidence-threshold variants).
+    """
+
+    chat_history: list[tuple[str, str]]
+    expected_intent: Literal[
+        "tax",
+        "expense",
+        "asset_monitoring",
+        "planning",
+        "recommendation",
+        "report",
+        "general",
+        "unknown",
+    ]
+    expected_clarify: bool = False
+
+
 class TaxAccuracyCase(EvaluationCase):
     """Test case with ground truth tax calculation.
 
@@ -147,6 +171,14 @@ class RoutingDataset(BaseModel):
     name: str = Field(default="routing_evaluation")
     version: str
     cases: list[RoutingCase]
+
+
+class RoutingHistoryDataset(BaseModel):
+    """Complete multi-turn routing evaluation dataset."""
+
+    name: str = Field(default="routing_history_evaluation")
+    version: str
+    cases: list[RoutingHistoryCase]
 
 
 class TaxAccuracyDataset(BaseModel):

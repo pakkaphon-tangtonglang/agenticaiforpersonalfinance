@@ -11,6 +11,7 @@ from finance_ai.evaluation.models import (
     RAGDataset,
     RecommendationSafetyDataset,
     RoutingDataset,
+    RoutingHistoryDataset,
     TaxAccuracyDataset,
 )
 
@@ -55,6 +56,24 @@ def load_routing_dataset(path: str) -> RoutingDataset:
     """
     data = _load_yaml_file(path)
     return RoutingDataset(**data)
+
+
+def load_routing_history_dataset(path: str) -> RoutingHistoryDataset:
+    """Load a multi-turn routing history dataset from YAML.
+
+    Args:
+        path: Path to the YAML file.
+
+    Returns:
+        Parsed RoutingHistoryDataset.
+
+    Example:
+        >>> dataset = load_routing_history_dataset(
+        ...     "data/evaluation/routing_history_dataset.yaml"
+        ... )
+    """
+    data = _load_yaml_file(path)
+    return RoutingHistoryDataset(**data)
 
 
 def load_tax_accuracy_dataset(path: str) -> TaxAccuracyDataset:
