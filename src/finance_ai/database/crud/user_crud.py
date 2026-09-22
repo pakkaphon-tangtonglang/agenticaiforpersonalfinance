@@ -68,7 +68,7 @@ class UserCRUD(BaseCRUD[User]):
     def get_or_create_demo_user(self, session: Session, user_id: str) -> User:
         """Get an existing user by ID, or create a demo user if not found.
 
-        Used by the Streamlit app to ensure a valid user record exists
+        Used by the FastAPI backend to ensure a valid user record exists
         before expense/investment agents try to write transactions.
 
         Args:

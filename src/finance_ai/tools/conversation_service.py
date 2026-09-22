@@ -162,7 +162,7 @@ def load_conversation_messages(
 
 
 def _message_to_dict(message: ConversationMessage) -> dict[str, Any]:
-    """Convert a ConversationMessage to a Streamlit-compatible dict.
+    """Convert a ConversationMessage to an API-friendly dict.
 
     Args:
         message: ConversationMessage instance.
