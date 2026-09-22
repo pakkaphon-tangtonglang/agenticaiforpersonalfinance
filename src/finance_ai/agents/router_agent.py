@@ -7,6 +7,7 @@ and Report agents. General/unknown intents are handled by general chat.
 import json
 import re
 from collections.abc import Callable
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
 
@@ -16,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from finance_ai.agents.prompts import (
     GENERAL_CHAT_SYSTEM_PROMPT,
-    ORCHESTRATOR_SYSTEM_PROMPT,
+    build_orchestrator_system_prompt,
     get_date_context,
 )
 from finance_ai.agents.schemas import OrchestratorDecision
@@ -38,6 +39,31 @@ _ASSET_TOKEN_PATTERN = re.compile(r"^[A-Z][A-Z0-9.\-]{1,9}$")
 
 # Common uppercase words that are not asset tickers
 _NON_ASSET_TOKENS = {"USD", "THB", "OK", "ATM", "SMS", "HTTP", "WWW"}
+
+
+@dataclass(frozen=True)
+class RouterAblationConfig:
+    """Feature toggles for router ablation experiments.
+
+    Defaults reproduce production behavior exactly. Evaluation runs
+    flip one flag at a time to isolate each feature's contribution.
+    The confidence threshold defaults to False because production
+    applies it in orchestrate_query, not in classify_query.
+
+    Attributes:
+        include_chat_history: Pass recent messages to the router LLM.
+        include_few_shot_examples: Include the prompt's example block.
+        resolve_asset_hint: Pre-search uppercase tokens on Yahoo.
+        apply_confidence_threshold: Downgrade low-confidence to clarify.
+    """
+
+    include_chat_history: bool = True
+    include_few_shot_examples: bool = True
+    resolve_asset_hint: bool = True
+    apply_confidence_threshold: bool = False
+
+
+DEFAULT_ABLATION_CONFIG = RouterAblationConfig()
 
 
 def _content_to_text(content: Any) -> str:
@@ -134,16 +160,19 @@ def classify_query(
     query: str,
     chat_model: BaseChatModel | None = None,
     chat_history: list[tuple[str, str]] | None = None,
+    config: RouterAblationConfig | None = None,
 ) -> OrchestratorDecision:
     """Classify a user query into an intent category.
 
     Uses recent chat history for context and resolves possible asset
-    mentions (ticker-like tokens) before classification.
+    mentions (ticker-like tokens) before classification. Ablation
+    runs can disable each helper via config.
 
     Args:
         query: The user's natural language query.
         chat_model: Optional ChatModel override for testing.
         chat_history: Optional recent (role, content) messages for context.
+        config: Optional ablation toggles; None uses production defaults.
 
     Returns:
         OrchestratorDecision with intent and confidence.
@@ -155,8 +184,9 @@ def classify_query(
         from finance_ai.agents.llm_factory import create_chat_model
 
         chat_model = create_chat_model()
-    asset_hint = _resolve_asset_hint(query)
-    messages = _build_router_messages(query, chat_history, asset_hint)
+    settings = config or DEFAULT_ABLATION_CONFIG
+    asset_hint = _resolve_asset_hint(query) if settings.resolve_asset_hint else None
+    messages = _build_router_messages(query, chat_history, asset_hint, settings)
     response = chat_model.invoke(messages)
     return parse_orchestrator_response(response.content)
 
@@ -205,10 +235,31 @@ def _resolve_asset_hint(query: str) -> str | None:
     return None
 
 
+def _history_messages(
+    chat_history: list[tuple[str, str]] | None,
+) -> list[BaseMessage]:
+    """Convert trimmed (role, content) history into LangChain messages.
+
+    Args:
+        chat_history: Optional recent messages.
+
+    Returns:
+        Up to _ROUTER_HISTORY_LIMIT HumanMessage/AIMessage objects.
+    """
+    messages: list[BaseMessage] = []
+    for role, content in (chat_history or [])[-_ROUTER_HISTORY_LIMIT:]:
+        if role == "user":
+            messages.append(HumanMessage(content=content))
+        else:
+            messages.append(AIMessage(content=content))
+    return messages
+
+
 def _build_router_messages(
     query: str,
     chat_history: list[tuple[str, str]] | None = None,
     asset_hint: str | None = None,
+    config: RouterAblationConfig | None = None,
 ) -> list[BaseMessage]:
     """Build the router LLM message list.
 
@@ -216,18 +267,16 @@ def _build_router_messages(
         query: The user's current query.
         chat_history: Optional recent messages for context.
         asset_hint: Optional resolved asset symbol hint.
+        config: Optional ablation toggles; None uses production defaults.
 
     Returns:
-        System prompt, trimmed history, optional hint, current query.
+        System prompt, optional history, optional hint, current query.
     """
-    messages: list[BaseMessage] = [
-        SystemMessage(content=get_date_context() + ORCHESTRATOR_SYSTEM_PROMPT)
-    ]
-    for role, content in (chat_history or [])[-_ROUTER_HISTORY_LIMIT:]:
-        if role == "user":
-            messages.append(HumanMessage(content=content))
-        else:
-            messages.append(AIMessage(content=content))
+    settings = config or DEFAULT_ABLATION_CONFIG
+    system_prompt = build_orchestrator_system_prompt(settings.include_few_shot_examples)
+    messages: list[BaseMessage] = [SystemMessage(content=get_date_context() + system_prompt)]
+    if settings.include_chat_history:
+        messages.extend(_history_messages(chat_history))
     if asset_hint:
         messages.append(SystemMessage(content=asset_hint))
     messages.append(HumanMessage(content=query))
