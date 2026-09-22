@@ -288,8 +288,6 @@ This project follows strict code quality standards:
 - Functions under 20 lines
 - Docstrings on every function
 
-See [CLAUDE.md](./CLAUDE.md) for full coding standards.
-
 ### Available Make Commands
 
 ```bash
