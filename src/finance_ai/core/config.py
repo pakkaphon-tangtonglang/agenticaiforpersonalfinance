@@ -109,6 +109,22 @@ class Settings(BaseSettings):
         default="https://ollama.com",
         description="Base URL for the OCR provider (Ollama Cloud default).",
     )
+
+    # API security (public deployment protection)
+    api_key: Optional[str] = Field(
+        default=None,
+        description=(
+            "Shared API key required in X-API-Key header for all endpoints "
+            "except /health and /line/webhook. None disables the check."
+        ),
+    )
+    rate_limit_per_minute: int = Field(
+        default=30,
+        description=(
+            "Max requests per minute per client IP across protected endpoints. "
+            "0 disables rate limiting."
+        ),
+    )
     ocr_temperature: float = Field(
         default=0.0,
         ge=0.0,

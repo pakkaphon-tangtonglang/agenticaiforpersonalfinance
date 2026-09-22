@@ -115,6 +115,10 @@ Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `a
 - **Secrets อยู่บนเซิร์ฟเวอร์เท่านั้น** — `GOOGLE_API_KEY`
   (LLM/agent, router, OCR, RAG embeddings ใช้ key เดียวกัน)
   มีเฉพาะใน environment variables ของ Render ห้ามใส่ใน repo หรือไฟล์ frontend
+- **API key + Rate limiting** — ทุก endpoint ยกเว้น `/health` และ
+  `/line/webhook` ต้องส่ง header `X-API-Key` (ตั้ง `API_KEY` ใน Render
+  Environment) และจำกัด 30 requests/นาที/IP ผ่าน `RATE_LIMIT_PER_MINUTE`
+  ดู `src/finance_ai/core/api_security.py` — frontend ต้องส่ง key เดียวกัน
 - **ไม่มีระบบ login** — `user_id` เป็น UUID ที่ browser สร้างเอง (เก็บใน localStorage)
   ใครได้ UUID นั้นไปอ่าน/แก้ข้อมูลของ user คนนั้นได้ รับได้สำหรับ demo เพราะ
   UUID เดายาก แต่ **อย่าเก็บข้อมูลการเงินจริงที่ละเอียดอ่อน** ในระบบที่ deploy ไว้
@@ -240,6 +244,11 @@ works under the `/~<username>/` sub-path.
   LLM/agent, router, OCR, and RAG embeddings) exists
   only as Render environment variables — never in the repository or the
   frontend files served from iHost.
+- **API key + rate limiting** — every endpoint except `/health` and
+  `/line/webhook` requires an `X-API-Key` header (set `API_KEY` in the
+  Render Environment) and is capped at 30 requests/minute/IP via
+  `RATE_LIMIT_PER_MINUTE`. See `src/finance_ai/core/api_security.py` —
+  the frontend must send the same key.
 - **There is no authentication.** `user_id` is a client-generated UUID kept
   in the browser's `localStorage`; anyone who obtains a UUID can read and
   modify that user's data. Acceptable for a public demo because UUIDs are

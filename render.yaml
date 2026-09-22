@@ -50,5 +50,11 @@ services:
       # Secrets — prompted in the Render dashboard, copy from local .env
       - key: GOOGLE_API_KEY
         sync: false
+      # Public API protection: clients must send this value in X-API-Key
+      # (exempt: /health and /line/webhook, which verifies its own signature)
+      - key: API_KEY
+        sync: false
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "30"
       # Optional (add later via dashboard Environment tab):
       #   LANGSMITH_TRACING / LANGSMITH_API_KEY / LANGSMITH_PROJECT — tracing.
