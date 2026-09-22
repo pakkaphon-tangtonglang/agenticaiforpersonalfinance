@@ -178,16 +178,15 @@ the Neon URL).
    (write contention). Render injects `$PORT`.
 3. Set environment variables in the Render dashboard (values mirror local
    `.env`; never commit them): all non-secrets (`APP_ENV`, `DEBUG`,
-   `LOG_LEVEL`, `LLM_PROVIDER=ollama`, `LLM_MAX_TOKENS`,
-   `OLLAMA_BASE_URL`, `OLLAMA_MODEL`, `OCR_PROVIDER`, `OCR_MODEL`,
+   `LOG_LEVEL`, `LLM_PROVIDER=google`, `LLM_MAX_TOKENS`,
+   `GOOGLE_MODEL`, `OCR_PROVIDER`, `OCR_MODEL`,
    `RAG_KNOWLEDGE_BASE_DIRECTORY`) already live in `render.yaml` — enter
    these secrets yourself in the Environment tab:
 
    | Secret | Value |
    |---|---|
    | `DB_URL` | the **Neon Postgres** connection string (use the pooled one from the Neon dashboard / `DATABASE_URL` in `.env`) — **most important**; without it, every deploy wipes the data because Render's disk is ephemeral |
-   | `OLLAMA_API_KEY`, `OCR_API_KEY` | Ollama Cloud key (the same value works for both) |
-   | `GOOGLE_API_KEY` | optional (enables RAG) — without it bootstrap skips RAG and the API still works |
+   | `GOOGLE_API_KEY` | required — powers the LLM/agent, router, OCR, and RAG embeddings (one key for everything) |
    | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | from the LINE Developers Console — required for `/line/webhook` |
 4. Verify the deploy:
 
@@ -237,8 +236,8 @@ works under the `/~<username>/` sub-path.
 - **CORS** is locked to `https://www.it.kmitl.ac.th` and
   `http://localhost:8080`, with `allow_credentials=False` (no cookies;
   `user_id` travels in request bodies). See `src/finance_ai/main.py`.
-- **Secrets stay server-side.** `OLLAMA_API_KEY` and `OCR_API_KEY`
-  (plus `GOOGLE_API_KEY` when RAG is enabled) exist
+- **Secrets stay server-side.** `GOOGLE_API_KEY` (one key for the
+  LLM/agent, router, OCR, and RAG embeddings) exists
   only as Render environment variables — never in the repository or the
   frontend files served from iHost.
 - **There is no authentication.** `user_id` is a client-generated UUID kept
@@ -260,7 +259,7 @@ works under the `/~<username>/` sub-path.
 | Data lost after deploy | `DB_URL` is not set (still on ephemeral-disk SQLite) — set the Neon connection string |
 | Neon connection fails / times out | Use the **pooled** connection string (`...-pooler...`), not the unpooled one |
 | Writes fail with 500 (reads work fine) | Postgres enforces foreign keys (SQLite did not) — `ensure_user_exists` auto-creates missing users since `4ac76c0`; if it still fails, check the release log includes that commit |
-| `/chat` returns 500 instantly (DB reads fine) | The LLM call is failing — check `OLLAMA_API_KEY` in the Render dashboard (missing/expired key); test the same key locally first |
+| `/chat` returns 500 instantly (DB reads fine) | The LLM call is failing — check `GOOGLE_API_KEY` in the Render dashboard (missing/expired key); test the same key locally first |
 
 ### Future improvements
 
