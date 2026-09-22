@@ -188,7 +188,8 @@ def classify_query(
     asset_hint = _resolve_asset_hint(query) if settings.resolve_asset_hint else None
     messages = _build_router_messages(query, chat_history, asset_hint, settings)
     response = chat_model.invoke(messages)
-    return parse_orchestrator_response(response.content)
+    decision = parse_orchestrator_response(response.content)
+    return _apply_confidence_threshold(decision, settings)
 
 
 def _extract_asset_candidate_tokens(query: str) -> list[str]:
@@ -317,6 +318,27 @@ def _should_clarify(decision: OrchestratorDecision) -> bool:
     if decision.intent == "unknown":
         return False
     return decision.confidence < ROUTER_CONFIDENCE_THRESHOLD
+
+
+def _apply_confidence_threshold(
+    decision: OrchestratorDecision,
+    config: RouterAblationConfig,
+) -> OrchestratorDecision:
+    """Downgrade low-confidence decisions to 'clarify' when enabled.
+
+    Mirrors orchestrate_query's clarify-back rule for ablation runs.
+
+    Args:
+        decision: The parsed router decision.
+        config: Ablation toggles for the current run.
+
+    Returns:
+        The original decision, or a 'clarify' decision when the
+        threshold is enabled and confidence is below the threshold.
+    """
+    if config.apply_confidence_threshold and _should_clarify(decision):
+        return OrchestratorDecision(intent="clarify", confidence=decision.confidence)
+    return decision
 
 
 def _invoke_intent(

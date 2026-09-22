@@ -69,6 +69,9 @@ class OrchestratorDecision(BaseModel):
         "report",
         "general",
         "unknown",
+        # Produced only by the ablation confidence-threshold toggle in
+        # classify_query, never by the LLM or the production router path.
+        "clarify",
     ] = Field(description="The classified intent of the user query.")
     confidence: Decimal = Field(
         ge=Decimal("0"),

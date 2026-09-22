@@ -716,3 +716,36 @@ class TestClassifyQueryAblationFlags:
         messages_a = [m.content for m in model_a.invoke.call_args[0][0]]
         messages_b = [m.content for m in model_b.invoke.call_args[0][0]]
         assert messages_a == messages_b
+
+
+class TestClassifyQueryConfidenceThreshold:
+    """Threshold flag mirrors orchestrate_query's clarify-back rule."""
+
+    def test_threshold_disabled_returns_low_confidence_decision(self) -> None:
+        """Default config does NOT clarify (matches current behavior)."""
+        model = _mock_model_returning('{"intent": "tax", "confidence": 0.5}')
+        decision = classify_query("คำนวณภาษี", chat_model=model)
+        assert decision.intent == "tax"
+
+    def test_threshold_enabled_converts_low_confidence_to_clarify(self) -> None:
+        """Below-threshold decisions become intent='clarify'."""
+        config = RouterAblationConfig(apply_confidence_threshold=True)
+        model = _mock_model_returning('{"intent": "tax", "confidence": 0.5}')
+        decision = classify_query("คำนวณภาษี", chat_model=model, config=config)
+        assert decision.intent == "clarify"
+        assert decision.confidence == Decimal("0.5")
+
+    def test_threshold_enabled_keeps_high_confidence_decision(self) -> None:
+        """Above-threshold decisions pass through unchanged."""
+        config = RouterAblationConfig(apply_confidence_threshold=True)
+        model = _mock_model_returning('{"intent": "tax", "confidence": 0.95}')
+        decision = classify_query("คำนวณภาษี", chat_model=model, config=config)
+        assert decision.intent == "tax"
+        assert decision.confidence == Decimal("0.95")
+
+    def test_threshold_never_clarifies_unknown_intent(self) -> None:
+        """Unknown intent goes to general chat even below threshold."""
+        config = RouterAblationConfig(apply_confidence_threshold=True)
+        model = _mock_model_returning('{"intent": "unknown", "confidence": 0.2}')
+        decision = classify_query("สอนทำผัดกระเพรา", chat_model=model, config=config)
+        assert decision.intent == "unknown"
