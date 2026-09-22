@@ -189,6 +189,7 @@ ignore_missing_imports = true
 [[tool.mypy.overrides]]
 module = [
     "tests.core.test_config",
+    "tests.core.llm.test_factory",
     "tests.agents.test_llm_factory",
     "tests.agents.test_recommendation_agent",
 ]

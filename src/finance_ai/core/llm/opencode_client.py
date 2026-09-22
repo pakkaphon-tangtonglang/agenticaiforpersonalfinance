@@ -65,7 +65,7 @@ class OpenCodeClient(BaseLLMClient):
         """
         response = self._client.chat.completions.create(
             model=self._model,
-            messages=messages,
+            messages=messages,  # type: ignore[arg-type]
             max_tokens=max_tokens,
             temperature=temperature,
         )

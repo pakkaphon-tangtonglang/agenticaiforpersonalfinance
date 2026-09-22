@@ -35,20 +35,23 @@ services:
         sync: false
       - key: RAG_KNOWLEDGE_BASE_DIRECTORY
         value: docs/knowledge_base
-      # LLM via Google Gemini (agent + router + OCR)
+      # LLM chat/agents via OpenRouter (one key, any model)
       - key: LLM_PROVIDER
-        value: google
+        value: openrouter
       - key: LLM_MAX_TOKENS
         value: "7000"
-      - key: GOOGLE_MODEL
-        value: gemini-3.5-flash
-      # OCR via Google Gemini (same key, one API for both)
+      - key: OPENROUTER_MODEL
+        value: minimax/minimax-m3
+      # OCR via OpenRouter vision model (same key, fallback to OPENROUTER_API_KEY)
       - key: OCR_PROVIDER
-        value: google
+        value: openrouter
       - key: OCR_MODEL
-        value: gemini-3.5-flash
-      # Secrets — prompted in the Render dashboard, copy from local .env
+        value: qwen/qwen3.8-flash
+      # RAG embeddings still use Google (see rag_embedding_provider in config)
       - key: GOOGLE_API_KEY
+        sync: false
+      # Secrets — prompted in the Render dashboard, copy from local .env
+      - key: OPENROUTER_API_KEY
         sync: false
       # Public API protection: clients must send this value in X-API-Key
       # (exempt: /health and /line/webhook, which verifies its own signature)
