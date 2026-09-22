@@ -54,6 +54,7 @@ repos:
           - types-pyyaml
           - httpx
           - pytest
+          - openai
           - google-genai
           - sqlalchemy==2.0.51
           - langchain

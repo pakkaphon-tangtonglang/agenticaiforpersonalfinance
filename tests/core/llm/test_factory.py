@@ -5,28 +5,48 @@ from finance_ai.core.config import Settings
 from finance_ai.core.llm.factory import get_llm_client
 from finance_ai.core.llm.google_client import GoogleClient
 from finance_ai.core.llm.ollama_client import OLLAMAClient
+from finance_ai.core.llm.openrouter_client import OpenRouterClient
+from finance_ai.core.llm.opencode_client import OpenCodeClient
 
 
 def test_get_llm_client_openrouter() -> None:
     """Create an OpenRouter client when provider is openrouter."""
     settings = Settings(
+        _env_file=None,
         llm_provider="openrouter",
         openrouter_api_key="test-key",
     )
 
-    with pytest.raises((ImportError, Exception)):
+    client = get_llm_client(settings)
+
+    assert client is not None
+    assert isinstance(client, OpenRouterClient)
+
+
+def test_get_llm_client_openrouter_missing_key() -> None:
+    """Raise ValueError when openrouter_api_key is not set."""
+    settings = Settings(
+        _env_file=None,
+        llm_provider="openrouter",
+        openrouter_api_key=None,
+    )
+
+    with pytest.raises(ValueError, match="OpenRouter API key is required"):
         get_llm_client(settings)
 
 
 def test_get_llm_client_opencode() -> None:
     """Create an OpenCode client when provider is opencode."""
     settings = Settings(
+        _env_file=None,
         llm_provider="opencode",
         opencode_api_key="test-key",
     )
 
-    with pytest.raises((ImportError, Exception)):
-        get_llm_client(settings)
+    client = get_llm_client(settings)
+
+    assert client is not None
+    assert isinstance(client, OpenCodeClient)
 
 
 def test_get_llm_client_unsupported_raises() -> None:

@@ -10,6 +10,7 @@ from finance_ai.agents.llm_factory import (
     create_ocr_chat_model,
     create_ocr_google_chat_model,
     create_ocr_ollama_chat_model,
+    create_ocr_openrouter_chat_model,
     create_ollama_chat_model,
     create_openrouter_chat_model,
 )
@@ -23,6 +24,7 @@ class TestCreateGoogleChatModel:
     def test_creates_with_correct_params(self, mock_cls: MagicMock) -> None:
         """Creates ChatGoogleGenerativeAI with settings values."""
         settings = Settings(
+            _env_file=None,
             google_api_key="test-key",
             google_model="gemini-2.5-flash",
             llm_temperature=0.5,
@@ -38,7 +40,7 @@ class TestCreateGoogleChatModel:
 
     def test_missing_api_key_raises(self) -> None:
         """Raises ValueError when google_api_key is not set."""
-        settings = Settings(google_api_key=None)
+        settings = Settings(_env_file=None, google_api_key=None)
         with pytest.raises(ValueError, match="google_api_key is required"):
             create_google_chat_model(settings)
 
@@ -90,7 +92,7 @@ class TestCreateOllamaChatModel:
     )
     def test_import_error_raises(self, mock_import: MagicMock) -> None:
         """Raises ImportError when langchain-ollama is not installed."""
-        settings = Settings(llm_provider="ollama")
+        settings = Settings(_env_file=None, llm_provider="ollama")
         with pytest.raises(ImportError, match="langchain-ollama"):
             create_ollama_chat_model(settings)
 
@@ -104,6 +106,7 @@ class TestCreateOpenRouterChatModel:
         mock_chat_openai_cls = MagicMock()
         mock_import.return_value = mock_chat_openai_cls
         settings = Settings(
+            _env_file=None,
             openrouter_api_key="sk-or-test",
             openrouter_model="deepseek/deepseek-chat-v3-0324",
             llm_temperature=0.7,
@@ -120,7 +123,7 @@ class TestCreateOpenRouterChatModel:
 
     def test_missing_api_key_raises(self) -> None:
         """Raises ValueError when openrouter_api_key is not set."""
-        settings = Settings(llm_provider="openrouter", openrouter_api_key=None)
+        settings = Settings(_env_file=None, llm_provider="openrouter", openrouter_api_key=None)
         with pytest.raises(ValueError, match="openrouter_api_key is required"):
             create_openrouter_chat_model(settings)
 
@@ -130,7 +133,9 @@ class TestCreateOpenRouterChatModel:
     )
     def test_import_error_raises(self, mock_import: MagicMock) -> None:
         """Raises ImportError when langchain-openai is not installed."""
-        settings = Settings(llm_provider="openrouter", openrouter_api_key="sk-or-test")
+        settings = Settings(
+            _env_file=None, llm_provider="openrouter", openrouter_api_key="sk-or-test"
+        )
         with pytest.raises(ImportError, match="langchain-openai"):
             create_openrouter_chat_model(settings)
 
@@ -141,21 +146,23 @@ class TestCreateChatModel:
     @patch("finance_ai.agents.llm_factory.create_google_chat_model")
     def test_google_provider(self, mock_google: MagicMock) -> None:
         """Dispatches to Google when provider is google."""
-        settings = Settings(llm_provider="google", google_api_key="test-key")
+        settings = Settings(_env_file=None, llm_provider="google", google_api_key="test-key")
         create_chat_model(settings)
         mock_google.assert_called_once_with(settings)
 
     @patch("finance_ai.agents.llm_factory.create_ollama_chat_model")
     def test_ollama_provider(self, mock_ollama: MagicMock) -> None:
         """Dispatches to OLLAMA when provider is ollama."""
-        settings = Settings(llm_provider="ollama")
+        settings = Settings(_env_file=None, llm_provider="ollama")
         create_chat_model(settings)
         mock_ollama.assert_called_once_with(settings)
 
     @patch("finance_ai.agents.llm_factory.create_openrouter_chat_model")
     def test_openrouter_provider(self, mock_openrouter: MagicMock) -> None:
         """Dispatches to OpenRouter when provider is openrouter."""
-        settings = Settings(llm_provider="openrouter", openrouter_api_key="sk-or-test")
+        settings = Settings(
+            _env_file=None, llm_provider="openrouter", openrouter_api_key="sk-or-test"
+        )
         create_chat_model(settings)
         mock_openrouter.assert_called_once_with(settings)
 
@@ -167,7 +174,7 @@ class TestCreateChatModel:
         mock_get_settings: MagicMock,
     ) -> None:
         """Uses get_settings() when no settings provided."""
-        mock_settings = Settings(google_api_key="test-key")
+        mock_settings = Settings(_env_file=None, google_api_key="test-key")
         mock_get_settings.return_value = mock_settings
         create_chat_model()
         mock_get_settings.assert_called_once()
@@ -179,7 +186,9 @@ class TestCreateChatModelTemperatureOverride:
     @patch("finance_ai.agents.llm_factory.create_google_chat_model")
     def test_override_replaces_temperature(self, mock_google: MagicMock) -> None:
         """Dispatches with llm_temperature replaced by the override value."""
-        settings = Settings(llm_provider="google", google_api_key="test-key", llm_temperature=0.7)
+        settings = Settings(
+            _env_file=None, llm_provider="google", google_api_key="test-key", llm_temperature=0.7
+        )
         create_chat_model(settings, temperature=0.2)
         called_settings = mock_google.call_args[0][0]
         assert called_settings.llm_temperature == 0.2
@@ -187,7 +196,7 @@ class TestCreateChatModelTemperatureOverride:
     @patch("finance_ai.agents.llm_factory.create_google_chat_model")
     def test_no_override_keeps_settings_object(self, mock_google: MagicMock) -> None:
         """Without override, the settings object passes through unchanged."""
-        settings = Settings(llm_provider="google", google_api_key="test-key")
+        settings = Settings(_env_file=None, llm_provider="google", google_api_key="test-key")
         create_chat_model(settings)
         assert mock_google.call_args[0][0] is settings
 
@@ -287,6 +296,60 @@ class TestCreateOcrOllamaChatModel:
         )
 
 
+class TestCreateOcrOpenrouterChatModel:
+    """Tests for the OCR OpenRouter ChatModel creation."""
+
+    @patch("finance_ai.agents.llm_factory.import_chat_openai")
+    def test_creates_with_ocr_settings(self, mock_import: MagicMock) -> None:
+        """Creates ChatOpenAI pointed at OpenRouter from OCR_* settings."""
+        mock_chat_openai_cls = MagicMock()
+        mock_import.return_value = mock_chat_openai_cls
+        settings = Settings(
+            _env_file=None,
+            ocr_provider="openrouter",
+            ocr_model="qwen/qwen3.8-flash",
+            ocr_api_key="sk-or-ocr-key",
+            ocr_temperature=0.0,
+            ocr_max_tokens=2000,
+            ocr_timeout=120.0,
+        )
+        create_ocr_openrouter_chat_model(settings)
+        mock_chat_openai_cls.assert_called_once_with(
+            model="qwen/qwen3.8-flash",
+            api_key="sk-or-ocr-key",
+            base_url="https://openrouter.ai/api/v1",
+            temperature=0.0,
+            max_tokens=2000,
+            request_timeout=120.0,
+        )
+
+    def test_missing_api_key_raises(self) -> None:
+        """Raises ValueError when neither ocr_api_key nor openrouter_api_key set."""
+        settings = Settings(
+            _env_file=None,
+            ocr_provider="openrouter",
+            ocr_api_key=None,
+            openrouter_api_key=None,
+        )
+        with pytest.raises(ValueError, match="OCR provider 'openrouter' requires ocr_api_key"):
+            create_ocr_openrouter_chat_model(settings)
+
+    @patch("finance_ai.agents.llm_factory.import_chat_openai")
+    def test_falls_back_to_openrouter_api_key(self, mock_import: MagicMock) -> None:
+        """Reuses OPENROUTER_API_KEY when OCR_API_KEY is not set."""
+        mock_chat_openai_cls = MagicMock()
+        mock_import.return_value = mock_chat_openai_cls
+        settings = Settings(
+            _env_file=None,
+            ocr_provider="openrouter",
+            ocr_model="qwen/qwen3.8-flash",
+            ocr_api_key=None,
+            openrouter_api_key="sk-or-main-key",
+        )
+        create_ocr_openrouter_chat_model(settings)
+        assert mock_chat_openai_cls.call_args[1]["api_key"] == "sk-or-main-key"
+
+
 class TestCreateOcrChatModel:
     """Tests for the OCR factory dispatch."""
 
@@ -303,6 +366,17 @@ class TestCreateOcrChatModel:
         settings = Settings(_env_file=None, ocr_provider="ollama")
         create_ocr_chat_model(settings)
         mock_ollama.assert_called_once_with(settings)
+
+    @patch("finance_ai.agents.llm_factory.create_ocr_openrouter_chat_model")
+    def test_openrouter_provider(self, mock_openrouter: MagicMock) -> None:
+        """Dispatches to OpenRouter OCR when ocr_provider is openrouter."""
+        settings = Settings(
+            _env_file=None,
+            ocr_provider="openrouter",
+            openrouter_api_key="sk-or-test",
+        )
+        create_ocr_chat_model(settings)
+        mock_openrouter.assert_called_once_with(settings)
 
     @patch("finance_ai.agents.llm_factory.get_settings")
     @patch("finance_ai.agents.llm_factory.create_ocr_ollama_chat_model")

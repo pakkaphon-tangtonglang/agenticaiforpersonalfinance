@@ -93,9 +93,9 @@ class Settings(BaseSettings):
     # OCR Provider Configuration (vision model for document scanning)
     # Separate from the main LLM provider so OCR can use a vision model
     # (e.g. gemma4:31b on Ollama Cloud) without affecting chat agents.
-    ocr_provider: Literal["google", "ollama"] = Field(
+    ocr_provider: Literal["google", "ollama", "openrouter"] = Field(
         default="ollama",
-        description="OCR/vision provider for document scanning (google or ollama)",
+        description="OCR/vision provider for document scanning (google, ollama or openrouter)",
     )
     ocr_model: str = Field(
         default="gemma4:31b",
@@ -103,7 +103,7 @@ class Settings(BaseSettings):
     )
     ocr_api_key: Optional[str] = Field(
         default=None,
-        description="API key for the OCR provider (Ollama Cloud or Google).",
+        description="API key for the OCR provider (Ollama Cloud, Google or OpenRouter). Falls back to openrouter_api_key when ocr_provider is 'openrouter'.",
     )
     ocr_base_url: str = Field(
         default="https://ollama.com",

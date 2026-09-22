@@ -129,7 +129,7 @@ def import_chat_openai() -> type:
             "langchain-openai is required for OpenRouter provider. "
             "Install with: pip install langchain-openai"
         ) from exc
-    return ChatOpenAI  # type: ignore[no-any-return]
+    return ChatOpenAI  # type: ignore[no-any-return, unused-ignore]
 
 
 def create_openrouter_chat_model(settings: Settings) -> BaseChatModel:
@@ -271,6 +271,43 @@ def create_ocr_ollama_chat_model(settings: Settings) -> BaseChatModel:
     return chat_ollama_cls(**_ocr_ollama_client_kwargs(settings))  # type: ignore[no-any-return]
 
 
+def create_ocr_openrouter_chat_model(settings: Settings) -> BaseChatModel:
+    """Create a ChatOpenAI vision model for OCR via OpenRouter.
+
+    Reuses OPENROUTER_API_KEY when OCR_API_KEY is not set so one key can
+    cover both the chat agent and document scanning.
+
+    Args:
+        settings: Application settings with OCR config.
+
+    Returns:
+        Configured ChatOpenAI instance pointing at OpenRouter.
+
+    Raises:
+        ValueError: If neither ocr_api_key nor openrouter_api_key is set.
+        ImportError: If langchain-openai is not installed.
+
+    Example:
+        >>> model = create_ocr_openrouter_chat_model(settings)
+    """
+    api_key = settings.ocr_api_key or settings.openrouter_api_key
+    if not api_key:
+        raise ValueError("OCR provider 'openrouter' requires ocr_api_key or openrouter_api_key.")
+    chat_openai_cls = import_chat_openai()
+    logger.info(
+        "Creating OpenRouter OCR ChatModel with model=%s",
+        settings.ocr_model,
+    )
+    return chat_openai_cls(  # type: ignore[no-any-return]
+        model=settings.ocr_model,
+        api_key=api_key,
+        base_url="https://openrouter.ai/api/v1",
+        temperature=settings.ocr_temperature,
+        max_tokens=settings.ocr_max_tokens,
+        request_timeout=settings.ocr_timeout,
+    )
+
+
 def create_ocr_chat_model(settings: Settings | None = None) -> BaseChatModel:
     """Create a LangChain vision ChatModel for OCR from OCR_* settings.
 
@@ -282,7 +319,8 @@ def create_ocr_chat_model(settings: Settings | None = None) -> BaseChatModel:
         settings: Optional settings override. Uses get_settings() if None.
 
     Returns:
-        A LangChain BaseChatModel instance for OCR (Google or Ollama).
+        A LangChain BaseChatModel instance for OCR (Google, Ollama or
+        OpenRouter).
 
     Raises:
         ValueError: If the OCR provider is unsupported or config is missing.
@@ -296,4 +334,6 @@ def create_ocr_chat_model(settings: Settings | None = None) -> BaseChatModel:
         return create_ocr_google_chat_model(settings)
     if settings.ocr_provider == "ollama":
         return create_ocr_ollama_chat_model(settings)
+    if settings.ocr_provider == "openrouter":
+        return create_ocr_openrouter_chat_model(settings)
     raise ValueError(f"Unsupported OCR provider: {settings.ocr_provider}")
