@@ -1,6 +1,6 @@
 # Personal Finance AI
 
-> Multi-Agent AI system for personal finance management designed for Thai users
+> ระบบ AI แบบ Multi-Agent สำหรับช่วยจัดการการเงินส่วนบุคคล ออกแบบมาเพื่อผู้ใช้ชาวไทย
 
 [![CI](https://github.com/66070146-Pakkaphon/agenticaiforpersonalfinance/actions/workflows/ci.yml/badge.svg?branch=main)](./.github/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
@@ -8,102 +8,101 @@
 ![Coverage](https://img.shields.io/badge/coverage-92.7%25-brightgreen)
 [![License](https://img.shields.io/badge/license-Educational%20Use%20Only-orange.svg)](./LICENSE)
 
-## At a Glance
+## สรุปในหน้าเดียว
 
 | | |
 |---|---|
-| **Architecture** | LangGraph multi-agent: Router + 6 specialists, Hub-and-Spoke (verified vs P2P/Hierarchical benchmarks) |
-| **RAG** | ChromaDB, 24 Thai finance documents (official tax/SEC/SET PDFs), Recall@3 0.897 |
-| **Measured quality** | Router accuracy 0.943 single-turn / 1.000 multi-turn · tax calculation 95% (MAE 3,000 THB) · hallucination 0 in headline answers (10/10) |
-| **Engineering** | 1,901 tests, 92.7% coverage, mypy strict, pylint 10/10, TDD throughout |
-| **Deployment** | FastAPI (14 REST endpoints) on Render + Neon Postgres, LINE chatbot, receipt OCR |
-| **Evaluation** | Self-built 6-dimension evaluation framework: routing ablation (810 LLM calls), answer correctness, retrieval quality, hallucination detection, architecture benchmarks |
+| **สถาปัตยกรรม** | LangGraph multi-agent: Router + 6 specialist agents แบบ Hub-and-Spoke (พิสูจน์ด้วย benchmark เทียบกับ P2P/Hierarchical) |
+| **RAG** | ChromaDB กับเอกสารการเงินภาษาไทย 24 ฉบับ (PDF จากหน่วยงานจริง สรรพากร/กลต./ตลท.) Recall@3 0.897 |
+| **คุณภาพที่วัดได้** | Router accuracy 0.943 บทสนทนาเดี่ยว / 1.000 หลายรอบ · คำนวณภาษีแม่นยำ 95% (MAE 3,000 บาท) · hallucination 0 ในคำตอบหลัก (10/10) |
+| **ฝั่ง Engineering** | tests 1,901 ตัว, coverage 92.7%, mypy strict, pylint 10/10, เขียนด้วย TDD ทั้งโปรเจกต์ |
+| **Deployment** | FastAPI (REST 14 endpoints) บน Render + Neon Postgres, LINE chatbot, OCR ใบเสร็จ |
+| **การประเมินผล** | สร้าง evaluation framework 6 มิติขึ้นเอง: routing ablation (810 LLM calls), ความถูกต้องของคำตอบ, คุณภาพ retrieval, ตรวจ hallucination, benchmark สถาปัตยกรรม |
 
-## What is This?
+## โปรเจกต์นี้คืออะไร
 
-A finance assistant you can chat with in Thai. It can:
+ผู้ช่วยการเงินที่คุยด้วยได้เป็นภาษาไทย ทำสิ่งเหล่านี้ได้:
 
-- calculate Thai personal income tax, including all the deductions
-- record and categorize spending, and summarize by month
-- watch stock prices, pull finance news, and manage a watchlist
-- set financial goals and work out saving plans
-- suggest what to do next, with a financial health score
-- put everything together in a report (PDF/CSV)
+- คำนวณภาษีเงินได้หน่วงานพึงประเมินของไทย ครบทุกค่าลดหย่อน
+- บันทึกและจัดหมวดหมู่รายจ่าย สรุปยอดรายเดือน
+- ดูราคาหุ้น อ่านข่าวการเงิน และจัดการ watchlist
+- ตั้งเป้าหมายการเงินและคำนวณแผนเก็บเงิน
+- แนะนำสิ่งที่ควรทำต่อไป พร้อมคะแนนสุขภาพทางการเงิน
+- รวมทุกอย่างเป็นรายงาน (ส่งออก PDF/CSV)
 
-## Key Features
+## ความสามารถหลัก
 
-### Multi-agent system (LangGraph)
+### ระบบ Multi-agent (LangGraph)
 
-A LangGraph graph with a router and 6 specialist agents:
+LangGraph graph ประกอบด้วย router และ specialist agents 6 ตัว:
 
-- **Router Agent** - classifies the query and sends it to the right specialist
-- **Tax Agent** - Thai personal income tax with all deductions
-- **Expense Agent** - income/expense tracking, monthly summaries, category queries
-- **Asset Monitoring Agent** - stock prices, finance news, watchlists
-- **Planning Agent** - goals, saving plans, psychological cue detection
-- **Recommendation Agent** - proactive advice and health scoring
-- **Report Agent** - full reports with PDF/CSV export
+- **Router Agent** - จำแนก intent แล้วส่งต่อให้ specialist ที่ถูกต้อง
+- **Tax Agent** - ภาษีเงินได้หน่วงานพึงประเมินของไทย ครบทุกค่าลดหย่อน
+- **Expense Agent** - บันทึกรายรับ/รายจ่าย สรุปรายเดือน ค้นตามหมวดหมู่
+- **Asset Monitoring Agent** - ราคาหุ้น ข่าวการเงิน watchlist
+- **Planning Agent** - เป้าหมายการเงิน แผนเก็บเงิน ตรวจจับสัญญาณทางจิตวิทยา
+- **Recommendation Agent** - คำแนะนำเชิงรุกและคะแนนสุขภาพทางการเงิน
+- **Report Agent** - รายงานรวมทุกอย่าง ส่งออก PDF/CSV
 
-### RAG Knowledge Base
-ChromaDB vector store with 24 Thai finance documents (18 Markdown + 6 official PDFs) covering:
-- Personal income tax, deductions, filing guides, VAT/withholding
-- Thai stocks, mutual funds, ETFs, bonds, DCA strategy
-- Budgeting, emergency funds, debt management
-- Life/health insurance, social security
-- Retirement and financial planning
-- Digital assets & crypto (grounded on SEC/SET sources)
+### คลังความรู้ RAG
+Vector store ด้วย ChromaDB และเอกสารการเงินภาษาไทย 24 ฉบับ (Markdown 18 + PDF ทางการ 6) ครอบคลุม:
+- ภาษีเงินได้ ค่าลดหย่อน คู่มือยื่นภาษี ภาษีมูลค่าเพิ่ม/ภาษีหัก ณ ที่จ่าย
+- หุ้นไทย กองทุนรวม ETF พันธบัตร กลยุทธ์ DCA
+- การจัดงบประมาณ เงินสำรองฉุกเฉิน การจัดการหนี้
+- ประกันชีวิต/ประกันสุขภาพ ประกันสังคม
+- เกษียณและการวางแผนการเงิน
+- สินทรัพย์ดิจิทัลและ crypto (อ้างอิงแหล่งข้อมูลจาก ก.ล.ต. และตลท.)
 
-### Receipt OCR
-Upload a receipt photo and the system auto-extracts items, amounts and
-merchant, then drafts expense transactions for one-click confirmation
-(`POST /ocr/receipt` → `POST /ocr/confirm`). Vision model is configurable
-independently of the chat agent (`OCR_PROVIDER` + `OCR_MODEL`).
+### OCR ใบเสร็จ
+อัปโหลดรูปใบเสร็จ ระบบจะดึงรายการ จำนวนเงิน และร้านค้าออกมาเอง
+แล้วร่าง transaction เป็น draft ให้กดยืนยันครั้งเดียวจบ
+(`POST /ocr/receipt` → `POST /ocr/confirm`) ตัว Vision model ตั้งค่าแยกจาก
+chat agent ได้ (`OCR_PROVIDER` + `OCR_MODEL`)
 
 ### LINE Chatbot
-Chat with the same multi-agent system inside the LINE app:
-- `POST /line/webhook` verifies `X-Line-Signature` (HMAC-SHA256) and acknowledges within LINE's ~1 s window
-- The agent runs as a background task; the Thai answer is delivered via the Push Message API (reply tokens expire before slow agents finish)
-- Each LINE account is auto-mapped to an app user + conversation (`line_user_mappings`), so chat history persists
-- Account linking: send `เชื่อมต่อ <userId>` in LINE (command is copyable from the web sidebar card) to bind the chat to a web user; `ยกเลิกเชื่อมต่อ` / `unlink` or the website's "ยกเลิกการเชื่อมต่อ" button unbinds it
-- A tappable Quick Reply menu (บันทึกรายจ่าย / วางแผน / หุ้น / ภาษี) mirrors the web clarify options
+คุยกับระบบ multi-agent ชุดเดียวกันผ่านแอป LINE:
+- `POST /line/webhook` ตรวจ `X-Line-Signature` (HMAC-SHA256) และตอบรับภายในกรอบเวลา ~1 วินาทีของ LINE
+- Agent ทำงานเป็น background task แล้วส่งคำตอบภาษาไทยกลับผ่าน Push Message API (reply token หมดอายุก่อน agent ทำงานเสร็จ)
+- แต่ละบัญชี LINE map อัตโนมัติกับ user + conversation (`line_user_mappings`) ทำให้ประวัติแชตไม่หาย
+- ผูกบัญชี: พิมพ์ `เชื่อมต่อ <userId>` ใน LINE (คัดลอกคำสั่งได้จากการ์ดในเว็บ) เพื่อเชื่อมแชตกับบัญชีเว็บ; พิมพ์ `ยกเลิกเชื่อมต่อ` / `unlink` หรือกดปุ่ม "ยกเลิกการเชื่อมต่อ" บนเว็บเพื่อยกเลิก
+- มี Quick Reply menu ให้กด (บันทึกรายจ่าย / วางแผน / หุ้น / ภาษี) สอดคล้องกับตัวเลือก clarify บนเว็บ
 
-Architecture and sequence diagrams (chapter 3): [docs/diagrams.md](./docs/diagrams.md)
+แผนภาพสถาปัตยกรรมและ sequence diagram (บทที่ 3): [docs/diagrams.md](./docs/diagrams.md)
 
-### Design decisions, backed by numbers
+### การตัดสินใจออกแบบ ที่มีตัวเลขยืนยัน
 
-The architecture choices here come from measurements I ran, not hunches:
+ทุกทางเลือกสถาปัตยกรรมที่นี่มาจากการวัดผลจริง ไม่ใช่เดา:
 
-- **Chat history is the router's most valuable feature.** The ablation
-  (810 LLM calls over 3 rounds) showed multi-turn accuracy going from
-  0.733 to 1.000 once history is included. The strongest prompt layout
-  also puts the role instruction after the history block, not before it.
-- **Hub-and-Spoke wins on routing cost.** One LLM routing call per query,
-  versus 1.8 for P2P and 2.0 for hierarchical, with O(N) coupling instead
-  of O(N²). Latency was within noise (~3%), so cost is what separates them.
-- **Money math goes through a typed calculator, not the LLM.** Tax
-  computation hits 95% accuracy (MAE 3,000 THB) because the model calls
-  a deterministic tool instead of doing arithmetic in its head.
-- **Hallucination is reported in two layers, on purpose.** The regex
-  evaluator flags 0.70 raw, but content-level analysis shows 10/10
-  headline answers match the knowledge base. Both numbers are in the
-  results instead of only the flattering one.
+- **ประวัติแชตคือ feature ที่คุ้มค่าที่สุดของ router** จาก ablation
+  (810 LLM calls, 3 รอบ) ความแม่นยำแบบหลายรอบสนทนาพุ่งจาก 0.733
+  เป็น 1.000 เมื่อใส่ history และ prompt layout ที่ได้ผลดีที่สุด
+  คือแบบที่วาง role instruction ไว้หลัง history block ไม่ใช่ก่อนหน้า
+- **Hub-and-Spoke ชนะด้านต้นทุน routing** ใช้ LLM routing call 1 ครั้งต่อคำถาม
+  เทียบกับ 1.8 (P2P) และ 2.0 (Hierarchical) พร้อม coupling แบบ O(N)
+  แทน O(N²) ส่วน latency ต่างกันในระดับ noise (~3%) ตัวตัดสินจึงเป็นต้นทุน
+- **การคำนวณเงินผ่าน calculator ที่มี type ชัดเจน ไม่ใช่ให้ LLM คิดเอง**
+  การคำนวณภาษีแม่นยำ 95% (MAE 3,000 บาท) เพราะ model เรียกใช้ tool
+  แบบ deterministic แทนการตั้งสมการในหัว
+- **รายงาน hallucination เป็น 2 ชั้นโดยตั้งใจ** ตัวประเมิน regex ติดธง 0.70
+  แบบดิบ แต่วิเคราะห์ระดับเนื้อหาพบว่าคำตอบ headline ตรงกับ knowledge base
+  10/10 ตัวเลขทั้งสองชั้นอยู่ในผลลัพธ์ ไม่ได้โชว์แค่ตัวที่สวย
 
-### API security (for public deployments)
+### ความปลอดภัยของ API (สำหรับ deploy สาธารณะ)
 
-- `X-API-Key` required on every endpoint except `/health` and
-  `/line/webhook` (the LINE webhook verifies its own HMAC-SHA256 signature)
-- Per-IP sliding-window rate limiting, default 30 req/min (set `0` to disable)
-- See [`src/finance_ai/core/api_security.py`](./src/finance_ai/core/api_security.py)
+- ทุก endpoint ต้องส่ง `X-API-Key` ยกเว้น `/health` และ
+  `/line/webhook` (webhook ของ LINE ตรวจลายเซ็น HMAC-SHA256 ของตัวเองอยู่แล้ว)
+- Rate limiting แบบ per-IP sliding window เริ่มต้น 30 req/min (ใส่ `0` เพื่อปิด)
+- ดูโค้ดได้ที่ [`src/finance_ai/core/api_security.py`](./src/finance_ai/core/api_security.py)
 
-## Demo
+## ตัวอย่างการใช้งาน
 
-### Example session (real output)
+### บทสนทนาตัวอย่าง (ผลรันจริง)
 
-This exchange is taken from the evaluation run (`tax_acc_001`, minimax-m3),
-not a hand-written mock. The user types a Thai question, the router sends it
-to the Tax Agent, and the agent calls the deterministic tax calculator:
+ตัวอย่างนี้หยิบมาจาก evaluation run จริง (`tax_acc_001`, minimax-m3)
+ไม่ใช่แบบที่พิมพ์ขึ้นมาเอง ผู้ใช้พิมพ์คำถามภาษาไทย router ส่งต่อให้
+Tax Agent แล้ว agent เรียกใช้ตัวคำนวณภาษีแบบ deterministic:
 
-> **User:** คำนวณภาษี เงินเดือน 50,000 บาทต่อเดือน ค่าลดหย่อนส่วนตัว 60,000
+> **ผู้ใช้:** คำนวณภาษี เงินเดือน 50,000 บาทต่อเดือน ค่าลดหย่อนส่วนตัว 60,000
 >
 > **Finance AI:** จากการคำนวณ รายได้รวมทั้งปี 600,000 บาท หักค่าใช้จ่าย 50%
 > (สูงสุด 100,000 บาท) และค่าลดหย่อนส่วนตัว 60,000 บาท ทำให้มีเงินได้สุทธิ
@@ -117,15 +116,15 @@ to the Tax Agent, and the agent calls the deterministic tax calculator:
 > | **เงินได้สุทธิ** | **440,000** |
 > | **ภาษีที่ต้องชำระ** | **21,500** |
 
-Other things you can ask:
+ถามอย่างอื่นได้ด้วย:
 
-- "สรุปค่าใช้จ่ายเดือนนี้" → monthly expense summary with category breakdown
-- "ซื้อ RMF ปีละ 100,000 ได้ลดหย่อนเท่าไหร่" → retirement-savings deduction, grounded in the RAG knowledge base
-- "PTT.BK ราคาเท่าไหร่" → live quote via Yahoo Finance, and it can add symbols to your watchlist
-- "ช่วยวางแผนเก็บเงิน 100,000 ใน 1 ปี" → saving plan with a monthly schedule
-- Photo of a receipt → OCR extracts items and drafts expense rows for one-click confirmation
+- "สรุปค่าใช้จ่ายเดือนนี้" → สรุปรายจ่ายรายเดือนแยกตามหมวดหมู่
+- "ซื้อ RMF ปีละ 100,000 ได้ลดหย่อนเท่าไหร่" → ค่าลดหย่อนเพื่อการออมเกษียณ อ้างอิงจาก RAG knowledge base
+- "PTT.BK ราคาเท่าไหร่" → ราคาสดจาก Yahoo Finance และเพิ่มหุ้นเข้า watchlist ได้
+- "ช่วยวางแผนเก็บเงิน 100,000 ใน 1 ปี" → แผนเก็บเงินแบ่งรายเดือน
+- รูปใบเสร็จ → OCR ดึงรายการออกมา แล้วร่างรายจ่ายเป็น draft ให้กดยืนยันครั้งเดียว
 
-### Architecture at runtime
+### สถาปัตยกรรมขณะรันจริง
 
 ```mermaid
 flowchart LR
@@ -134,22 +133,22 @@ flowchart LR
     ORCH --> AG["6 specialist agents<br/>(LangGraph 1.x)"]
     AG --> TL["Tools & services layer"]
     TL --> DB[("Neon<br/>PostgreSQL")]
-    TL --> CH[("ChromaDB<br/>24 Thai docs")]
+    TL --> CH[("ChromaDB<br/>เอกสารไทย 24 ฉบับ")]
     TL --> YF["Yahoo<br/>Finance"]
     AG --> LLM["AI model provider<br/>(Ollama / Gemini /<br/>OpenRouter)"]
 ```
 
-Full diagrams (chapter 3, including sequence diagrams): [docs/diagrams.md](./docs/diagrams.md)
+แผนภาพเต็ม (บทที่ 3 รวม sequence diagram): [docs/diagrams.md](./docs/diagrams.md)
 
-## Quick Start
+## เริ่มใช้งานเร็ว ๆ
 
-### Prerequisites
-- Python 3.12 or higher
-- [uv](https://docs.astral.sh/uv/) (for dependency management)
-- Google Gemini API key ([Get one here](https://aistudio.google.com/apikey))
-  - Or use Ollama / OpenRouter as alternative LLM providers
+### สิ่งที่ต้องมี
+- Python 3.12 ขึ้นไป
+- [uv](https://docs.astral.sh/uv/) (สำหรับจัดการ dependencies)
+- Google Gemini API key ([รับได้ที่นี่](https://aistudio.google.com/apikey))
+  - หรือใช้ Ollama / OpenRouter เป็น LLM provider ทางเลือก
 
-### Installation
+### ติดตั้ง
 
 ```bash
 # Clone the repository
@@ -178,7 +177,7 @@ uv run python scripts/seed_demo.py
 make test
 ```
 
-### Running the Application
+### สั่งรันแอป
 
 ```bash
 # Start the FastAPI backend (development mode with auto-reload)
@@ -188,13 +187,13 @@ make dev
 make run
 ```
 
-The API will be available at `http://localhost:8080`
-Web UI (chat interface) at `http://localhost:8080/`
-Interactive API docs at `http://localhost:8080/docs`
+API จะรันอยู่ที่ `http://localhost:8080`
+Web UI (หน้าแชต) อยู่ที่ `http://localhost:8080/`
+เอกสาร API แบบ interactive อยู่ที่ `http://localhost:8080/docs`
 
-## Usage Examples
+## ตัวอย่างการเรียกใช้ในโค้ด
 
-### Calculate Taxes
+### คำนวณภาษี
 
 ```python
 from finance_ai.agents.llm_factory import create_chat_model
@@ -210,7 +209,7 @@ print(result["intent"])    # "tax"
 print(result["response"])  # Thai-language tax breakdown
 ```
 
-### Chat with Streaming
+### แชตแบบ Streaming
 
 ```python
 from finance_ai.agents.stream_utils import orchestrate_query_stream
@@ -224,7 +223,7 @@ for event in orchestrate_query_stream(
         print(event.content, end="", flush=True)
 ```
 
-## Project Structure
+## โครงสร้างโปรเจกต์
 
 ```
 agenticaiforpersonalfinance/
@@ -260,9 +259,9 @@ agenticaiforpersonalfinance/
 └── README.md
 ```
 
-## Development
+## พัฒนาต่อ
 
-### Setup Development Environment
+### เตรียมสภาพแวดล้อมพัฒนา
 
 ```bash
 # Install pre-commit hooks
@@ -278,17 +277,17 @@ make typecheck   # Check type hints
 make test        # Run tests
 ```
 
-### Code Quality Standards
+### มาตรฐานคุณภาพโค้ด
 
-This project follows strict code quality standards:
+โปรเจกต์นี้ตั้งมาตรฐานไว้เข้ม:
 
-- Type hints on all functions
+- ทุก function มี type hints
 - Test coverage >90%
 - Lint score >9.0/10
-- Functions under 20 lines
-- Docstrings on every function
+- Function สั้นไม่เกิน 20 บรรทัด
+- ทุก function มี docstring
 
-### Available Make Commands
+### คำสั่ง Make ที่ใช้ได้
 
 ```bash
 make install          # Install dependencies (+ pre-commit hooks)
@@ -313,28 +312,28 @@ make evaluate-compare # Compare multiple LLM providers
 
 ## LLM Providers
 
-The system supports multiple LLM providers (configured in `.env`):
+รองรับหลาย provider (ตั้งค่าใน `.env`):
 
 | Provider | Config key | Production model |
 |---|---|---|
-| Google Gemini (default, also used for OCR) | `llm_provider=google` | `gemini-3.5-flash` |
+| Google Gemini (ค่าเริ่มต้น, ใช้ทำ OCR ด้วย) | `llm_provider=google` | `gemini-3.5-flash` |
 | Ollama Cloud | `llm_provider=ollama` | `minimax-m3` |
 | OpenRouter | `llm_provider=openrouter` | `deepseek/deepseek-chat-v3.1` |
 
-## Research & Evaluation Results
+## งานวิจัยและผลการประเมิน
 
-The evaluation framework (6 dimensions) backs the thesis chapter 4.
-Result drafts with full tables live in `docs/thesis-results/`:
+Evaluation framework 6 มิตินี้เป็นฐานของบทที่ 4 ในวิทยานิพนธ์
+ร่างผลลัพธ์พร้อมตารางเต็มอยู่ที่ `docs/thesis-results/`:
 
-| Chapter | Topic | Headline result |
+| บท | หัวข้อ | ผลสำคัญ |
 |---|---|---|
-| [4.1](./docs/thesis-results/4.1-routing-ablation.md) | Router accuracy + feature ablation (810 calls, 3 rounds) | base 0.943; multi-turn 0.733 → **1.000** with chat history enabled |
-| [4.2](./docs/thesis-results/4.2-answer-correctness.md) | Answer correctness (tax accuracy + hallucination) | tax **95%** (MAE 3,000 THB); hallucination headline **10/10** |
-| [4.3](./docs/thesis-results/4.3-retrieval-quality.md) | RAG retrieval quality (39 queries, one-shot index of 1,586 chunks) | Recall@3 **0.897**, MRR **0.808** |
-| [4.4](./docs/thesis-results/4.4-architecture-comparison.md) | Architecture comparison (Hub-and-Spoke vs P2P/Hierarchical) | routing calls **1.0** vs 1.8/2.0; coupling O(N) vs O(N²) |
-| [model comparison](./docs/model-comparison.md) | Multi-provider routing/answer benchmarks | minimax-m3 0.94, gemini-3.5-flash 0.91 (±0.05) |
+| [4.1](./docs/thesis-results/4.1-routing-ablation.md) | ความแม่นยำของ Router + feature ablation (810 calls, 3 รอบ) | base 0.943; multi-turn 0.733 → **1.000** เมื่อเปิด chat history |
+| [4.2](./docs/thesis-results/4.2-answer-correctness.md) | ความถูกต้องของคำตอบ (ความแม่นภาษี + hallucination) | ภาษีแม่นยำ **95%** (MAE 3,000 บาท); hallucination headline **10/10** |
+| [4.3](./docs/thesis-results/4.3-retrieval-quality.md) | คุณภาพการดึงข้อมูล RAG (39 queries, index 1,586 chunks แบบ one-shot) | Recall@3 **0.897**, MRR **0.808** |
+| [4.4](./docs/thesis-results/4.4-architecture-comparison.md) | เปรียบเทียบสถาปัตยกรรม (Hub-and-Spoke vs P2P/Hierarchical) | routing calls **1.0** vs 1.8/2.0; coupling O(N) vs O(N²) |
+| [เปรียบเทียบ model](./docs/model-comparison.md) | Benchmark หลาย provider (routing/คำตอบ) | minimax-m3 0.94, gemini-3.5-flash 0.91 (±0.05) |
 
-Run the evaluations yourself:
+รันการประเมินเองได้:
 
 ```bash
 make evaluate-routing   # router accuracy + ablation (see docs/deployment.md flags)
@@ -344,38 +343,40 @@ make evaluate-compare   # multi-provider comparison
 
 ## Deployment
 
-Full guide (Render free tier + Neon Postgres, env variables, troubleshooting):
-[docs/deployment.md](./docs/deployment.md). The Render blueprint is
-[`render.yaml`](./render.yaml) (LLM + OCR via Google Gemini).
+คู่มือเต็ม (Render free tier + Neon Postgres, ตัวแปรสภาพแวดล้อม, การแก้ปัญหา):
+[docs/deployment.md](./docs/deployment.md) Render blueprint อยู่ที่
+[`render.yaml`](./render.yaml) (LLM + OCR ผ่าน Google Gemini)
 
-## Contributing
+## ร่วมพัฒนา
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+1. Fork repository
+2. สร้าง feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit การเปลี่ยนแปลง (`git commit -m 'Add amazing feature'`)
+4. Push ขึ้น branch (`git push origin feature/amazing-feature`)
+5. เปิด Pull Request
 
-All PRs must:
-- Pass all tests (`make check`)
-- Have >90% coverage
-- Pass linting (score >9.0)
-- Pass type checking
+PR ทุกอันต้อง:
+- ผ่าน test ทั้งหมด (`make check`)
+- Coverage >90%
+- ผ่าน linting (score >9.0)
+- ผ่าน type checking
 
 ## License
 
-This project is licensed for **personal and educational use only**
-(see the [LICENSE](./LICENSE) file). Commercial use requires prior
-written permission from the copyright holder. Not financial advice.
+โปรเจกต์นี้อนุญาตให้ใช้เพื่อ **ส่วนตัวและการศึกษาเท่านั้น**
+(ดูรายละเอียดในไฟล์ [LICENSE](./LICENSE)) การใช้เชิงพาณิชย์ต้องได้รับ
+อนุญาตเป็นลายลักษณ์อักษรจากผู้ถือสิทธิก่อน และนี่ไม่ใช่คำแนะนำทางการเงิน
 
-## Acknowledgments
+## ขอบคุณแหล่งข้อมูล
 
 - Agent orchestration: [LangGraph](https://github.com/langchain-ai/langgraph)
-- LLM: [Google Gemini](https://ai.google.dev/) (or Ollama / OpenRouter)
+- LLM: [Google Gemini](https://ai.google.dev/) (หรือ Ollama / OpenRouter)
 - Vector store: [ChromaDB](https://www.trychroma.com/)
-- Market data: [yfinance](https://github.com/ranaroussi/yfinance), [SET](https://www.set.or.th/), [AIMC](https://www.aimc.or.th/)
-- Tax rules: [Thai Revenue Department](https://www.rd.go.th/)
+- ข้อมูลตลาด: [yfinance](https://github.com/ranaroussi/yfinance), [SET](https://www.set.or.th/), [AIMC](https://www.aimc.or.th/)
+- กฎภาษี: [กรมสรรพากร](https://www.rd.go.th/)
 
 ---
 
-**Disclaimer**: This tool is for informational purposes only and does not constitute financial advice. Always consult with a qualified financial advisor before making investment decisions. Tax calculations are based on current Thai tax laws and may not reflect the latest changes.
+**ข้อจำกัดความรับผิดชอบ**: เครื่องมือนี้จัดทำขึ้นเพื่อให้ข้อมูลเท่านั้น ไม่ใช่คำแนะนำทางการเงิน
+ควรปรึกษาผู้เชี่ยวชาญด้านการเงินก่อนตัดสินใจลงทุนทุกครั้ง การคำนวณภาษีอ้างอิงกฎหมายภาษีไทยฉบับปัจจุบัน
+และอาจไม่รวมการเปลี่ยนแปลงล่าสุด
