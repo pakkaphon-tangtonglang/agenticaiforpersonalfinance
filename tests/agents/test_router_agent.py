@@ -3,10 +3,12 @@
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from finance_ai.agents.router_agent import (
+    DEFAULT_ABLATION_CONFIG,
     ROUTER_CONFIDENCE_THRESHOLD,
+    RouterAblationConfig,
     _build_clarify_response,
     _build_messages,
     _content_to_text,
@@ -608,3 +610,109 @@ class TestAssetHintResolution:
         """Lowercase English words (e.g. 'test') do not trigger a search."""
         assert _resolve_asset_hint("test the query") is None
         mock_search.assert_not_called()
+
+
+def _mock_model_returning(content: str) -> MagicMock:
+    """Build a MagicMock chat model whose invoke returns an AIMessage."""
+    model = MagicMock()
+    model.invoke.return_value = AIMessage(content=content)
+    return model
+
+
+class TestRouterAblationConfigDefaults:
+    """Defaults must reproduce current production behavior."""
+
+    def test_defaults_match_production(self) -> None:
+        """All helpers on, threshold off (it lives in orchestrate_query)."""
+        config = RouterAblationConfig()
+        assert config.include_chat_history is True
+        assert config.include_few_shot_examples is True
+        assert config.resolve_asset_hint is True
+        assert config.apply_confidence_threshold is False
+
+
+class TestClassifyQueryAblationFlags:
+    """Each flag must visibly change the messages sent to the LLM."""
+
+    def test_few_shot_disabled_removes_examples_from_prompt(self) -> None:
+        """System message has no example block when few-shot is off."""
+        config = RouterAblationConfig(include_few_shot_examples=False)
+        model = _mock_model_returning('{"intent": "tax", "confidence": 0.9}')
+        classify_query("คำนวณภาษี", chat_model=model, config=config)
+        sent_messages = model.invoke.call_args[0][0]
+        assert "ตัวอย่าง:" not in sent_messages[0].content
+
+    def test_few_shot_enabled_keeps_examples_in_prompt(self) -> None:
+        """System message keeps examples when few-shot is on."""
+        config = RouterAblationConfig()
+        model = _mock_model_returning('{"intent": "tax", "confidence": 0.9}')
+        classify_query("คำนวณภาษี", chat_model=model, config=config)
+        sent_messages = model.invoke.call_args[0][0]
+        assert "จ่ายค่ากาแฟ 80 บาท" in sent_messages[0].content
+
+    def test_history_disabled_omits_history_messages(self) -> None:
+        """Only system message + current query are sent when history is off."""
+        config = RouterAblationConfig(include_chat_history=False)
+        model = _mock_model_returning('{"intent": "tax", "confidence": 0.9}')
+        history = [("user", "ก่อนหน้านี้ถามอะไร"), ("assistant", "ตอบอะไรไป")]
+        classify_query("คำนวณภาษี", chat_model=model, chat_history=history, config=config)
+        sent_messages = model.invoke.call_args[0][0]
+        assert len(sent_messages) == 2
+        assert isinstance(sent_messages[0], SystemMessage)
+        assert isinstance(sent_messages[1], HumanMessage)
+
+    def test_history_enabled_includes_history_messages(self) -> None:
+        """History messages are sent when history is on."""
+        config = RouterAblationConfig()
+        model = _mock_model_returning('{"intent": "tax", "confidence": 0.9}')
+        history = [("user", "ก่อนหน้านี้ถามอะไร"), ("assistant", "ตอบอะไรไป")]
+        classify_query("คำนวณภาษี", chat_model=model, chat_history=history, config=config)
+        sent_messages = model.invoke.call_args[0][0]
+        assert len(sent_messages) == 4  # system + 2 history + query
+
+    def test_asset_hint_disabled_skips_symbol_search(self) -> None:
+        """Yahoo symbol search is never called when the hint flag is off."""
+        config = RouterAblationConfig(resolve_asset_hint=False)
+        model = _mock_model_returning('{"intent": "asset_monitoring", "confidence": 0.9}')
+        with patch("finance_ai.agents.router_agent.search_asset_symbols") as mock_search:
+            classify_query("ดูราคา PTT ล่าสุด", chat_model=model, config=config)
+        mock_search.assert_not_called()
+
+    def test_asset_hint_enabled_calls_symbol_search(self) -> None:
+        """Yahoo symbol search runs and injects a hint SystemMessage."""
+        config = RouterAblationConfig()
+        model = _mock_model_returning('{"intent": "asset_monitoring", "confidence": 0.9}')
+        match = AssetSymbolMatch(
+            symbol="PTT.BK",
+            name="PTT Public Company Limited",
+            exchange="SET",
+            quote_type="EQUITY",
+        )
+        with patch(
+            "finance_ai.agents.router_agent.search_asset_symbols",
+            return_value=[match],
+        ) as mock_search:
+            classify_query("ดูราคา PTT ล่าสุด", chat_model=model, config=config)
+        mock_search.assert_called_once()
+        sent_messages = model.invoke.call_args[0][0]
+        hint_messages = [
+            m for m in sent_messages if isinstance(m, SystemMessage) and "หลักทรัพย์" in m.content
+        ]
+        assert len(hint_messages) == 1
+
+    def test_default_config_behaves_like_no_config(self) -> None:
+        """Passing the default config sends identical messages to None."""
+        model_a = _mock_model_returning('{"intent": "tax", "confidence": 0.9}')
+        model_b = _mock_model_returning('{"intent": "tax", "confidence": 0.9}')
+        history = [("user", "สวัสดี")]
+        with patch("finance_ai.agents.router_agent.search_asset_symbols"):
+            classify_query("คำนวณภาษี", chat_model=model_a, chat_history=history)
+            classify_query(
+                "คำนวณภาษี",
+                chat_model=model_b,
+                chat_history=history,
+                config=DEFAULT_ABLATION_CONFIG,
+            )
+        messages_a = [m.content for m in model_a.invoke.call_args[0][0]]
+        messages_b = [m.content for m in model_b.invoke.call_args[0][0]]
+        assert messages_a == messages_b
