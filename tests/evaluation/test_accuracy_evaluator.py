@@ -98,7 +98,11 @@ class TestExtractTaxFromResponse:
 
     def test_zero_tax_not_confused_with_income(self) -> None:
         """Test that 0 tax is not confused with income numbers."""
-        text = "**รายได้รวม:** 150,000 บาท\n" "**เงินได้สุทธิ:** 90,000 บาท\n" "**ภาษีที่ต้องจ่าย:** 0 บาท"
+        text = (
+            "**รายได้รวม:** 150,000 บาท\n"
+            "**เงินได้สุทธิ:** 90,000 บาท\n"
+            "**ภาษีที่ต้องจ่าย:** 0 บาท"
+        )
         result = extract_tax_from_response(text)
         assert result == Decimal("0")
 

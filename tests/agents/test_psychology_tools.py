@@ -43,6 +43,8 @@ class TestDetectPsychologicalCuesTool:
 
     def test_tool_multiple_biases(self) -> None:
         """Tool detects multiple biases."""
-        result = detect_psychological_cues.invoke({"user_input": "กลัวขาดทุน แต่เห็นกำลังฮิตก็อยากซื้อ"})
+        result = detect_psychological_cues.invoke(
+            {"user_input": "กลัวขาดทุน แต่เห็นกำลังฮิตก็อยากซื้อ"}
+        )
         bias_types = {b["bias_type"] for b in result["detected_biases"]}
         assert len(bias_types) >= 2

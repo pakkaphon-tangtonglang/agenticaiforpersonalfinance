@@ -271,7 +271,8 @@ def _fetch_exchange_rate(from_currency: str, to_currency: str) -> Decimal:
     rate = fetch_current_price(fx_symbol)
     if rate is None:
         raise ValueError(
-            f"ไม่พบอัตราแลกเปลี่ยนสำหรับ {from_currency} → {to_currency} " "(โปรดลองใหม่อีกครั้งในภายหลัง)"
+            f"ไม่พบอัตราแลกเปลี่ยนสำหรับ {from_currency} → {to_currency} "
+            "(โปรดลองใหม่อีกครั้งในภายหลัง)"
         )
     return rate
 
