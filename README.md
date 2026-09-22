@@ -95,6 +95,52 @@ The architecture choices here come from measurements I ran, not hunches:
 - Per-IP sliding-window rate limiting, default 30 req/min (set `0` to disable)
 - See [`src/finance_ai/core/api_security.py`](./src/finance_ai/core/api_security.py)
 
+## Demo
+
+### Example session (real output)
+
+This exchange is taken from the evaluation run (`tax_acc_001`, minimax-m3),
+not a hand-written mock. The user types a Thai question, the router sends it
+to the Tax Agent, and the agent calls the deterministic tax calculator:
+
+> **User:** คำนวณภาษี เงินเดือน 50,000 บาทต่อเดือน ค่าลดหย่อนส่วนตัว 60,000
+>
+> **Finance AI:** จากการคำนวณ รายได้รวมทั้งปี 600,000 บาท หักค่าใช้จ่าย 50%
+> (สูงสุด 100,000 บาท) และค่าลดหย่อนส่วนตัว 60,000 บาท ทำให้มีเงินได้สุทธิ
+> 440,000 บาท และต้องเสียภาษี 21,500 บาท
+>
+> | รายการ | จำนวนเงิน (บาท) |
+> |---|---:|
+> | รายได้รวมทั้งปี | 600,000 |
+> | ค่าใช้จ่าย (หัก 50% สูงสุด 100,000) | 100,000 |
+> | ค่าลดหย่อนส่วนตัว | 60,000 |
+> | **เงินได้สุทธิ** | **440,000** |
+> | **ภาษีที่ต้องชำระ** | **21,500** |
+
+Other things you can ask:
+
+- "สรุปค่าใช้จ่ายเดือนนี้" → monthly expense summary with category breakdown
+- "ซื้อ RMF ปีละ 100,000 ได้ลดหย่อนเท่าไหร่" → retirement-savings deduction, grounded in the RAG knowledge base
+- "PTT.BK ราคาเท่าไหร่" → live quote via Yahoo Finance, and it can add symbols to your watchlist
+- "ช่วยวางแผนเก็บเงิน 100,000 ใน 1 ปี" → saving plan with a monthly schedule
+- Photo of a receipt → OCR extracts items and drafts expense rows for one-click confirmation
+
+### Architecture at runtime
+
+```mermaid
+flowchart LR
+    LINE["LINE app"] & WEB["Web app"] -->|"webhook + push"| API["FastAPI<br/>(Render)"]
+    API --> ORCH["Query coordinator"]
+    ORCH --> AG["6 specialist agents<br/>(LangGraph 1.x)"]
+    AG --> TL["Tools & services layer"]
+    TL --> DB[("Neon<br/>PostgreSQL")]
+    TL --> CH[("ChromaDB<br/>24 Thai docs")]
+    TL --> YF["Yahoo<br/>Finance"]
+    AG --> LLM["AI model provider<br/>(Ollama / Gemini /<br/>OpenRouter)"]
+```
+
+Full diagrams (chapter 3, including sequence diagrams): [docs/diagrams.md](./docs/diagrams.md)
+
 ## Quick Start
 
 ### Prerequisites
@@ -123,6 +169,10 @@ nano .env
 
 # Initialize the database (runs Alembic migrations to create all tables)
 make init-db
+
+# (Optional) load demo data - users, expenses, watchlist - so the UI
+# is populated on first open
+uv run python scripts/seed_demo.py
 
 # Run tests to verify setup
 make test
