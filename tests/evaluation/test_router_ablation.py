@@ -16,7 +16,12 @@ from finance_ai.evaluation.router_ablation import (
     ABLATION_VARIANTS,
     AblationCallRow,
     AblationRunner,
+    RouterAblationReport,
+    VariantSummary,
+    aggregate_rows,
+    format_ablation_markdown,
     parse_model_spec,
+    save_ablation_report,
 )
 
 
@@ -193,3 +198,100 @@ class TestAblationRunner:
         for line in lines:
             row = AblationCallRow(**json.loads(line))
             assert row.model == "ollama:fake"
+
+
+def _row(**overrides: object) -> AblationCallRow:
+    """Build a completed call row with test-friendly defaults."""
+    defaults: dict[str, object] = dict(
+        model="ollama:fake",
+        variant="baseline",
+        round=1,
+        case_id="fx_001",
+        case_group="base",
+        query="q",
+        expected_intent="tax",
+        predicted_intent="tax",
+        predicted_confidence="0.9",
+        latency_seconds=1.0,
+    )
+    defaults.update(overrides)
+    return AblationCallRow(**defaults)  # type: ignore[arg-type]
+
+
+class TestAggregateRows:
+    """Aggregation splits by case group and rounds correctly."""
+
+    def test_mean_accuracy_across_rounds(self) -> None:
+        """Round 1: 1/1 correct. Round 2: 0/1 correct. Mean 0.5."""
+        rows = [_row(), _row(round=2, predicted_intent="general")]
+        summary = aggregate_rows(rows, rounds=2)
+        assert len(summary) == 1
+        assert summary[0].base_accuracy_mean == 0.5
+        assert summary[0].base_accuracy_std > 0.0
+
+    def test_history_group_scored_separately(self) -> None:
+        """History rows must not leak into the base accuracy."""
+        rows = [_row(), _row(case_id="fx_hist_001", case_group="history")]
+        summary = aggregate_rows(rows, rounds=1)[0]
+        assert summary.base_accuracy_mean == 1.0
+        assert summary.history_accuracy_mean == 1.0
+
+    def test_clarify_counts_as_miss_unless_expected(self) -> None:
+        """ "clarify" is wrong unless expected_clarify is True."""
+        rows = [_row(predicted_intent="clarify")]
+        summary = aggregate_rows(rows, rounds=1)[0]
+        assert summary.base_accuracy_mean == 0.0
+        assert summary.clarify_rate_mean == 1.0
+        rows_expected = [_row(predicted_intent="clarify", expected_clarify=True)]
+        summary_expected = aggregate_rows(rows_expected, rounds=1)[0]
+        assert summary_expected.base_accuracy_mean == 1.0
+
+    def test_error_rows_excluded_from_accuracy(self) -> None:
+        """Errored calls are counted in error_count, not accuracy."""
+        rows = [_row(), _row(case_id="fx_002", error="boom")]
+        summary = aggregate_rows(rows, rounds=1)[0]
+        assert summary.total_calls == 2
+        assert summary.error_count == 1
+        assert summary.base_accuracy_mean == 1.0
+
+    def test_single_round_std_is_zero(self) -> None:
+        """With one completed round the std is 0.0, not a division error."""
+        summary = aggregate_rows([_row()], rounds=1)[0]
+        assert summary.base_accuracy_std == 0.0
+
+    def test_variants_sorted_in_canonical_order(self) -> None:
+        """Summaries keep the ABLATION_VARIANTS order per model."""
+        rows = [
+            _row(variant="full"),
+            _row(variant="baseline", case_id="fx_002"),
+        ]
+        summaries = aggregate_rows(rows, rounds=1)
+        assert [s.variant for s in summaries] == ["baseline", "full"]
+
+
+class TestFormatAndSave:
+    """Markdown formatting and file saving."""
+
+    def _build_report(self, rounds: int = 1) -> RouterAblationReport:
+        """Build a one-row report for formatting tests."""
+        summary = aggregate_rows([_row()], rounds=rounds)[0]
+        return RouterAblationReport(
+            report_id="test-report",
+            rounds=rounds,
+            generated_at="2026-09-22",
+            variants=[summary],
+        )
+
+    def test_markdown_contains_headers_and_values(self) -> None:
+        """The report table shows models, variants and values."""
+        markdown = format_ablation_markdown(self._build_report())
+        assert "ollama:fake" in markdown
+        assert "baseline" in markdown
+        assert "1.000" in markdown
+
+    def test_save_writes_json_and_markdown(self, tmp_path: Path) -> None:
+        """save_ablation_report writes <id>.json and <id>.md."""
+        report = self._build_report()
+        json_path, md_path = save_ablation_report(report, str(tmp_path))
+        assert Path(json_path).exists()
+        assert Path(md_path).exists()

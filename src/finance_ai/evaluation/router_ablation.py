@@ -12,8 +12,11 @@ Example:
 """
 
 import json
+import statistics
 import time
+import uuid
 from dataclasses import replace
+from datetime import datetime, timezone
 from pathlib import Path
 
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -333,3 +336,294 @@ def _execute_call(  # noqa: PLR0913
         row.error = str(exc)
     row.latency_seconds = time.perf_counter() - start
     return row
+
+
+# ============================================================================
+# Aggregation and Report
+# ============================================================================
+
+
+class VariantSummary(BaseModel):
+    """Aggregated metrics for one (model, variant) cell.
+
+    Attributes:
+        model: "provider:model" spec of the chat model.
+        variant: Ablation variant label.
+        rounds_completed: How many rounds produced valid rows.
+        total_calls: All logged calls, including errors.
+        error_count: Calls that raised an exception.
+        base_accuracy_mean: Mean accuracy on the base 35-case group.
+        base_accuracy_std: Sample std of base accuracy across rounds.
+        history_accuracy_mean: Mean accuracy on the history 10-case group.
+        history_accuracy_std: Sample std of history accuracy across rounds.
+        clarify_rate_mean: Share of valid calls predicting "clarify".
+        mean_latency_seconds: Mean wall-clock seconds per valid call.
+    """
+
+    model: str
+    variant: str
+    rounds_completed: int
+    total_calls: int
+    error_count: int
+    base_accuracy_mean: float
+    base_accuracy_std: float
+    history_accuracy_mean: float
+    history_accuracy_std: float
+    clarify_rate_mean: float
+    mean_latency_seconds: float
+
+
+class RouterAblationReport(BaseModel):
+    """Complete ablation report across models and variants.
+
+    Attributes:
+        report_id: Unique identifier used for the output file names.
+        rounds: Planned number of rounds per grid cell.
+        generated_at: UTC ISO timestamp of report creation.
+        variants: One summary per (model, variant), in canonical order.
+    """
+
+    report_id: str
+    rounds: int
+    generated_at: str
+    variants: list[VariantSummary]
+
+
+def _is_correct(row: AblationCallRow) -> bool:
+    """Apply the scoring rule to one row.
+
+    Args:
+        row: The logged call.
+
+    Returns:
+        True when the prediction matches and 'clarify' is expected.
+
+    Example:
+        >>> _is_correct(_row())  # doctest: +SKIP
+    """
+    if row.expected_clarify:
+        return row.predicted_intent == "clarify"
+    return row.predicted_intent == row.expected_intent
+
+
+def _round_accuracies(rows: list[AblationCallRow], group: str, round_number: int) -> float | None:
+    """Accuracy of one group in one round, None when no valid calls.
+
+    Args:
+        rows: Rows for a single (model, variant).
+        group: "base" or "history".
+        round_number: 1-based round index.
+
+    Returns:
+        Accuracy for that (group, round), or None.
+    """
+    valid = [
+        row
+        for row in rows
+        if row.case_group == group and row.error is None and row.round == round_number
+    ]
+    if not valid:
+        return None
+    return sum(_is_correct(row) for row in valid) / len(valid)
+
+
+def _group_stats(rows: list[AblationCallRow], group: str, rounds: int) -> tuple[float, float]:
+    """Mean and std accuracy for one case group across rounds.
+
+    Args:
+        rows: Rows for a single (model, variant).
+        group: "base" or "history".
+        rounds: Planned round count.
+
+    Returns:
+        (mean, std) — std is 0.0 when fewer than two rounds completed.
+    """
+    per_round = [
+        accuracy
+        for r in range(1, rounds + 1)
+        if (accuracy := _round_accuracies(rows, group, r)) is not None
+    ]
+    if not per_round:
+        return 0.0, 0.0
+    if len(per_round) < 2:
+        return per_round[0], 0.0
+    return float(statistics.mean(per_round)), float(statistics.stdev(per_round))
+
+
+def _clarify_rate(rows: list[AblationCallRow]) -> float:
+    """Share of valid calls that predicted 'clarify'.
+
+    Args:
+        rows: Rows for a single (model, variant).
+
+    Returns:
+        Clarify rate, 0.0 when there are no valid calls.
+    """
+    valid = [row for row in rows if row.error is None]
+    if not valid:
+        return 0.0
+    return sum(row.predicted_intent == "clarify" for row in valid) / len(valid)
+
+
+def _mean_latency(rows: list[AblationCallRow]) -> float:
+    """Mean latency over valid calls.
+
+    Args:
+        rows: Rows for a single (model, variant).
+
+    Returns:
+        Mean seconds, 0.0 when there are no valid calls.
+    """
+    valid = [row for row in rows if row.error is None]
+    if not valid:
+        return 0.0
+    return float(statistics.mean(row.latency_seconds for row in valid))
+
+
+def _summarize_cell(
+    model_spec: str, variant_name: str, cell_rows: list[AblationCallRow], rounds: int
+) -> VariantSummary:
+    """Build one VariantSummary from a (model, variant) cell's rows.
+
+    Args:
+        model_spec: Model key for the summary.
+        variant_name: Variant label for the summary.
+        cell_rows: All logged rows of this cell.
+        rounds: Planned round count.
+
+    Returns:
+        The aggregated VariantSummary.
+    """
+    base_mean, base_std = _group_stats(cell_rows, BASE_CASE_GROUP, rounds)
+    hist_mean, hist_std = _group_stats(cell_rows, HISTORY_CASE_GROUP, rounds)
+    valid = [row for row in cell_rows if row.error is None]
+    return VariantSummary(
+        model=model_spec,
+        variant=variant_name,
+        rounds_completed=len({row.round for row in valid}),
+        total_calls=len(cell_rows),
+        error_count=len(cell_rows) - len(valid),
+        base_accuracy_mean=base_mean,
+        base_accuracy_std=base_std,
+        history_accuracy_mean=hist_mean,
+        history_accuracy_std=hist_std,
+        clarify_rate_mean=_clarify_rate(cell_rows),
+        mean_latency_seconds=_mean_latency(cell_rows),
+    )
+
+
+def aggregate_rows(rows: list[AblationCallRow], rounds: int) -> list[VariantSummary]:
+    """Aggregate logged rows into per (model, variant) summaries.
+
+    Args:
+        rows: All rows from the run log.
+        rounds: Planned number of rounds.
+
+    Returns:
+        One VariantSummary per (model, variant), sorted by model then
+        the ABLATION_VARIANTS order.
+
+    Example:
+        >>> summaries = aggregate_rows(rows, rounds=3)  # doctest: +SKIP
+    """
+    grouped: dict[tuple[str, str], list[AblationCallRow]] = {}
+    for row in rows:
+        grouped.setdefault((row.model, row.variant), []).append(row)
+    summaries = [
+        _summarize_cell(model_spec, variant_name, cell_rows, rounds)
+        for (model_spec, variant_name), cell_rows in grouped.items()
+    ]
+    variant_order = {name: i for i, name in enumerate(ABLATION_VARIANTS)}
+    return sorted(summaries, key=lambda s: (s.model, variant_order.get(s.variant, 99)))
+
+
+def format_ablation_markdown(report: RouterAblationReport) -> str:
+    """Render the report as markdown tables (one per model).
+
+    Args:
+        report: The complete ablation report.
+
+    Returns:
+        Markdown string for the .md report file.
+
+    Example:
+        >>> text = format_ablation_markdown(report)  # doctest: +SKIP
+    """
+    lines = [
+        "# Router Ablation Report",
+        "",
+        f"**Generated:** {report.generated_at} | **Rounds:** {report.rounds}",
+        "",
+    ]
+    for model_spec in sorted({summary.model for summary in report.variants}):
+        lines.append(f"## Model: {model_spec}")
+        lines.append("")
+        lines.append(
+            "| Variant | base acc (mean ± std) "
+            "| history acc (mean ± std) | clarify rate | latency (s) |"
+        )
+        lines.append("|---|---|---|---|---|")
+        lines.extend(_model_table_lines(report, model_spec))
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _model_table_lines(report: RouterAblationReport, model_spec: str) -> list[str]:
+    """Render the table rows of one model.
+
+    Args:
+        report: The complete ablation report.
+        model_spec: Model key to render.
+
+    Returns:
+        Markdown table lines for the model's variants.
+    """
+    lines = []
+    for summary in report.variants:
+        if summary.model != model_spec:
+            continue
+        lines.append(
+            f"| {summary.variant} "
+            f"| {summary.base_accuracy_mean:.3f} ± {summary.base_accuracy_std:.3f} "
+            f"| {summary.history_accuracy_mean:.3f} ± {summary.history_accuracy_std:.3f} "
+            f"| {summary.clarify_rate_mean:.3f} "
+            f"| {summary.mean_latency_seconds:.2f} |"
+        )
+    return lines
+
+
+def save_ablation_report(report: RouterAblationReport, output_dir: str) -> tuple[str, str]:
+    """Write the report as JSON and Markdown files.
+
+    Args:
+        report: The complete ablation report.
+        output_dir: Directory for the report files.
+
+    Returns:
+        (json_path, markdown_path) of the written files.
+    """
+    directory = Path(output_dir)
+    directory.mkdir(parents=True, exist_ok=True)
+    json_path = directory / f"{report.report_id}.json"
+    json_path.write_text(report.model_dump_json(indent=2), encoding="utf-8")
+    md_path = directory / f"{report.report_id}.md"
+    md_path.write_text(format_ablation_markdown(report), encoding="utf-8")
+    return str(json_path), str(md_path)
+
+
+def build_ablation_report(rows: list[AblationCallRow], rounds: int) -> RouterAblationReport:
+    """Build a complete report from logged rows.
+
+    Args:
+        rows: All rows from the run log.
+        rounds: Planned number of rounds.
+
+    Returns:
+        RouterAblationReport ready to save.
+    """
+    return RouterAblationReport(
+        report_id=str(uuid.uuid4()),
+        rounds=rounds,
+        generated_at=datetime.now(timezone.utc).isoformat(),
+        variants=aggregate_rows(rows, rounds),
+    )
