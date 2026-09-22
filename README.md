@@ -31,12 +31,19 @@ Powered by LangGraph with a Router + 6 specialized agents:
 - **Report Agent** - Comprehensive financial reports with PDF/CSV export
 
 ### RAG Knowledge Base
-ChromaDB vector store with 23 Thai finance documents covering:
+ChromaDB vector store with 24 Thai finance documents (18 Markdown + 6 official PDFs) covering:
 - Personal income tax, deductions, filing guides, VAT/withholding
 - Thai stocks, mutual funds, ETFs, bonds, DCA strategy
 - Budgeting, emergency funds, debt management
 - Life/health insurance, social security
 - Retirement and financial planning
+- Digital assets & crypto (grounded on SEC/SET sources)
+
+### Receipt OCR
+Upload a receipt photo and the system auto-extracts items, amounts and
+merchant, then drafts expense transactions for one-click confirmation
+(`POST /ocr/receipt` → `POST /ocr/confirm`). Vision model is configurable
+independently of the chat agent (`OCR_PROVIDER` + `OCR_MODEL`).
 
 ### LINE Chatbot
 Chat with the same multi-agent system inside the LINE app:
@@ -221,11 +228,30 @@ make evaluate-compare # Compare multiple LLM providers
 
 The system supports multiple LLM providers (configured in `.env`):
 
-| Provider | Config key | Default model |
+| Provider | Config key | Production model |
 |---|---|---|
-| Google Gemini | `llm_provider=google` | `gemini-2.5-flash` |
-| Ollama | `llm_provider=ollama` | `minimax-m3` |
+| Google Gemini (default, also used for OCR) | `llm_provider=google` | `gemini-3.5-flash` |
+| Ollama Cloud | `llm_provider=ollama` | `minimax-m3` |
 | OpenRouter | `llm_provider=openrouter` | `deepseek/deepseek-chat-v3.1` |
+
+## Research & Evaluation Results
+
+The evaluation framework (6 dimensions) backs the thesis chapter 4 —
+result drafts with full tables live in `docs/thesis-results/`:
+
+| Chapter | Topic | Headline result |
+|---|---|---|
+| [4.1](./docs/thesis-results/4.1-routing-ablation.md) | Router accuracy + feature ablation (810 calls, 3 rounds) | base 0.943; multi-turn 0.733 → **1.000** with chat history enabled |
+| [4.3](./docs/thesis-results/4.3-retrieval-quality.md) | RAG retrieval quality (39 queries, one-shot index of 1,586 chunks) | Recall@3 **0.897**, MRR **0.808** |
+| [model comparison](./docs/model-comparison.md) | Multi-provider routing/answer benchmarks | minimax-m3 0.94, gemini-3.5-flash 0.91 (±0.05) |
+
+Run the evaluations yourself:
+
+```bash
+make evaluate-routing   # router accuracy + ablation (see docs/deployment.md flags)
+make evaluate-rag       # RAG retrieval metrics
+make evaluate-compare   # multi-provider comparison
+```
 
 ## Roadmap
 
@@ -248,6 +274,9 @@ The system supports multiple LLM providers (configured in `.env`):
 - [x] LINE chatbot (`/line/webhook` + Push API replies, Quick Reply menu)
 - [x] LINE account link/unlink lifecycle (chat commands + website connect card/modal with `POST /line/unlink`)
 - [x] Production database migrated from ephemeral SQLite to Neon Postgres (free tier) via `DB_URL`
+- [x] Receipt OCR (vision model → drafted expense transactions)
+- [x] Router ablation framework (feature-toggled router, resumable JSONL runner, markdown report)
+- [x] Render deployment blueprint (Render free tier + Neon Postgres)
 
 ### In Progress
 - [ ] Streamlit code cleanup (legacy remnants in `ui/` and CRUD still reference Streamlit)
@@ -258,6 +287,12 @@ The system supports multiple LLM providers (configured in `.env`):
 - [ ] Real-time market data streaming
 - [ ] Advanced tax strategies (scenario modeling)
 - [ ] Broker statement auto-import
+
+## Deployment
+
+Full guide (Render free tier + Neon Postgres, env variables, troubleshooting):
+[docs/deployment.md](./docs/deployment.md) — the Render blueprint is
+[`render.yaml`](./render.yaml) (LLM + OCR via Google Gemini).
 
 ## Contributing
 
