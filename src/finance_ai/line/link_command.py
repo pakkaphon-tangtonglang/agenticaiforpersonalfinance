@@ -59,11 +59,17 @@ def link_line_user(session: Session, line_user_id: str, target_user_id: str) -> 
     )
     target_user = session.get(User, target_user_id)
     if mapping is None or target_user is None:
-        return False, "ไม่พบผู้ใช้รหัสนี้ครับ กรุณาคัดลอก User ID จากหน้าเว็บแล้วส่ง 'เชื่อมต่อ <User ID>' อีกครั้ง"
+        return (
+            False,
+            "ไม่พบผู้ใช้รหัสนี้ครับ กรุณาคัดลอก User ID จากหน้าเว็บแล้วส่ง 'เชื่อมต่อ <User ID>' อีกครั้ง",
+        )
     mapping.user_id = target_user_id
     session.commit()
     display_name = target_user.full_name or target_user.email
-    return True, f"เชื่อมต่อบัญชีเรียบร้อยแล้วครับ ({display_name}) ข้อมูลการเงินชุดนี้จะใช้ทั้งในแชท LINE และหน้าเว็บ"
+    return (
+        True,
+        f"เชื่อมต่อบัญชีเรียบร้อยแล้วครับ ({display_name}) ข้อมูลการเงินชุดนี้จะใช้ทั้งในแชท LINE และหน้าเว็บ",
+    )
 
 
 def parse_unlink_command(text: str) -> bool:
