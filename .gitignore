@@ -230,3 +230,6 @@ diagramforslide/
 .neon
 node_modules/
 tmp-upload/
+
+# Scratch artifacts
+tmp-mermaid/
