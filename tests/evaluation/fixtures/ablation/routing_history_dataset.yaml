@@ -1,0 +1,9 @@
+name: routing_history_evaluation
+version: "1.0"
+cases:
+  - case_id: "fx_hist_001"
+    query: "อีก 120 ด้วยค่า จ่ายไปแล้ว"
+    chat_history:
+      - ["user", "จ่ายค่ากาแฟ 80 บาท"]
+      - ["assistant", "บันทึกรายจ่ายค่ากาแฟ 80 บาทเรียบร้อยแล้วค่ะ"]
+    expected_intent: "expense"

@@ -1,0 +1,10 @@
+name: routing_evaluation
+version: "1.0"
+cases:
+  - case_id: "fx_001"
+    query: "คำนวณภาษีเงินเดือน 50,000 บาท"
+    expected_intent: "tax"
+
+  - case_id: "fx_002"
+    query: "สอนทำผัดกระเพราหน่อย"
+    expected_intent: "general"
