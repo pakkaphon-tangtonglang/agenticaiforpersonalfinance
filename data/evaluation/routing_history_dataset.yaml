@@ -1,0 +1,98 @@
+name: routing_history_evaluation
+version: "1.0"
+cases:
+  # Multi-turn follow-up questions. The final query is deliberately
+  # ambiguous or wrong when chat_history is removed (that is the point:
+  # variants with include_chat_history=False are expected to miss these).
+
+  - case_id: "hist_001"
+    query: "แล้ววันนี้ขึ้นหรือลงเปล่า"
+    description: "Price-direction follow-up on a stock discussed earlier"
+    chat_history:
+      - ["user", "ดูราคาหุ้น PTT ล่าสุดให้หน่อย"]
+      - ["assistant", "หุ้น PTT ปิดที่ 32.50 บาท ลดลง 0.75 บาทจากวันก่อน"]
+    expected_intent: "asset_monitoring"
+    tags: ["multi_turn", "follow_up", "stock"]
+
+  - case_id: "hist_002"
+    query: "อีก 120 ด้วยค่า จ่ายไปแล้ว"
+    description: "Second expense amount that only makes sense after the first entry"
+    chat_history:
+      - ["user", "จ่ายค่ากาแฟ 80 บาท"]
+      - ["assistant", "บันทึกรายจ่ายค่ากาแฟ 80 บาทเรียบร้อยแล้วค่ะ"]
+    expected_intent: "expense"
+    tags: ["multi_turn", "follow_up", "expense_entry"]
+
+  - case_id: "hist_003"
+    query: "อันนั้นเสี่ยงมากไหม มือใหม่หนิ"
+    description: "Risk question about the fund suggested in the previous turn"
+    chat_history:
+      - ["user", "อยากลงทุนก้อนแรกประมาณ 20,000 บาท ควรเริ่มจากอะไรดี"]
+      - ["assistant", "สำหรับก้อนแรก 20,000 บาท แนะนำเริ่มจากกองทุนผสมที่ลงทุนในหุ้นไทย เช่นกองทุนรวมหุ้นระยะยาว"]
+    expected_intent: "recommendation"
+    tags: ["multi_turn", "follow_up", "risk"]
+
+  - case_id: "hist_004"
+    query: "แบบนี้ต้องเสียภาษีไหม"
+    description: "Tax-liability question tied to the salary disclosed earlier"
+    chat_history:
+      - ["user", "เงินเดือนหนูประมาณ 50,000 บาทต่อเดือน"]
+      - ["assistant", "รับทราบค่ะ รายได้เงินเดือน 600,000 บาทต่อปี"]
+    expected_intent: "tax"
+    tags: ["multi_turn", "follow_up", "tax_liability"]
+
+  - case_id: "hist_005"
+    query: "สรุปทั้งหมดให้หน่อยว่าเหลือเท่าไหร่"
+    description: "Summary request that needs the expenses logged earlier"
+    chat_history:
+      - ["user", "บันทึกค่าอาหาร 450 บาท"]
+      - ["assistant", "บันทึกรายจ่ายค่าอาหาร 450 บาทเรียบร้อยแล้วค่ะ"]
+      - ["user", "ค่าเดินทางอีก 200 บาท"]
+      - ["assistant", "บันทึกรายจ่ายค่าเดินทาง 200 บาทเรียบร้อยแล้วค่ะ"]
+    expected_intent: "report"
+    tags: ["multi_turn", "follow_up", "summary"]
+
+  - case_id: "hist_006"
+    query: "ประมาณสามปีได้ไหม"
+    description: "Timeline answer that continues the savings-goal conversation"
+    chat_history:
+      - ["user", "อยากตั้งเป้าออมเงินซื้อรถ"]
+      - ["assistant", "ได้ค่ะ เป้าหมายซื้อรถมูลค่าประมาณเท่าไหร่ และต้องการใช้เงินภายในเวลาเท่าไหร่คะ"]
+    expected_intent: "planning"
+    tags: ["multi_turn", "follow_up", "goal_timeline"]
+
+  - case_id: "hist_007"
+    query: "ตัวไหนวิ่งนำอยู่"
+    description: "Comparison question about the two stocks tracked earlier"
+    chat_history:
+      - ["user", "ช่วยติดตามหุ้น AOT กับ KBANK ไว้หน่อย"]
+      - ["assistant", "ติดตาม AOT และ KBANK เรียบร้อยแล้วค่ะ ราคาล่าสุด AOT อยู่ที่ 55.25 บาท KBANK อยู่ที่ 152.00 บาท"]
+    expected_intent: "asset_monitoring"
+    tags: ["multi_turn", "follow_up", "watchlist_compare"]
+
+  - case_id: "hist_008"
+    query: "อันนี้ก็บันทึกให้หน่อยอีก 1,200"
+    description: "Another expense entry continuing an earlier expense session"
+    chat_history:
+      - ["user", "เดือนนี้ค่าเช่าบ้าน 8,000 บาท"]
+      - ["assistant", "บันทึกรายจ่ายค่าเช่าบ้าน 8,000 บาทเรียบร้อยแล้วค่ะ"]
+    expected_intent: "expense"
+    tags: ["multi_turn", "follow_up", "expense_entry"]
+
+  - case_id: "hist_009"
+    query: "แล้วกองทุน LTF ที่ถืออยู่ล่ะ ได้เหมือนกันไหม"
+    description: "Deduction follow-up continuing an insurance-deduction topic"
+    chat_history:
+      - ["user", "ซื้อประกันสุขภาพไป 20,000 บาท"]
+      - ["assistant", "เบี้ยประกันสุขภาพ 20,000 บาท นำไปลดหย่อนภาษีได้ค่ะ"]
+    expected_intent: "tax"
+    tags: ["multi_turn", "follow_up", "deduction"]
+
+  - case_id: "hist_010"
+    query: "ขอตัวอย่างตัวเลขจริงสิ"
+    description: "Numeric example request continuing a finance-concept explanation"
+    chat_history:
+      - ["user", "ดอกเบี้ยทบต้นคืออะไร"]
+      - ["assistant", "ดอกเบี้ยทบต้นคือการนำดอกเบี้ยที่ได้รับกลับเข้าไปรวมกับต้นทุนเดิม แล้วคิดดอกเบี้ยรอบถัดไปจากยอดรวมใหม่"]
+    expected_intent: "general"
+    tags: ["multi_turn", "follow_up", "concept_example"]
