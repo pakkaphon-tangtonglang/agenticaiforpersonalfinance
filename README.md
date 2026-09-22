@@ -2,33 +2,47 @@
 
 > Multi-Agent AI system for personal finance management designed for Thai users
 
-[![CI](https://img.shields.io/github/actions/workflow/status/66070146-Pakkaphon/agenticaiforpersonalfinance/ci.yml?branch=main)](./.github/workflows/ci.yml)
+[![CI](https://github.com/66070146-Pakkaphon/agenticaiforpersonalfinance/actions/workflows/ci.yml/badge.svg?branch=main)](./.github/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+![Tests](https://img.shields.io/badge/tests-1%2C901%20passed-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-92.7%25-brightgreen)
+[![License](https://img.shields.io/badge/license-Educational%20Use%20Only-orange.svg)](./LICENSE)
+
+## At a Glance
+
+| | |
+|---|---|
+| **Architecture** | LangGraph multi-agent: Router + 6 specialists, Hub-and-Spoke (verified vs P2P/Hierarchical benchmarks) |
+| **RAG** | ChromaDB, 24 Thai finance documents (official tax/SEC/SET PDFs), Recall@3 0.897 |
+| **Measured quality** | Router accuracy 0.943 single-turn / 1.000 multi-turn · tax calculation 95% (MAE 3,000 THB) · hallucination 0 in headline answers (10/10) |
+| **Engineering** | 1,901 tests, 92.7% coverage, mypy strict, pylint 10/10, TDD throughout |
+| **Deployment** | FastAPI (14 REST endpoints) on Render + Neon Postgres, LINE chatbot, receipt OCR |
+| **Evaluation** | Self-built 6-dimension evaluation framework: routing ablation (810 LLM calls), answer correctness, retrieval quality, hallucination detection, architecture benchmarks |
 
 ## What is This?
 
-An intelligent personal finance assistant that helps you:
+A finance assistant you can chat with in Thai. It can:
 
-- **Optimize Taxes** - Calculate Thai personal income tax with all deductions
-- **Track Expenses** - Record and categorize spending, get monthly summaries
-- **Monitor Assets** - Watch stock prices, search finance news, manage watchlists
-- **Plan Ahead** - Set financial goals, calculate saving plans, track progress
-- **Get Recommendations** - Receive proactive, personalized financial advice
-- **Generate Reports** - Full financial reports with health scores and visualizations
+- calculate Thai personal income tax, including all the deductions
+- record and categorize spending, and summarize by month
+- watch stock prices, pull finance news, and manage a watchlist
+- set financial goals and work out saving plans
+- suggest what to do next, with a financial health score
+- put everything together in a report (PDF/CSV)
 
 ## Key Features
 
-### Multi-Agent System (LangGraph)
-Powered by LangGraph with a Router + 6 specialized agents:
+### Multi-agent system (LangGraph)
 
-- **Router Agent** - Classifies user query and routes to the right specialist
-- **Tax Agent** - Thai personal income tax calculations with all deductions
-- **Expense Agent** - Income/expense tracking, monthly summaries, category queries
-- **Asset Monitoring Agent** - Stock prices, finance news, watchlist management
-- **Planning Agent** - Financial goals, saving plans, psychological cue detection
-- **Recommendation Agent** - Proactive financial recommendations and health scoring
-- **Report Agent** - Comprehensive financial reports with PDF/CSV export
+A LangGraph graph with a router and 6 specialist agents:
+
+- **Router Agent** - classifies the query and sends it to the right specialist
+- **Tax Agent** - Thai personal income tax with all deductions
+- **Expense Agent** - income/expense tracking, monthly summaries, category queries
+- **Asset Monitoring Agent** - stock prices, finance news, watchlists
+- **Planning Agent** - goals, saving plans, psychological cue detection
+- **Recommendation Agent** - proactive advice and health scoring
+- **Report Agent** - full reports with PDF/CSV export
 
 ### RAG Knowledge Base
 ChromaDB vector store with 24 Thai finance documents (18 Markdown + 6 official PDFs) covering:
@@ -54,6 +68,32 @@ Chat with the same multi-agent system inside the LINE app:
 - A tappable Quick Reply menu (บันทึกรายจ่าย / วางแผน / หุ้น / ภาษี) mirrors the web clarify options
 
 Architecture and sequence diagrams (chapter 3): [docs/diagrams.md](./docs/diagrams.md)
+
+### Design decisions, backed by numbers
+
+The architecture choices here come from measurements I ran, not hunches:
+
+- **Chat history is the router's most valuable feature.** The ablation
+  (810 LLM calls over 3 rounds) showed multi-turn accuracy going from
+  0.733 to 1.000 once history is included. The strongest prompt layout
+  also puts the role instruction after the history block, not before it.
+- **Hub-and-Spoke wins on routing cost.** One LLM routing call per query,
+  versus 1.8 for P2P and 2.0 for hierarchical, with O(N) coupling instead
+  of O(N²). Latency was within noise (~3%), so cost is what separates them.
+- **Money math goes through a typed calculator, not the LLM.** Tax
+  computation hits 95% accuracy (MAE 3,000 THB) because the model calls
+  a deterministic tool instead of doing arithmetic in its head.
+- **Hallucination is reported in two layers, on purpose.** The regex
+  evaluator flags 0.70 raw, but content-level analysis shows 10/10
+  headline answers match the knowledge base. Both numbers are in the
+  results instead of only the flattering one.
+
+### API security (for public deployments)
+
+- `X-API-Key` required on every endpoint except `/health` and
+  `/line/webhook` (the LINE webhook verifies its own HMAC-SHA256 signature)
+- Per-IP sliding-window rate limiting, default 30 req/min (set `0` to disable)
+- See [`src/finance_ai/core/api_security.py`](./src/finance_ai/core/api_security.py)
 
 ## Quick Start
 
@@ -155,8 +195,7 @@ agenticaiforpersonalfinance/
 │   ├── rag/                # ChromaDB vector store + embeddings
 │   ├── database/           # SQLAlchemy models + CRUD + Alembic
 │   ├── evaluation/         # Evaluation framework (6 dimensions)
-│   ├── core/               # Config, logging, LLM clients
-│   ├── ui/                 # Charts, export, constants (non-Streamlit)
+│   ├── core/               # Config, logging, API security, LLM clients
 │   ├── static/             # Web frontend (HTML/JS/CSS served by FastAPI)
 │   └── main.py             # FastAPI app entry point
 ├── tests/                  # Test suite (mirrors src/)
@@ -195,9 +234,9 @@ This project follows strict code quality standards:
 
 - Type hints on all functions
 - Test coverage >90%
-- Linting score >9.0/10
-- Functions <20 lines
-- Comprehensive docstrings
+- Lint score >9.0/10
+- Functions under 20 lines
+- Docstrings on every function
 
 See [CLAUDE.md](./CLAUDE.md) for full coding standards.
 
@@ -236,13 +275,15 @@ The system supports multiple LLM providers (configured in `.env`):
 
 ## Research & Evaluation Results
 
-The evaluation framework (6 dimensions) backs the thesis chapter 4 —
-result drafts with full tables live in `docs/thesis-results/`:
+The evaluation framework (6 dimensions) backs the thesis chapter 4.
+Result drafts with full tables live in `docs/thesis-results/`:
 
 | Chapter | Topic | Headline result |
 |---|---|---|
 | [4.1](./docs/thesis-results/4.1-routing-ablation.md) | Router accuracy + feature ablation (810 calls, 3 rounds) | base 0.943; multi-turn 0.733 → **1.000** with chat history enabled |
+| [4.2](./docs/thesis-results/4.2-answer-correctness.md) | Answer correctness (tax accuracy + hallucination) | tax **95%** (MAE 3,000 THB); hallucination headline **10/10** |
 | [4.3](./docs/thesis-results/4.3-retrieval-quality.md) | RAG retrieval quality (39 queries, one-shot index of 1,586 chunks) | Recall@3 **0.897**, MRR **0.808** |
+| [4.4](./docs/thesis-results/4.4-architecture-comparison.md) | Architecture comparison (Hub-and-Spoke vs P2P/Hierarchical) | routing calls **1.0** vs 1.8/2.0; coupling O(N) vs O(N²) |
 | [model comparison](./docs/model-comparison.md) | Multi-provider routing/answer benchmarks | minimax-m3 0.94, gemini-3.5-flash 0.91 (±0.05) |
 
 Run the evaluations yourself:
@@ -253,45 +294,10 @@ make evaluate-rag       # RAG retrieval metrics
 make evaluate-compare   # multi-provider comparison
 ```
 
-## Roadmap
-
-### Completed
-- [x] Project foundation, dev tools, CI/CD config
-- [x] Database models + Alembic migrations
-- [x] Tax calculation engine (all Thai deductions + brackets)
-- [x] RAG knowledge base (ChromaDB + 23 Thai finance docs)
-- [x] Multi-agent system (Router + 6 specialized agents)
-- [x] Cross-agent collaboration tools
-- [x] Conversation history + memory (DB persistence)
-- [x] Evaluation framework (routing, RAG, accuracy, hallucination, quality, performance)
-- [x] Dashboard, file upload, PDF/CSV export
-- [x] Asset monitoring with scheduled fetching + notifications
-- [x] Proactive recommendations + financial health scoring
-- [x] FastAPI backend (replaced Streamlit; 14 REST endpoints)
-- [x] Static web frontend (HTML/JS/CSS served by FastAPI)
-- [x] Dependency upgrades (LangGraph 1.x, LangChain 1.x, google-genai 2.x)
-- [x] Demo seed script (`scripts/seed_demo.py`) for a populated defense demo
-- [x] LINE chatbot (`/line/webhook` + Push API replies, Quick Reply menu)
-- [x] LINE account link/unlink lifecycle (chat commands + website connect card/modal with `POST /line/unlink`)
-- [x] Production database migrated from ephemeral SQLite to Neon Postgres (free tier) via `DB_URL`
-- [x] Receipt OCR (vision model → drafted expense transactions)
-- [x] Router ablation framework (feature-toggled router, resumable JSONL runner, markdown report)
-- [x] Render deployment blueprint (Render free tier + Neon Postgres)
-
-### In Progress
-- [ ] Streamlit code cleanup (legacy remnants in `ui/` and CRUD still reference Streamlit)
-
-### Future
-- [ ] Web frontend (Next.js or similar)
-- [ ] Mobile app
-- [ ] Real-time market data streaming
-- [ ] Advanced tax strategies (scenario modeling)
-- [ ] Broker statement auto-import
-
 ## Deployment
 
 Full guide (Render free tier + Neon Postgres, env variables, troubleshooting):
-[docs/deployment.md](./docs/deployment.md) — the Render blueprint is
+[docs/deployment.md](./docs/deployment.md). The Render blueprint is
 [`render.yaml`](./render.yaml) (LLM + OCR via Google Gemini).
 
 ## Contributing
@@ -310,16 +316,17 @@ All PRs must:
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
+This project is licensed for **personal and educational use only**
+(see the [LICENSE](./LICENSE) file). Commercial use requires prior
+written permission from the copyright holder. Not financial advice.
 
 ## Acknowledgments
 
-- Built with [LangGraph](https://github.com/langchain-ai/langgraph) for agent orchestration
-- Powered by [Google Gemini](https://ai.google.dev/) for LLM capabilities
-- RAG with [ChromaDB](https://www.trychroma.com/)
-- Market data from [Bright Data](https://brightdata.com/) and yfinance
-- Tax data from [Thai Revenue Department](https://www.rd.go.th/)
-- Market data from [SET](https://www.set.or.th/) and [AIMC](https://www.aimc.or.th/)
+- Agent orchestration: [LangGraph](https://github.com/langchain-ai/langgraph)
+- LLM: [Google Gemini](https://ai.google.dev/) (or Ollama / OpenRouter)
+- Vector store: [ChromaDB](https://www.trychroma.com/)
+- Market data: [yfinance](https://github.com/ranaroussi/yfinance), [SET](https://www.set.or.th/), [AIMC](https://www.aimc.or.th/)
+- Tax rules: [Thai Revenue Department](https://www.rd.go.th/)
 
 ---
 
