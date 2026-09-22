@@ -50,7 +50,7 @@ GENERAL_CHAT_SYSTEM_PROMPT: str = (
     "- ห้ามแต่งข้อมูลทางการเงินเด็ดขาด\n"
 )
 
-ORCHESTRATOR_SYSTEM_PROMPT: str = (
+ORCHESTRATOR_PROMPT_HEAD: str = (
     "คุณเป็นตัวจำแนกคำถามทางการเงิน (Financial Query Classifier)\n"
     "\n"
     "จำแนกคำถามของผู้ใช้เป็นหมวดหมู่ต่อไปนี้:\n"
@@ -77,6 +77,9 @@ ORCHESTRATOR_SYSTEM_PROMPT: str = (
     "- ใช้ unknown เฉพาะคำถามที่ไม่เกี่ยวกับการเงินเลย\n"
     "- ถ้าไม่แน่ใจ ให้เลือก general แทน unknown\n"
     "\n"
+)
+
+ORCHESTRATOR_EXAMPLES_SECTION: str = (
     "ตัวอย่าง:\n"
     '- "จ่ายค่ากาแฟ 80 บาท" → {"intent": "expense", "confidence": 0.95}\n'
     '- "มีเงินออม 50,000 บาท" → {"intent": "expense", "confidence": 0.9}'
@@ -92,8 +95,35 @@ ORCHESTRATOR_SYSTEM_PROMPT: str = (
     "  (คำถามความรู้ทั่วไป ไม่ต้องเรียก tool)\n"
     '- "สอนทำผัดกระเพราหน่อย" → {"intent": "unknown", "confidence": 0.9}\n'
     "\n"
+)
+
+ORCHESTRATOR_PROMPT_TAIL: str = (
     'ตอบเป็น JSON เท่านั้น: {"intent": "<category>", "confidence": <0.0-1.0>}'
 )
+
+ORCHESTRATOR_SYSTEM_PROMPT: str = (
+    ORCHESTRATOR_PROMPT_HEAD + ORCHESTRATOR_EXAMPLES_SECTION + ORCHESTRATOR_PROMPT_TAIL
+)
+
+
+def build_orchestrator_system_prompt(include_examples: bool = True) -> str:
+    """Build the orchestrator system prompt with or without few-shot examples.
+
+    Args:
+        include_examples: Whether to include the few-shot example block.
+
+    Returns:
+        Full system prompt text for the router.
+
+    Example:
+        >>> prompt = build_orchestrator_system_prompt(include_examples=False)
+        >>> "ตัวอย่าง:" in prompt
+        False
+    """
+    if include_examples:
+        return ORCHESTRATOR_PROMPT_HEAD + ORCHESTRATOR_EXAMPLES_SECTION + ORCHESTRATOR_PROMPT_TAIL
+    return ORCHESTRATOR_PROMPT_HEAD + ORCHESTRATOR_PROMPT_TAIL
+
 
 TAX_AGENT_SYSTEM_PROMPT: str = (
     "คุณเป็นผู้เชี่ยวชาญภาษีเงินได้บุคคลธรรมดาของไทย\n"
