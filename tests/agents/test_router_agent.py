@@ -477,10 +477,12 @@ class TestClassifyQueryWithHistory:
         classify_query("อันนั้นล่ะ", chat_model=mock_chat_model, chat_history=history)
 
         call_args = mock_chat_model.invoke.call_args[0][0]
-        assert len(call_args) == 4  # system + 2 history + current query
+        assert len(call_args) == 5  # system + 2 history + instruction + query
         assert call_args[1].content == "ดูพอร์ต PTT"
         assert isinstance(call_args[2], AIMessage)
-        assert call_args[3].content == "อันนั้นล่ะ"
+        assert isinstance(call_args[3], SystemMessage)
+        assert "ประวัติการสนทนา" in call_args[3].content
+        assert call_args[4].content == "อันนั้นล่ะ"
 
     def test_classify_without_history_has_two_messages(self, mock_chat_model: MagicMock) -> None:
         """No history keeps messages minimal (system + query)."""
@@ -668,7 +670,41 @@ class TestClassifyQueryAblationFlags:
         history = [("user", "ก่อนหน้านี้ถามอะไร"), ("assistant", "ตอบอะไรไป")]
         classify_query("คำนวณภาษี", chat_model=model, chat_history=history, config=config)
         sent_messages = model.invoke.call_args[0][0]
-        assert len(sent_messages) == 4  # system + 2 history + query
+        assert len(sent_messages) == 5  # system + instruction + 2 history + query
+
+    def test_history_enabled_includes_role_instruction(self) -> None:
+        """A context-only instruction closes the history block."""
+        config = RouterAblationConfig()
+        model = _mock_model_returning('{"intent": "tax", "confidence": 0.9}')
+        history = [("user", "ก่อนหน้านี้ถามอะไร"), ("assistant", "ตอบอะไรไป")]
+        classify_query("คำนวณภาษี", chat_model=model, chat_history=history, config=config)
+        sent_messages = model.invoke.call_args[0][0]
+        instructions = [
+            m
+            for m in sent_messages
+            if isinstance(m, SystemMessage) and "ประวัติการสนทนา" in m.content
+        ]
+        assert len(instructions) == 1
+        assert sent_messages[3] == instructions[0]
+        assert sent_messages[3].content != sent_messages[0].content
+
+    def test_history_disabled_has_no_role_instruction(self) -> None:
+        """No context-only instruction when the history flag is off."""
+        config = RouterAblationConfig(include_chat_history=False)
+        model = _mock_model_returning('{"intent": "tax", "confidence": 0.9}')
+        history = [("user", "ก่อนหน้านี้ถามอะไร")]
+        classify_query("คำนวณภาษี", chat_model=model, chat_history=history, config=config)
+        sent_messages = model.invoke.call_args[0][0]
+        assert not any("ประวัติการสนทนา" in m.content for m in sent_messages)
+
+    def test_history_enabled_with_empty_history_has_no_instruction(self) -> None:
+        """No instruction when the flag is on but history is empty."""
+        config = RouterAblationConfig()
+        model = _mock_model_returning('{"intent": "tax", "confidence": 0.9}')
+        classify_query("คำนวณภาษี", chat_model=model, chat_history=[], config=config)
+        sent_messages = model.invoke.call_args[0][0]
+        assert len(sent_messages) == 2
+        assert not any("ประวัติการสนทนา" in m.content for m in sent_messages)
 
     def test_asset_hint_disabled_skips_symbol_search(self) -> None:
         """Yahoo symbol search is never called when the hint flag is off."""

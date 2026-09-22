@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from finance_ai.agents.prompts import (
     GENERAL_CHAT_SYSTEM_PROMPT,
+    ORCHESTRATOR_HISTORY_INSTRUCTION,
     build_orchestrator_system_prompt,
     get_date_context,
 )
@@ -245,14 +246,22 @@ def _history_messages(
         chat_history: Optional recent messages.
 
     Returns:
-        Up to _ROUTER_HISTORY_LIMIT HumanMessage/AIMessage objects.
+        Up to _ROUTER_HISTORY_LIMIT HumanMessage/AIMessage objects
+        followed by a closing instruction SystemMessage. The instruction
+        (placed last, right before the current query) tells the model the
+        history is context only, keeping it in classifier (JSON) mode
+        instead of answering the conversation directly.
     """
+    trimmed = (chat_history or [])[-_ROUTER_HISTORY_LIMIT:]
+    if not trimmed:
+        return []
     messages: list[BaseMessage] = []
-    for role, content in (chat_history or [])[-_ROUTER_HISTORY_LIMIT:]:
+    for role, content in trimmed:
         if role == "user":
             messages.append(HumanMessage(content=content))
         else:
             messages.append(AIMessage(content=content))
+    messages.append(SystemMessage(content=ORCHESTRATOR_HISTORY_INSTRUCTION))
     return messages
 
 
