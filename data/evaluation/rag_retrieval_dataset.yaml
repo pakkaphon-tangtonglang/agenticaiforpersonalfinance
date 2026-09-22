@@ -1,5 +1,5 @@
 name: rag_retrieval_evaluation
-version: "1.0"
+version: "1.1"
 cases:
   - case_id: "rag_001"
     query: "ค่าลดหย่อนส่วนตัว ปี 2024 เท่าไหร่"
@@ -62,7 +62,7 @@ cases:
     domain_filter: "tax"
     expected_source_files:
       - "tax_thai_personal_income.md"
-    expected_keywords: ["ยื่นภาษี"]
+    expected_keywords: ["ยื่นแบบ", "กรมสรรพากร"]
     tags: ["tax", "filing"]
 
   - case_id: "rag_009"
@@ -182,7 +182,7 @@ cases:
     domain_filter: "investment"
     expected_source_files:
       - "investment_earthh_evans_lifelong.pdf"
-    expected_keywords: ["ลงทุน"]
+    expected_keywords: ["พอร์ตลงทุน", "ความมั่นคง"]
     tags: ["investment", "pdf"]
 
   - case_id: "rag_024"
@@ -214,7 +214,7 @@ cases:
     domain_filter: null
     expected_source_files:
       - "finance_psychology_of_money.pdf"
-    expected_keywords: ["เงิน"]
+    expected_keywords: ["Compounding", "Save Money"]
     tags: ["general", "psychology"]
 
   - case_id: "rag_028"
@@ -230,7 +230,7 @@ cases:
     domain_filter: "tax"
     expected_source_files:
       - "tax_personal_income_guide.pdf"
-    expected_keywords: ["ภาษีเงินได้"]
+    expected_keywords: ["คนละครึ่ง", "SME"]
     tags: ["tax", "guide_pdf"]
 
   - case_id: "rag_030"
@@ -240,3 +240,75 @@ cases:
       - "finance_behavioral_finance_ritter.pdf"
     expected_keywords: ["bias"]
     tags: ["general", "behavioral_finance_pdf"]
+
+  - case_id: "rag_031"
+    query: "ก่อนเริ่มลงทุนควรเก็บเงินสำรองฉุกเฉินไว้กี่เท่าของค่าใช้จ่ายต่อเดือน"
+    domain_filter: "investment"
+    expected_source_files:
+      - "investment_earthh_evans_lifelong.pdf"
+    expected_keywords: ["6 เท่า", "เงินสำรองฉุกเฉิน"]
+    tags: ["investment", "pdf", "cross_domain", "hard"]
+
+  - case_id: "rag_032"
+    query: "ร้านค้าคนละครึ่งได้สิทธิ์อะไรบ้าง"
+    domain_filter: "tax"
+    expected_source_files:
+      - "tax_personal_income_guide.pdf"
+    expected_keywords: ["คนละครึ่ง", "ธงฟ้า"]
+    tags: ["tax", "guide_pdf", "specific"]
+
+  - case_id: "rag_033"
+    query: "หุ้นปันผล ถูกหักภาษี ณ ที่จ่ายแล้วต้องนำไปรวมคำนวณไหม"
+    domain_filter: "tax"
+    expected_source_files:
+      - "tax_vat_withholding.md"
+    expected_keywords: ["ปันผล", "หัก ณ ที่จ่าย"]
+    tags: ["tax", "withholding", "cross_domain", "hard"]
+
+  - case_id: "rag_034"
+    query: "รายได้มาตรา 40 มีกี่ประเภท"
+    domain_filter: "tax"
+    expected_source_files:
+      - "tax_pit90_guide_2568.pdf"
+    expected_keywords: ["มาตรา 40"]
+    tags: ["tax", "filing_pdf", "specific"]
+
+  - case_id: "rag_035"
+    query: "What is DCA and why does it reduce risk"
+    domain_filter: "investment"
+    expected_source_files:
+      - "investment_dca_strategy.md"
+    expected_keywords: ["DCA"]
+    tags: ["investment", "dca", "english_query", "cross_lingual"]
+
+  - case_id: "rag_036"
+    query: "difference between ETF and mutual fund"
+    domain_filter: "investment"
+    expected_source_files:
+      - "investment_etf_bonds.md"
+    expected_keywords: ["ETF", "กองทุนรวม"]
+    tags: ["investment", "etf", "english_query", "cross_lingual"]
+
+  - case_id: "rag_037"
+    query: "prospect theory ในการลงทุนคืออะไร"
+    domain_filter: null
+    expected_source_files:
+      - "finance_behavioral_finance_ritter.pdf"
+    expected_keywords: ["prospect"]
+    tags: ["general", "behavioral_finance_pdf", "specific"]
+
+  - case_id: "rag_038"
+    query: "ควรลงทุนคริปโตไหม มีความเสี่ยงอะไรบ้าง"
+    domain_filter: "investment"
+    expected_source_files:
+      - "investment_digital_assets.md"
+    expected_keywords: ["ความเสี่ยง", "ก.ล.ต."]
+    tags: ["investment", "crypto", "suitability"]
+
+  - case_id: "rag_039"
+    query: "กำไรจากคริปโตต้องเสียภาษียังไง"
+    domain_filter: "investment"
+    expected_source_files:
+      - "investment_digital_assets.md"
+    expected_keywords: ["40(4)(ฌ)", "FIFO"]
+    tags: ["investment", "crypto", "tax", "cross_domain", "hard"]
