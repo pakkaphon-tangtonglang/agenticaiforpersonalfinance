@@ -35,26 +35,20 @@ services:
         sync: false
       - key: RAG_KNOWLEDGE_BASE_DIRECTORY
         value: docs/knowledge_base
-      # LLM via Ollama Cloud (non-secret settings inlined from .env)
+      # LLM via Google Gemini (agent + router + OCR)
       - key: LLM_PROVIDER
-        value: ollama
+        value: google
       - key: LLM_MAX_TOKENS
         value: "7000"
-      - key: OLLAMA_BASE_URL
-        value: https://ollama.com
-      - key: OLLAMA_MODEL
-        value: minimax-m3
-      # OCR via Ollama Cloud (defaults already match .env, set explicitly)
+      - key: GOOGLE_MODEL
+        value: gemini-3.5-flash
+      # OCR via Google Gemini (same key, one API for both)
       - key: OCR_PROVIDER
-        value: ollama
+        value: google
       - key: OCR_MODEL
-        value: gemma4:31b
+        value: gemini-3.5-flash
       # Secrets — prompted in the Render dashboard, copy from local .env
-      - key: OLLAMA_API_KEY
-        sync: false
-      - key: OCR_API_KEY
+      - key: GOOGLE_API_KEY
         sync: false
       # Optional (add later via dashboard Environment tab):
-      #   GOOGLE_API_KEY — enables RAG knowledge base (Google embeddings).
-      #     Without it, bootstrap logs a warning and the API runs without RAG.
       #   LANGSMITH_TRACING / LANGSMITH_API_KEY / LANGSMITH_PROJECT — tracing.
