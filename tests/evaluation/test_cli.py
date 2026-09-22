@@ -224,3 +224,39 @@ class TestModelComparisonCli:
         """--comparison-judge overrides the default quality-dimension judge."""
         args = parse_args(["--compare", "--comparison-judge", "ollama:glm-5.3"])
         assert args.comparison_judge == "ollama:glm-5.3"
+
+
+class TestRouterAblationCli:
+    """CLI arguments and dispatch for the ablation eval type."""
+
+    def test_router_ablation_in_eval_choices(self) -> None:
+        """--eval router_ablation parses successfully."""
+        args = parse_args(["--eval", "router_ablation"])
+        assert args.eval == "router_ablation"
+
+    def test_default_ablation_models(self) -> None:
+        """Default model list is Phase 1 (minimax-m3 only)."""
+        args = parse_args(["--eval", "router_ablation"])
+        assert args.ablation_models == ["ollama:minimax-m3"]
+
+    def test_custom_ablation_models_and_rounds(self) -> None:
+        """--ablation-models accepts multiple provider:model specs."""
+        args = parse_args(
+            [
+                "--eval",
+                "router_ablation",
+                "--ablation-models",
+                "ollama:minimax-m3",
+                "google:gemini-3.5-flash",
+                "--ablation-rounds",
+                "2",
+            ]
+        )
+        assert args.ablation_models == ["ollama:minimax-m3", "google:gemini-3.5-flash"]
+        assert args.ablation_rounds == 2
+
+    def test_default_log_path_and_rounds(self) -> None:
+        """Log path and rounds have stable defaults for resume."""
+        args = parse_args(["--eval", "router_ablation"])
+        assert args.ablation_log == "data/evaluation/results/router_ablation_log.jsonl"
+        assert args.ablation_rounds == 3

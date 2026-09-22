@@ -5,6 +5,11 @@ Usage:
     python -m finance_ai.evaluation.cli --compare  # multi-model routing comparison
 """
 
+# Heavy dependencies (llm_factory, chromadb, vector store) load lazily
+# inside functions to keep `--help` fast; pylint disagrees, so the check
+# is disabled for the whole module on purpose.
+# pylint: disable=import-outside-toplevel
+
 from __future__ import annotations
 
 import argparse
@@ -37,6 +42,7 @@ VALID_EVAL_TYPES = (
     "quality",
     "safety",
     "performance",
+    "router_ablation",
     "all",
 )
 VALID_PROVIDERS = ("google", "ollama", "openrouter")
@@ -146,6 +152,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Reuse existing ChromaDB index instead of re-indexing.",
     )
+    parser.add_argument(
+        "--ablation-models",
+        nargs="+",
+        default=["ollama:minimax-m3"],
+        help="provider:model specs for the router ablation run.",
+    )
+    parser.add_argument(
+        "--ablation-rounds",
+        type=int,
+        default=3,
+        help="Repetitions per (model, variant) to control variance.",
+    )
+    parser.add_argument(
+        "--ablation-log",
+        default="data/evaluation/results/router_ablation_log.jsonl",
+        help="JSONL log path (reused across runs for resume).",
+    )
     return parser.parse_args(argv)
 
 
@@ -165,11 +188,39 @@ def main(argv: list[str] | None = None) -> None:
         _run_model_comparison(args)
         return
 
-    from finance_ai.evaluation.reporter import (  # noqa: PLC0415
+    if args.eval == "router_ablation":
+        _run_router_ablation(args)
+        return
+
+    from finance_ai.evaluation.reporter import (
         save_json_report,
         save_markdown_report,
     )
-    from finance_ai.evaluation.runner import EvaluationRunner  # noqa: PLC0415
+
+    runner = _build_evaluation_runner(args)
+
+    skip_set = set(args.skip)
+    if skip_set:
+        print(f"[Eval] Skipping: {', '.join(skip_set)}")
+    print(f"[Eval] Running {args.eval}...")
+    report = _run_selected_evaluation(runner, args.eval, skip_set)
+    json_path = save_json_report(report, args.output_dir)
+    md_path = save_markdown_report(report, args.output_dir)
+    print("[Eval] Done! Results saved:")
+    print(f"  JSON: {json_path}")
+    print(f"  Markdown: {md_path}")
+
+
+def _build_evaluation_runner(args: argparse.Namespace) -> "EvaluationRunner":
+    """Create the chat model and runner for a standard eval run.
+
+    Args:
+        args: Parsed CLI arguments.
+
+    Returns:
+        An EvaluationRunner wired with models and data directory.
+    """
+    from finance_ai.evaluation.runner import EvaluationRunner
 
     print("[Eval] Creating model...")
     chat_model = _create_model(args.provider, args.model)
@@ -180,7 +231,7 @@ def main(argv: list[str] | None = None) -> None:
         _create_judge_model(args.judge_provider, args.judge_model) if needs_judge else None
     )
 
-    runner = EvaluationRunner(
+    return EvaluationRunner(
         chat_model=chat_model,
         vector_store=vector_store,
         llm_provider=args.provider,
@@ -188,17 +239,6 @@ def main(argv: list[str] | None = None) -> None:
         judge_model=judge_model,
         data_dir=args.data_dir,
     )
-
-    skip_set = set(args.skip)
-    if skip_set:
-        print(f"[Eval] Skipping: {', '.join(skip_set)}")
-    print(f"[Eval] Running {args.eval}...")
-    report = _run_selected_evaluation(runner, args.eval, skip_set)
-    json_path = save_json_report(report, args.output_dir)
-    md_path = save_markdown_report(report, args.output_dir)
-    print(f"[Eval] Done! Results saved:")
-    print(f"  JSON: {json_path}")
-    print(f"  Markdown: {md_path}")
 
 
 def _run_model_comparison(args: argparse.Namespace) -> None:
@@ -238,6 +278,47 @@ def _run_model_comparison(args: argparse.Namespace) -> None:
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     for result in results:
         _save_dimension_report(result, output_dir, stamp)
+
+
+def _run_router_ablation(args: argparse.Namespace) -> None:
+    """Run the router ablation grid and save the report.
+
+    Args:
+        args: Parsed CLI arguments (uses .ablation_models,
+            .ablation_rounds, .ablation_log, .data_dir, .output_dir).
+
+    Example:
+        >>> _run_router_ablation(parse_args(["--eval", "router_ablation"]))  # doctest: +SKIP
+    """
+    from pathlib import Path  # pylint: disable=import-outside-toplevel
+
+    from finance_ai.evaluation.router_ablation import (  # pylint: disable=import-outside-toplevel
+        AblationRunner,
+        build_ablation_report,
+        parse_model_spec,
+        save_ablation_report,
+    )
+
+    models: dict[str, "BaseChatModel"] = {}
+    for spec in args.ablation_models:
+        provider, model_name = parse_model_spec(spec)
+        print(f"[Eval] Creating model {spec}...")
+        models[spec] = _create_model(provider, model_name)
+
+    runner = AblationRunner(
+        models=models,
+        log_path=Path(args.ablation_log),
+        data_dir=args.data_dir,
+    )
+    print(f"[Eval] Running ablation: {len(models)} model(s), " f"rounds={args.ablation_rounds}")
+    executed = runner.run(rounds=args.ablation_rounds)
+    print(f"[Eval] Executed {executed} new call(s)")
+
+    report = build_ablation_report(runner.read_rows(), rounds=args.ablation_rounds)
+    json_path, md_path = save_ablation_report(report, args.output_dir)
+    print("[Eval] Done! Results saved:")
+    print(f"  JSON: {json_path}")
+    print(f"  Markdown: {md_path}")
 
 
 def _save_dimension_report(
@@ -413,14 +494,13 @@ def _build_settings(provider: str, model_name: str) -> "Settings":  # noqa: F821
 
     settings = get_settings()
     settings.llm_provider = provider  # type: ignore[assignment]
-    _MODEL_FIELD = {
+    model_field = {
         "google": "google_model",
         "ollama": "ollama_model",
         "openrouter": "openrouter_model",
-    }
-    field = _MODEL_FIELD.get(provider)
-    if field:
-        setattr(settings, field, model_name)
+    }.get(provider)
+    if model_field:
+        setattr(settings, model_field, model_name)
     return settings
 
 
