@@ -2,6 +2,8 @@
 
 > ระบบ AI แบบ Multi-Agent สำหรับช่วยจัดการการเงินส่วนบุคคล ออกแบบมาเพื่อผู้ใช้ชาวไทย
 
+[English version](./README_EN.md) | ไทย (เอกสารนี้)
+
 [![CI](https://github.com/66070146-Pakkaphon/agenticaiforpersonalfinance/actions/workflows/ci.yml/badge.svg?branch=main)](./.github/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 ![Tests](https://img.shields.io/badge/tests-1%2C901%20passed-brightgreen)
