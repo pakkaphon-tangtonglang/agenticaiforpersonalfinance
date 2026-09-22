@@ -12,8 +12,11 @@ from finance_ai.evaluation.datasets import (
     load_recommendation_safety_dataset,
     load_rag_dataset,
     load_routing_dataset,
+    load_routing_history_dataset,
     load_tax_accuracy_dataset,
 )
+
+from finance_ai.evaluation.models import RoutingHistoryDataset
 
 
 def _write_temp_yaml(content: str) -> str:
@@ -235,3 +238,57 @@ class TestProductionDatasetsValidate:
             if compute_tax_ground_truth(case).total_tax != case.expected_total_tax
         ]
         assert mismatches == []
+
+
+VALID_HISTORY_YAML = """
+name: routing_history_evaluation
+version: "1.0"
+cases:
+  - case_id: "hist_001"
+    query: "แล้ววันนี้ขึ้นหรือลงเปล่า"
+    chat_history:
+      - ["user", "ดูราคาหุ้น PTT ล่าสุดให้หน่อย"]
+      - ["assistant", "หุ้น PTT ปิดที่ 32.50 บาท ลดลง 0.75 บาทจากวันก่อน"]
+    expected_intent: "asset_monitoring"
+"""
+
+
+def _write_history_yaml(tmp_path: Path, content: str) -> str:
+    """Write a routing history dataset YAML fixture and return its path."""
+    file_path = tmp_path / "routing_history_dataset.yaml"
+    file_path.write_text(content, encoding="utf-8")
+    return str(file_path)
+
+
+class TestLoadRoutingHistoryDataset:
+    """Tests for load_routing_history_dataset."""
+
+    def test_loads_valid_file(self, tmp_path: Path) -> None:
+        """Happy path: valid YAML parses into RoutingHistoryDataset."""
+        dataset = load_routing_history_dataset(_write_history_yaml(tmp_path, VALID_HISTORY_YAML))
+        assert isinstance(dataset, RoutingHistoryDataset)
+        assert dataset.version == "1.0"
+        assert len(dataset.cases) == 1
+
+    def test_history_pairs_parsed_as_tuples(self, tmp_path: Path) -> None:
+        """chat_history entries become (role, text) tuples."""
+        dataset = load_routing_history_dataset(_write_history_yaml(tmp_path, VALID_HISTORY_YAML))
+        history = dataset.cases[0].chat_history
+        assert history[0] == ("user", "ดูราคาหุ้น PTT ล่าสุดให้หน่อย")
+        assert history[1] == ("assistant", "หุ้น PTT ปิดที่ 32.50 บาท ลดลง 0.75 บาทจากวันก่อน")
+
+    def test_expected_clarify_defaults_false(self, tmp_path: Path) -> None:
+        """expected_clarify defaults to False when omitted."""
+        dataset = load_routing_history_dataset(_write_history_yaml(tmp_path, VALID_HISTORY_YAML))
+        assert dataset.cases[0].expected_clarify is False
+
+    def test_missing_file_raises(self, tmp_path: Path) -> None:
+        """Missing file raises FileNotFoundError."""
+        with pytest.raises(FileNotFoundError):
+            load_routing_history_dataset(str(tmp_path / "nope.yaml"))
+
+    def test_invalid_intent_rejected(self, tmp_path: Path) -> None:
+        """An expected_intent outside the Literal is a validation error."""
+        broken = VALID_HISTORY_YAML.replace('"asset_monitoring"', '"not_an_intent"')
+        with pytest.raises(ValueError):
+            load_routing_history_dataset(_write_history_yaml(tmp_path, broken))
