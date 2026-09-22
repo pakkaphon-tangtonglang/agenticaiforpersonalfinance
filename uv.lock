@@ -990,7 +990,7 @@ provides-extras = ["ollama", "openrouter"]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "black", specifier = ">=25.0.0" },
+    { name = "black", specifier = "==26.5.1" },
     { name = "ipython", specifier = ">=8.31.0" },
     { name = "mypy", specifier = ">=1.15.0" },
     { name = "pandas-stubs", specifier = ">=3.0.5.260914" },

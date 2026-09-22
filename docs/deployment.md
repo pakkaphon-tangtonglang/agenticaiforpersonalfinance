@@ -141,7 +141,6 @@ Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `a
 ### การพัฒนาต่อในอนาคต
 
 Authentication จริง, persistent disk (สำหรับ RAG index), rate limiting, custom domain
-— ดูรายการเต็มใน `websitehosting.md` ส่วน "Future improvements"
 (ย้ายไป Postgres เสร็จแล้ว — ดูส่วน Database ด้านบน)
 
 ---
@@ -273,6 +272,6 @@ works under the `/~<username>/` sub-path.
 ### Future improvements
 
 Real authentication, persistent disk (for the RAG index), rate limiting,
-custom domain — see the full list in `websitehosting.md`,
+custom domain,
 "Future improvements". (The Postgres migration is done — see the Database
 section above.)

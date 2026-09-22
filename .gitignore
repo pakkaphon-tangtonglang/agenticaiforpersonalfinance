@@ -233,3 +233,9 @@ tmp-upload/
 
 # Scratch artifacts
 tmp-mermaid/
+
+# Internal docs (not part of the public project)
+CLAUDE.md
+PROJECT_SPEC.md
+websitehosting.md
+docs/thesis-roadmap.md
