@@ -59,14 +59,15 @@ iHost รันได้เฉพาะ PHP จึงใส่ FastAPI ลงไ
    Render กำหนด `$PORT` ให้เอง
 3. ตั้ง Environment variables ในหน้า Dashboard (ค่ามาจาก `.env` ในเครื่อง
    ห้าม commit): ตัวที่ไม่ใช่ความลับ (`APP_ENV`, `DEBUG`, `LOG_LEVEL`,
-   `LLM_PROVIDER=google`, `LLM_MAX_TOKENS`, `GOOGLE_MODEL`,
+   `LLM_PROVIDER=openrouter`, `LLM_MAX_TOKENS`, `OPENROUTER_MODEL`,
    `OCR_PROVIDER`, `OCR_MODEL`, `RAG_KNOWLEDGE_BASE_DIRECTORY`)
    อยู่ใน `render.yaml` อยู่แล้ว — ต้องกรอกเองในหน้า Environment:
 
    | Secret | ค่า |
    |---|---|
    | `DB_URL` | connection string ของ **Neon Postgres** (ใช้ตัว pooled จาก Neon dashboard / `DATABASE_URL` ใน `.env`) — **สำคัญที่สุด** ถ้าไม่ใส่ ข้อมูลจะหายทุกครั้งที่ deploy เพราะดิสก์ Render เป็นแบบ ephemeral |
-   | `GOOGLE_API_KEY` | จำเป็น — ใช้ทั้ง LLM/agent, router, OCR และ embedding ของ RAG (key เดียวจบ) |
+   | `OPENROUTER_API_KEY` | จำเป็น — ใช้ทั้ง LLM/agent, router และ OCR (จาก https://openrouter.ai/keys) |
+   | `GOOGLE_API_KEY` | จำเป็นเฉพาะ RAG embeddings (`RAG_EMBEDDING_PROVIDER=google`) |
    | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | จาก LINE Developers Console — ต้องมีเพื่อเปิด `/line/webhook` |
 4. ตรวจสอบการติดตั้ง:
 
@@ -112,8 +113,9 @@ Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `a
 - **CORS** ล็อกเฉพาะ `https://www.it.kmitl.ac.th` กับ `http://localhost:8080`
   และปิด `allow_credentials` (ไม่ใช้ cookies; `user_id` ส่งใน request body)
   ดู `src/finance_ai/main.py`
-- **Secrets อยู่บนเซิร์ฟเวอร์เท่านั้น** — `GOOGLE_API_KEY`
-  (LLM/agent, router, OCR, RAG embeddings ใช้ key เดียวกัน)
+- **Secrets อยู่บนเซิร์ฟเวอร์เท่านั้น** — `OPENROUTER_API_KEY`
+  (LLM/agent, router, OCR ใช้ key เดียวกัน) และ `GOOGLE_API_KEY`
+  (เฉพาะ RAG embeddings)
   มีเฉพาะใน environment variables ของ Render ห้ามใส่ใน repo หรือไฟล์ frontend
 - **API key + Rate limiting** — ทุก endpoint ยกเว้น `/health` และ
   `/line/webhook` ต้องส่ง header `X-API-Key` (ตั้ง `API_KEY` ใน Render
@@ -136,7 +138,7 @@ Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `a
 | ข้อมูลหายหลัง deploy | `DB_URL` ไม่ได้ตั้ง (ยังใช้ SQLite บนดิสก์ ephemeral) — ใส่ connection string ของ Neon |
 | เชื่อมต่อ Neon ไม่ได้ / connection timeout | ใช้ connection string ตัว **pooled** (`...-pooler...`) ไม่ใช่ตัว unpooled |
 | ส่ง/บันทึกข้อมูลไม่ได้ (500 เฉพาะ endpoint ที่เขียน, อ่านได้ปกติ) | บน Postgres FK ถูกบังคับจริง (ต่างจาก SQLite) — ระบบจะ auto-create user ให้เองตั้งแต่ `4ac76c0`; ถ้ายังพังดู release log ว่า deploy ล่าสุดรวมโค้ดนี้แล้ว |
-| `/chat` ตอบ 500 ทันที (อ่าน DB ได้ปกติ) | LLM call พัง — เช็ค `GOOGLE_API_KEY` ใน Render dashboard (key หาย/หมดอายุ), ทดสอบ key เดียวกันจากเครื่อง local ก่อน |
+| `/chat` ตอบ 500 ทันที (อ่าน DB ได้ปกติ) | LLM call พัง — เช็ค `OPENROUTER_API_KEY` ใน Render dashboard (key หาย/หมดอายุ), ทดสอบ key เดียวกันจากเครื่อง local ก่อน |
 
 ### การพัฒนาต่อในอนาคต
 
@@ -181,15 +183,16 @@ the Neon URL).
    (write contention). Render injects `$PORT`.
 3. Set environment variables in the Render dashboard (values mirror local
    `.env`; never commit them): all non-secrets (`APP_ENV`, `DEBUG`,
-   `LOG_LEVEL`, `LLM_PROVIDER=google`, `LLM_MAX_TOKENS`,
-   `GOOGLE_MODEL`, `OCR_PROVIDER`, `OCR_MODEL`,
+   `LOG_LEVEL`, `LLM_PROVIDER=openrouter`, `LLM_MAX_TOKENS`,
+   `OPENROUTER_MODEL`, `OCR_PROVIDER`, `OCR_MODEL`,
    `RAG_KNOWLEDGE_BASE_DIRECTORY`) already live in `render.yaml` — enter
    these secrets yourself in the Environment tab:
 
    | Secret | Value |
    |---|---|
    | `DB_URL` | the **Neon Postgres** connection string (use the pooled one from the Neon dashboard / `DATABASE_URL` in `.env`) — **most important**; without it, every deploy wipes the data because Render's disk is ephemeral |
-   | `GOOGLE_API_KEY` | required — powers the LLM/agent, router, OCR, and RAG embeddings (one key for everything) |
+   | `OPENROUTER_API_KEY` | required — powers the LLM/agent, router, and OCR (from https://openrouter.ai/keys) |
+   | `GOOGLE_API_KEY` | required only for RAG embeddings (`RAG_EMBEDDING_PROVIDER=google`) |
    | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | from the LINE Developers Console — required for `/line/webhook` |
 4. Verify the deploy:
 
@@ -239,8 +242,9 @@ works under the `/~<username>/` sub-path.
 - **CORS** is locked to `https://www.it.kmitl.ac.th` and
   `http://localhost:8080`, with `allow_credentials=False` (no cookies;
   `user_id` travels in request bodies). See `src/finance_ai/main.py`.
-- **Secrets stay server-side.** `GOOGLE_API_KEY` (one key for the
-  LLM/agent, router, OCR, and RAG embeddings) exists
+- **Secrets stay server-side.** `OPENROUTER_API_KEY` (one key for the
+  LLM/agent, router, and OCR) and `GOOGLE_API_KEY` (RAG embeddings only)
+  exist
   only as Render environment variables — never in the repository or the
   frontend files served from iHost.
 - **API key + rate limiting** — every endpoint except `/health` and
@@ -267,7 +271,7 @@ works under the `/~<username>/` sub-path.
 | Data lost after deploy | `DB_URL` is not set (still on ephemeral-disk SQLite) — set the Neon connection string |
 | Neon connection fails / times out | Use the **pooled** connection string (`...-pooler...`), not the unpooled one |
 | Writes fail with 500 (reads work fine) | Postgres enforces foreign keys (SQLite did not) — `ensure_user_exists` auto-creates missing users since `4ac76c0`; if it still fails, check the release log includes that commit |
-| `/chat` returns 500 instantly (DB reads fine) | The LLM call is failing — check `GOOGLE_API_KEY` in the Render dashboard (missing/expired key); test the same key locally first |
+| `/chat` returns 500 instantly (DB reads fine) | The LLM call is failing — check `OPENROUTER_API_KEY` in the Render dashboard (missing/expired key); test the same key locally first |
 
 ### Future improvements
 

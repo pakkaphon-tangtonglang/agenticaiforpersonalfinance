@@ -148,8 +148,8 @@ Full diagrams (chapter 3, including sequence diagrams): [docs/diagrams.md](./doc
 ### Prerequisites
 - Python 3.12 or higher
 - [uv](https://docs.astral.sh/uv/) (for dependency management)
-- Google Gemini API key ([Get one here](https://aistudio.google.com/apikey))
-  - Or use Ollama / OpenRouter as alternative LLM providers
+- OpenRouter API key ([create at https://openrouter.ai/keys](https://openrouter.ai/keys))
+  - Or use Google Gemini / Ollama as alternative LLM providers
 
 ### Installation
 
@@ -165,7 +165,7 @@ make install
 cp .env.example .env
 
 # Edit .env and add your API keys
-#   At minimum set: LLM_PROVIDER (google | ollama | openrouter) + GOOGLE_API_KEY
+#   At minimum set: LLM_PROVIDER (google | ollama | openrouter) + OPENROUTER_API_KEY
 #   (ollama needs no API key — run it locally on http://localhost:11434)
 nano .env
 
@@ -319,7 +319,8 @@ The system supports multiple LLM providers (configured in `.env`):
 
 | Provider | Config key | Production model |
 |---|---|---|
-| Google Gemini (default, also used for OCR) | `llm_provider=google` | `gemini-3.5-flash` |
+| OpenRouter (production default, also used for OCR) | `llm_provider=openrouter` | `minimax/minimax-m3` |
+| Google Gemini | `llm_provider=google` | `gemini-3.5-flash` |
 | Ollama Cloud | `llm_provider=ollama` | `minimax-m3` |
 | OpenRouter | `llm_provider=openrouter` | `deepseek/deepseek-chat-v3.1` |
 
@@ -348,7 +349,7 @@ make evaluate-compare   # multi-provider comparison
 
 Full guide (Render free tier + Neon Postgres, env variables, troubleshooting):
 [docs/deployment.md](./docs/deployment.md). The Render blueprint is
-[`render.yaml`](./render.yaml) (LLM + OCR via Google Gemini).
+[`render.yaml`](./render.yaml) (LLM + OCR via OpenRouter, RAG embeddings via Google).
 
 ## Contributing
 
@@ -373,7 +374,7 @@ written permission from the copyright holder. Not financial advice.
 ## Acknowledgments
 
 - Agent orchestration: [LangGraph](https://github.com/langchain-ai/langgraph)
-- LLM: [Google Gemini](https://ai.google.dev/) (or Ollama / OpenRouter)
+- LLM: [OpenRouter](https://openrouter.ai/) (or Google Gemini / Ollama)
 - Vector store: [ChromaDB](https://www.trychroma.com/)
 - Market data: [yfinance](https://github.com/ranaroussi/yfinance), [SET](https://www.set.or.th/), [AIMC](https://www.aimc.or.th/)
 - Tax rules: [Thai Revenue Department](https://www.rd.go.th/)

@@ -147,8 +147,8 @@ flowchart LR
 ### สิ่งที่ต้องมี
 - Python 3.12 ขึ้นไป
 - [uv](https://docs.astral.sh/uv/) (สำหรับจัดการ dependencies)
-- Google Gemini API key ([รับได้ที่นี่](https://aistudio.google.com/apikey))
-  - หรือใช้ Ollama / OpenRouter เป็น LLM provider ทางเลือก
+- OpenRouter API key ([สร้างได้ที่ https://openrouter.ai/keys](https://openrouter.ai/keys))
+  - หรือใช้ Google Gemini / Ollama เป็น LLM provider ทางเลือก
 
 ### ติดตั้ง
 
@@ -164,7 +164,7 @@ make install
 cp .env.example .env
 
 # Edit .env and add your API keys
-#   At minimum set: LLM_PROVIDER (google | ollama | openrouter) + GOOGLE_API_KEY
+#   At minimum set: LLM_PROVIDER (google | ollama | openrouter) + OPENROUTER_API_KEY
 #   (ollama needs no API key — run it locally on http://localhost:11434)
 nano .env
 
@@ -318,9 +318,9 @@ make evaluate-compare # Compare multiple LLM providers
 
 | Provider | Config key | Production model |
 |---|---|---|
-| Google Gemini (ค่าเริ่มต้น, ใช้ทำ OCR ด้วย) | `llm_provider=google` | `gemini-3.5-flash` |
+| OpenRouter (ค่าเริ่มต้นที่ใช้งานจริง, ใช้ทำ OCR ด้วย) | `llm_provider=openrouter` | `minimax/minimax-m3` |
+| Google Gemini | `llm_provider=google` | `gemini-3.5-flash` |
 | Ollama Cloud | `llm_provider=ollama` | `minimax-m3` |
-| OpenRouter | `llm_provider=openrouter` | `deepseek/deepseek-chat-v3.1` |
 
 ## งานวิจัยและผลการประเมิน
 
@@ -347,7 +347,7 @@ make evaluate-compare   # multi-provider comparison
 
 คู่มือเต็ม (Render free tier + Neon Postgres, ตัวแปรสภาพแวดล้อม, การแก้ปัญหา):
 [docs/deployment.md](./docs/deployment.md) Render blueprint อยู่ที่
-[`render.yaml`](./render.yaml) (LLM + OCR ผ่าน Google Gemini)
+[`render.yaml`](./render.yaml) (LLM + OCR ผ่าน OpenRouter, RAG embeddings ผ่าน Google)
 
 ## ร่วมพัฒนา
 
@@ -372,7 +372,7 @@ PR ทุกอันต้อง:
 ## ขอบคุณแหล่งข้อมูล
 
 - Agent orchestration: [LangGraph](https://github.com/langchain-ai/langgraph)
-- LLM: [Google Gemini](https://ai.google.dev/) (หรือ Ollama / OpenRouter)
+- LLM: [OpenRouter](https://openrouter.ai/) (หรือ Google Gemini / Ollama)
 - Vector store: [ChromaDB](https://www.trychroma.com/)
 - ข้อมูลตลาด: [yfinance](https://github.com/ranaroussi/yfinance), [SET](https://www.set.or.th/), [AIMC](https://www.aimc.or.th/)
 - กฎภาษี: [กรมสรรพากร](https://www.rd.go.th/)
