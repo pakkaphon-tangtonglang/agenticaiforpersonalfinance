@@ -90,6 +90,60 @@ def create_sentence_transformer_embeddings(settings: Settings) -> Embeddings:
     )
 
 
+def import_openai_embeddings() -> type:
+    """Import OpenAIEmbeddings class, raising ImportError if not installed.
+
+    Returns:
+        The OpenAIEmbeddings class.
+
+    Raises:
+        ImportError: If langchain-openai is not installed.
+    """
+    try:
+        module = importlib.import_module("langchain_openai")
+    except ImportError as exc:
+        raise ImportError(
+            "langchain-openai is required for OpenRouter embeddings. "
+            "Install with: pip install langchain-openai"
+        ) from exc
+    return module.OpenAIEmbeddings  # type: ignore[no-any-return]
+
+
+def create_openrouter_embeddings(settings: Settings) -> Embeddings:
+    """Create OpenAI-compatible embeddings pointed at the OpenRouter endpoint.
+
+    Args:
+        settings: Application settings with OpenRouter config.
+
+    Returns:
+        Configured Embeddings instance.
+
+    Raises:
+        ValueError: If openrouter_api_key is not set.
+
+    Example:
+        >>> embeddings = create_openrouter_embeddings(settings)
+    """
+    if not settings.openrouter_api_key:
+        raise ValueError(
+            "openrouter_api_key is required when rag_embedding_provider is 'openrouter'."
+        )
+    openai_embeddings_cls = import_openai_embeddings()
+    logger.info(
+        "Creating OpenRouter Embeddings with model=%s",
+        settings.rag_embedding_model,
+    )
+    return openai_embeddings_cls(  # type: ignore[no-any-return]
+        model=settings.rag_embedding_model,
+        api_key=settings.openrouter_api_key,
+        base_url="https://openrouter.ai/api/v1",
+        # OpenRouter embeddings accept raw strings only — token-array input
+        # (the OpenAI default) is rejected, and tiktoken is wrong for
+        # non-OpenAI models anyway.
+        check_embedding_ctx_length=False,
+    )
+
+
 def create_embeddings(settings: Settings | None = None) -> Embeddings:
     """Create an embedding model based on the configured provider.
 
@@ -111,4 +165,6 @@ def create_embeddings(settings: Settings | None = None) -> Embeddings:
         return create_google_embeddings(settings)
     if settings.rag_embedding_provider == "sentence_transformers":
         return create_sentence_transformer_embeddings(settings)
+    if settings.rag_embedding_provider == "openrouter":
+        return create_openrouter_embeddings(settings)
     raise ValueError(f"Unsupported embedding provider: {settings.rag_embedding_provider}")
