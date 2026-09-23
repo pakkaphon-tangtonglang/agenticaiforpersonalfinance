@@ -160,8 +160,9 @@ class Settings(BaseSettings):
     )
 
     # RAG Configuration
-    rag_embedding_provider: Literal["google", "sentence_transformers"] = Field(
-        default="google", description="Embedding provider (google or sentence_transformers)"
+    rag_embedding_provider: Literal["google", "sentence_transformers", "openrouter"] = Field(
+        default="google",
+        description="Embedding provider (google, sentence_transformers, or openrouter)",
     )
     rag_embedding_model: str = Field(
         default="models/gemini-embedding-001", description="Google embedding model name"

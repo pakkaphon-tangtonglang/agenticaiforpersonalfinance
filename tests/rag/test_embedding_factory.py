@@ -8,6 +8,7 @@ from finance_ai.core.config import Settings
 from finance_ai.rag.embedding_factory import (
     create_embeddings,
     create_google_embeddings,
+    create_openrouter_embeddings,
     create_sentence_transformer_embeddings,
     import_sentence_transformer_embeddings,
 )
@@ -95,6 +96,36 @@ class TestCreateSentenceTransformerEmbeddings:
         )
 
 
+class TestCreateOpenrouterEmbeddings:
+    """Tests for the OpenRouter embeddings provider."""
+
+    def test_creates_with_rag_embedding_model(self) -> None:
+        """Creates OpenAI-compatible embeddings for the OpenRouter endpoint."""
+        settings = Settings(
+            _env_file=None,
+            rag_embedding_provider="openrouter",
+            openrouter_api_key="sk-or-test",
+            rag_embedding_model="qwen/qwen3-embedding-0.6b",
+        )
+        with patch("finance_ai.rag.embedding_factory.import_openai_embeddings") as mock_import:
+            create_openrouter_embeddings(settings)
+        kwargs = mock_import.return_value.call_args[1]
+        assert kwargs["model"] == "qwen/qwen3-embedding-0.6b"
+        assert kwargs["api_key"] == "sk-or-test"
+        assert kwargs["base_url"] == "https://openrouter.ai/api/v1"
+        assert kwargs["check_embedding_ctx_length"] is False
+
+    def test_missing_api_key_raises(self) -> None:
+        """Raises ValueError when openrouter_api_key is not set."""
+        settings = Settings(
+            _env_file=None,
+            rag_embedding_provider="openrouter",
+            openrouter_api_key=None,
+        )
+        with pytest.raises(ValueError, match="openrouter_api_key is required"):
+            create_openrouter_embeddings(settings)
+
+
 class TestCreateEmbeddings:
     """Tests for the factory dispatch function."""
 
@@ -125,6 +156,17 @@ class TestCreateEmbeddings:
         """Test sentence-transformers provider dispatch."""
         create_embeddings(sentence_transformer_settings)
         mock_create.assert_called_once_with(sentence_transformer_settings)
+
+    @patch("finance_ai.rag.embedding_factory.create_openrouter_embeddings")
+    def test_openrouter_dispatch(self, mock_create: MagicMock) -> None:
+        """Test OpenRouter provider dispatch."""
+        settings = Settings(
+            _env_file=None,
+            rag_embedding_provider="openrouter",
+            openrouter_api_key="sk-or-test",
+        )
+        create_embeddings(settings)
+        mock_create.assert_called_once_with(settings)
 
     def test_uses_provided_settings(self, google_settings: Settings) -> None:
         """Test that provided settings are used instead of defaults."""
