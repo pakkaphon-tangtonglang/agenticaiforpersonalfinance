@@ -27,7 +27,11 @@ jobs:
           version: latest
 
       - name: Install dependencies
-        run: uv sync --group dev
+        # --all-extras: tests instantiate OpenRouter/Google/Ollama clients and
+        # the ChromaDB store, which live in optional-dependencies. Without
+        # this, mypy sees missing third-party packages as Any (unused-ignore
+        # errors) and pytest fails on ImportError.
+        run: uv sync --group dev --all-extras
 
       - name: Check formatting
         run: uv run black --check src/finance_ai tests/
