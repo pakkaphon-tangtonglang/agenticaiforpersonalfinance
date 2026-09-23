@@ -77,10 +77,8 @@ class TestLineWebhookEndpoint:
         )
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
-        assert len(FakeMessagingApi.calls) == 2
-        ack_request = FakeMessagingApi.calls[0]["push_message_request"]
-        assert "กำลังประมวลผล" in ack_request.messages[0].text
-        request = FakeMessagingApi.calls[1]["push_message_request"]
+        assert len(FakeMessagingApi.calls) == 1
+        request = FakeMessagingApi.calls[0]["push_message_request"]
         assert request.to == "Uline-user-1"
         assert request.messages[0].text == "คำตอบภาษี"
 

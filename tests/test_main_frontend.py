@@ -33,6 +33,12 @@ class TestFrontendServing:
         assert "javascript" in content_type or "text/plain" in content_type
         assert "INTENT_CONFIG" in response.text
 
+    def test_intent_config_covers_clarify_intent(self) -> None:
+        """The clarify intent has its own badge label, not the unknown fallback."""
+        response = self.client.get("/static/app.js")
+        assert response.status_code == 200
+        assert "clarify:" in response.text
+
 
 class TestUploadRecheckMarkup:
     """Tests for the document-scan + recheck UI markup."""
