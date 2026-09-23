@@ -25,7 +25,7 @@
 
 ผู้ช่วยการเงินที่คุยด้วยได้เป็นภาษาไทย ทำสิ่งเหล่านี้ได้:
 
-- คำนวณภาษีเงินได้หน่วงานพึงประเมินของไทย ครบทุกค่าลดหย่อน
+- คำนวณภาษีเงินได้บุคคลธรรมดาของไทย ครบทุกค่าลดหย่อน
 - บันทึกและจัดหมวดหมู่รายจ่าย สรุปยอดรายเดือน
 - ดูราคาหุ้น อ่านข่าวการเงิน และจัดการ watchlist
 - ตั้งเป้าหมายการเงินและคำนวณแผนเก็บเงิน
@@ -39,7 +39,7 @@
 LangGraph graph ประกอบด้วย router และ specialist agents 6 ตัว:
 
 - **Router Agent** - จำแนก intent แล้วส่งต่อให้ specialist ที่ถูกต้อง
-- **Tax Agent** - ภาษีเงินได้หน่วงานพึงประเมินของไทย ครบทุกค่าลดหย่อน
+- **Tax Agent** - ภาษีเงินได้บุคคลธรรมดาของไทย ครบทุกค่าลดหย่อน
 - **Expense Agent** - บันทึกรายรับ/รายจ่าย สรุปรายเดือน ค้นตามหมวดหมู่
 - **Asset Monitoring Agent** - ราคาหุ้น ข่าวการเงิน watchlist
 - **Planning Agent** - เป้าหมายการเงิน แผนเก็บเงิน ตรวจจับสัญญาณทางจิตวิทยา
@@ -85,7 +85,7 @@ chat agent ได้ (`OCR_PROVIDER` + `OCR_MODEL`)
 - **การคำนวณเงินผ่าน calculator ที่มี type ชัดเจน ไม่ใช่ให้ LLM คิดเอง**
   การคำนวณภาษีแม่นยำ 95% (MAE 3,000 บาท) เพราะ model เรียกใช้ tool
   แบบ deterministic แทนการตั้งสมการในหัว
-- **รายงาน hallucination เป็น 2 ชั้นโดยตั้งใจ** ตัวประเมิน regex ติดธง 0.70
+- **รายงาน hallucination เป็น 2 ชั้นโดยตั้งใจ** ตัวประเมิน regex ให้ flag 0.70
   แบบดิบ แต่วิเคราะห์ระดับเนื้อหาพบว่าคำตอบ headline ตรงกับ knowledge base
   10/10 ตัวเลขทั้งสองชั้นอยู่ในผลลัพธ์ ไม่ได้โชว์แค่ตัวที่สวย
 
@@ -96,9 +96,7 @@ chat agent ได้ (`OCR_PROVIDER` + `OCR_MODEL`)
 - Rate limiting แบบ per-IP sliding window เริ่มต้น 30 req/min (ใส่ `0` เพื่อปิด)
 - ดูโค้ดได้ที่ [`src/finance_ai/core/api_security.py`](./src/finance_ai/core/api_security.py)
 
-## ตัวอย่างการใช้งาน
-
-### บทสนทนาตัวอย่าง (ผลรันจริง)
+## ตัวอย่างการใช้งานจริง (Demo)
 
 ตัวอย่างนี้หยิบมาจาก evaluation run จริง (`tax_acc_001`, minimax-m3)
 ไม่ใช่แบบที่พิมพ์ขึ้นมาเอง ผู้ใช้พิมพ์คำถามภาษาไทย router ส่งต่อให้
@@ -263,7 +261,7 @@ agenticaiforpersonalfinance/
 
 ## พัฒนาต่อ
 
-### เตรียมสภาพแวดล้อมพัฒนา
+### ตั้งค่า Development Environment
 
 ```bash
 # Install pre-commit hooks
@@ -345,7 +343,7 @@ make evaluate-compare   # multi-provider comparison
 
 ## Deployment
 
-คู่มือเต็ม (Render free tier + Neon Postgres, ตัวแปรสภาพแวดล้อม, การแก้ปัญหา):
+คู่มือเต็ม (Render free tier + Neon Postgres, Environment Variables, การแก้ปัญหา):
 [docs/deployment.md](./docs/deployment.md) Render blueprint อยู่ที่
 [`render.yaml`](./render.yaml) (LLM + OCR ผ่าน OpenRouter, RAG embeddings ผ่าน Google)
 
