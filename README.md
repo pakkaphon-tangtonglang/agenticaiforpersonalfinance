@@ -4,7 +4,7 @@
 
 [English version](./README_EN.md) | ไทย (เอกสารนี้)
 
-[![CI](https://github.com/66070146-Pakkaphon/agenticaiforpersonalfinance/actions/workflows/ci.yml/badge.svg?branch=main)](./.github/workflows/ci.yml)
+[![CI](https://github.com/pakkaphon-tangtonglang/agenticaiforpersonalfinance/actions/workflows/ci.yml/badge.svg?branch=main)](./.github/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 ![Tests](https://img.shields.io/badge/tests-1%2C901%20passed-brightgreen)
 ![Coverage](https://img.shields.io/badge/coverage-92.7%25-brightgreen)
@@ -154,7 +154,7 @@ flowchart LR
 
 ```bash
 # Clone the repository
-git clone https://github.com/66070146-Pakkaphon/agenticaiforpersonalfinance.git
+git clone https://github.com/pakkaphon-tangtonglang/agenticaiforpersonalfinance.git
 cd agenticaiforpersonalfinance
 
 # Install dependencies
