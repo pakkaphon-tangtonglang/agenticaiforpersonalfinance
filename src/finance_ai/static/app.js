@@ -19,6 +19,7 @@
     report: { label: "รายงานการเงิน", icon: "📊", color: "#4a6b3a" },
     general: { label: "ทั่วไป", icon: "💬", color: "#72706b" },
     general_chat: { label: "แชททั่วไป", icon: "💬", color: "#72706b" },
+    clarify: { label: "ขอข้อมูลเพิ่ม", icon: "🤔", color: "#8a7a5a" },
     unknown: { label: "ไม่ทราบ", icon: "❓", color: "#92918b" },
     error: { label: "ข้อผิดพลาด", icon: "⚠️", color: "#a8442c" },
   };

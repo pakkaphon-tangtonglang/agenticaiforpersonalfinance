@@ -98,13 +98,13 @@ class TestProcessLineMessage:
 
 
 class TestHandleLineEvent:
-    """Tests for the webhook background task (ack -> agent -> reply)."""
+    """Tests for the webhook background task (agent -> reply)."""
 
-    def test_pushes_ack_then_converted_reply(self) -> None:
-        """A processing ack is pushed first, then the converted reply.
+    def test_pushes_converted_reply_without_ack(self) -> None:
+        """Only the converted reply is pushed — no processing ack.
 
-        The agent takes 10-30s; without an immediate ack, LINE users
-        stare at silence and resend the message.
+        The ack was removed because the duplicate waiting message
+        annoyed users more than the short silence did.
         """
         markdown_reply = (
             "## ราคาหุ้น PTT\n\n" + "| **ราคาปัจจุบัน** | 42.00 บาท |\n\n" + "- **ชื่อ**: PTT\n"
@@ -124,16 +124,14 @@ class TestHandleLineEvent:
                 access_token="token-123",
             )
 
-        assert mock_push.call_count == 2
-        ack_text = mock_push.call_args_list[0][0][2]
-        assert "กำลังประมวลผล" in ack_text
-        pushed_text = mock_push.call_args_list[1][0][2]
+        assert mock_push.call_count == 1
+        pushed_text = mock_push.call_args[0][2]
         assert pushed_text == ("ราคาหุ้น PTT\n\nราคาปัจจุบัน | 42.00 บาท\n\n• ชื่อ: PTT")
         assert "##" not in pushed_text
         assert "**" not in pushed_text
 
-    def test_skips_ack_for_link_command(self) -> None:
-        """Link commands reply instantly, so no processing ack is sent."""
+    def test_link_command_pushes_reply(self) -> None:
+        """Link commands push the instant reply like any other message."""
         link_reply = "เชื่อมต่อบัญชีเรียบร้อย"
         with (
             patch(
@@ -154,7 +152,7 @@ class TestHandleLineEvent:
         assert mock_push.call_args[0][2] == link_reply
 
     def test_pushes_error_reply_on_agent_failure(self) -> None:
-        """An agent exception still pushes the ack, then a Thai error."""
+        """An agent exception still pushes a Thai error reply."""
         with (
             patch(
                 "finance_ai.line.line_bot_service.process_line_message",
@@ -170,7 +168,7 @@ class TestHandleLineEvent:
                 access_token="token-123",
             )
 
-        assert mock_push.call_count == 2
+        assert mock_push.call_count == 1
         pushed_text = mock_push.call_args[0][2]
         assert "ขออภัย" in pushed_text
         assert "boom" in pushed_text
