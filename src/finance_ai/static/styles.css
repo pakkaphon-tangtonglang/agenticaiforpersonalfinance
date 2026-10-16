@@ -486,6 +486,15 @@ a:hover { text-decoration: underline; }
 }
 .gauge-unit { font-size: var(--text-body-lg); color: var(--color-graphite); }
 .gauge-caption { margin-top: var(--sp-3); color: var(--color-graphite); }
+.gauge-value.is-unknown { font-size: 2.25rem; color: var(--color-graphite); }
+.pillar-list {
+  list-style: none; margin: var(--sp-3) 0 0; padding: 0;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-1) var(--sp-3);
+}
+.pillar-list li { display: flex; justify-content: space-between; color: var(--color-graphite); }
+.pillar-list .pillar-score { color: var(--color-ink); font-weight: 600; }
+.pillar-list .pillar-score.is-unknown { color: var(--color-graphite); font-weight: 400; }
+.pillar-coverage { margin-top: var(--sp-2); font-size: 0.85em; color: var(--color-graphite); }
 
 /* Overview */
 .overview-grid {

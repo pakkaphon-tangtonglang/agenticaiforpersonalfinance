@@ -83,6 +83,9 @@ def _serialize_report(report: Any) -> dict[str, Any]:
         "year": report.year,
         "month": report.month,
         "health_score": report.health_score,
+        "health_status": report.health_status,
+        "health_pillars": report.health_pillars,
+        "health_missing_data": report.health_missing_data,
         "monthly_overview": _serialize_section(report.monthly_overview),
         "expense_breakdown": _serialize_section(report.expense_breakdown),
         "investment_portfolio": _serialize_section(report.investment_portfolio),
@@ -134,6 +137,7 @@ def get_financial_summary(
     return {
         "action": "financial_summary",
         "health_score": report_data["health_score"],
+        "health_missing_data": report_data.get("health_missing_data", []),
         "total_income": overview.get("total_income", "0"),
         "total_expenses": overview.get("total_expenses", "0"),
         "net_savings": overview.get("net_savings", "0"),

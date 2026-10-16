@@ -167,7 +167,11 @@ class FinancialReport(BaseModel):
         investment_portfolio: Portfolio status.
         goal_progress: Goal completion status.
         tax_status: Tax filing status.
-        health_score: Financial health score 0-100.
+        health_score: Financial health score 0-100, or None if data is insufficient.
+        health_status: "scored" or "insufficient_data".
+        health_pillars: Pillar key -> score 0-100 or None.
+        health_coverage: Fraction of pillars with data.
+        health_missing_data: Thai labels of data needed for a score.
         highlights: Notable findings.
 
     Example:
@@ -189,5 +193,9 @@ class FinancialReport(BaseModel):
     )
     goal_progress: GoalProgressSection = Field(default_factory=GoalProgressSection)
     tax_status: TaxStatusSection = Field(default_factory=TaxStatusSection)
-    health_score: int = Field(default=100, ge=0, le=100)
+    health_score: int | None = Field(default=None, ge=0, le=100)
+    health_status: str = "insufficient_data"
+    health_pillars: dict[str, int | None] = Field(default_factory=dict)
+    health_coverage: Decimal = Decimal("0")
+    health_missing_data: list[str] = Field(default_factory=list)
     highlights: list[ReportHighlight] = Field(default_factory=list)

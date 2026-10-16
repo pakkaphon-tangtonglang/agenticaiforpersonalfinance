@@ -13,12 +13,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from finance_ai.core.logging import get_logger
+from finance_ai.tools.health_score_models import HealthScoreResult
+from finance_ai.tools.health_score_service import calculate_health_score
 from finance_ai.tools.recommendation_constants import (
     EMERGENCY_FUND_MONTHS,
     EXPENSE_CONCENTRATION_THRESHOLD,
     GOAL_BEHIND_SCHEDULE_PERCENTAGE,
-    HEALTH_SCORE_BASE,
-    HEALTH_SCORE_PENALTY_PER_PRIORITY,
     INVESTMENT_CONCENTRATION_THRESHOLD,
     LOW_RISK_LEVEL_THRESHOLD,
     OVERSPENDING_THRESHOLD,
@@ -62,7 +62,8 @@ class RecommendationReport(BaseModel):
         user_id: UUID of the user.
         generated_at: ISO datetime of generation.
         total_recommendations: Number of recommendations.
-        health_score: Financial health score (0-100).
+        health_score: Financial health score (0-100), or None if data is insufficient.
+        health_detail: Pillar breakdown, coverage, and missing data.
         recommendations: List of recommendations sorted by priority.
 
     Example:
@@ -75,7 +76,8 @@ class RecommendationReport(BaseModel):
     user_id: str
     generated_at: str
     total_recommendations: int
-    health_score: int = Field(ge=0, le=100)
+    health_score: int | None = Field(default=None, ge=0, le=100)
+    health_detail: HealthScoreResult = Field(default_factory=HealthScoreResult)
     recommendations: list[Recommendation] = Field(default_factory=list)
 
 
@@ -577,28 +579,6 @@ def _check_emergency_fund(
     return []
 
 
-def calculate_health_score(
-    recommendations: list[Recommendation],
-) -> int:
-    """Calculate financial health score based on recommendations.
-
-    Higher score = healthier finances. Fewer and less severe
-    recommendations result in a higher score.
-
-    Args:
-        recommendations: List of generated recommendations.
-
-    Returns:
-        Health score from 0 to 100.
-
-    Example:
-        >>> calculate_health_score([])
-        100
-    """
-    penalty = sum(r.priority * HEALTH_SCORE_PENALTY_PER_PRIORITY for r in recommendations)
-    return max(0, HEALTH_SCORE_BASE - penalty)
-
-
 def generate_recommendations(
     session: Session,
     user_id: str,
@@ -626,8 +606,8 @@ def generate_recommendations(
     risk_level = _get_user_risk_level(session, user_id)
     recommendations = _run_all_analyses(data, risk_level)
     recommendations.sort(key=lambda r: r.priority, reverse=True)
-    score = calculate_health_score(recommendations)
-    return _build_report(user_id, recommendations, score)
+    health = calculate_health_score(data)
+    return _build_report(user_id, recommendations, health)
 
 
 def _get_user_risk_level(session: Session, user_id: str) -> int | None:
@@ -683,14 +663,14 @@ def _run_all_analyses(
 def _build_report(
     user_id: str,
     recommendations: list[Recommendation],
-    health_score: int,
+    health: HealthScoreResult,
 ) -> RecommendationReport:
     """Build the final recommendation report.
 
     Args:
         user_id: UUID of the user.
         recommendations: Sorted list of recommendations.
-        health_score: Calculated health score.
+        health: Pillar-based health score result.
 
     Returns:
         RecommendationReport instance.
@@ -699,6 +679,7 @@ def _build_report(
         user_id=user_id,
         generated_at=datetime.now(timezone.utc).isoformat(),
         total_recommendations=len(recommendations),
-        health_score=health_score,
+        health_score=health.score,
+        health_detail=health,
         recommendations=recommendations,
     )

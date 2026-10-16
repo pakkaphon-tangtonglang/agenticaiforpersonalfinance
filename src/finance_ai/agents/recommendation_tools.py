@@ -80,6 +80,10 @@ def _serialize_report(report: Any) -> dict[str, Any]:
         "generated_at": report.generated_at,
         "total_recommendations": report.total_recommendations,
         "health_score": report.health_score,
+        "health_status": report.health_detail.status,
+        "health_pillars": report.health_detail.pillars,
+        "health_coverage": str(report.health_detail.coverage),
+        "health_missing_data": report.health_detail.missing_data,
         "recommendations": [
             {
                 "category": r.category,
@@ -120,6 +124,8 @@ def get_financial_health_score(
 
     Analyzes all financial domains and returns a score.
     Higher score means healthier financial situation.
+    health_score is None when data is insufficient; health_missing_data
+    lists what the user must add before a score can be given.
 
     Args:
         user_id: UUID of the user (injected from graph state).
@@ -132,6 +138,9 @@ def get_financial_health_score(
     report = _fetch_recommendations(db_session_factory, user_id, today.year, today.month)
     return {
         "health_score": report["health_score"],
+        "health_status": report["health_status"],
+        "health_pillars": report["health_pillars"],
+        "health_missing_data": report["health_missing_data"],
         "total_recommendations": report["total_recommendations"],
         "top_issues": [r["title"] for r in report["recommendations"][:3]],
     }

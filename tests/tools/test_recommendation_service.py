@@ -15,7 +15,6 @@ from finance_ai.tools.recommendation_service import (
     analyze_risk_profile_alignment,
     analyze_savings_rate,
     analyze_tax_optimization,
-    calculate_health_score,
     generate_recommendations,
 )
 
@@ -438,44 +437,6 @@ class TestAnalyzeSavingsRate:
         assert not any(r.category == "emergency_fund" for r in result)
 
 
-# -- TestCalculateHealthScore --
-
-
-class TestCalculateHealthScore:
-    """Tests for calculate_health_score function."""
-
-    def test_no_recommendations_returns_100(self) -> None:
-        """No recommendations means perfect health score."""
-        assert calculate_health_score([]) == 100
-
-    def test_recommendations_reduce_score(self) -> None:
-        """Each recommendation reduces score by priority * penalty."""
-        recs = [
-            Recommendation(
-                category="tax_optimization",
-                priority=5,
-                title="test",
-                description="test",
-            ),
-        ]
-        score = calculate_health_score(recs)
-        assert score == 75  # 100 - 5*5
-
-    def test_score_never_below_zero(self) -> None:
-        """Score should never go below 0."""
-        recs = [
-            Recommendation(
-                category="test",
-                priority=5,
-                title="test",
-                description="test",
-            )
-            for _ in range(10)
-        ]
-        score = calculate_health_score(recs)
-        assert score == 0  # 100 - 50*5 = clamped to 0
-
-
 # -- TestGenerateRecommendations (integration with DB) --
 
 
@@ -491,8 +452,8 @@ class TestGenerateRecommendations:
         report = generate_recommendations(test_session, sample_user.id, 2026, 3)
         assert isinstance(report, RecommendationReport)
         assert report.user_id == sample_user.id
-        assert report.health_score <= 100
-        assert report.health_score >= 0
+        assert report.health_score is None
+        assert report.health_detail.status == "insufficient_data"
         assert report.total_recommendations == len(report.recommendations)
 
     def test_recommendations_sorted_by_priority(

@@ -53,12 +53,6 @@ GOAL_BEHIND_SCHEDULE_PERCENTAGE: Decimal = Decimal("50.00")
 # Goal deadline warning: flag if deadline is within this many months
 GOAL_DEADLINE_WARNING_MONTHS: int = 6
 
-# Health score: base score (100) minus penalty per recommendation
-HEALTH_SCORE_BASE: int = 100
-
-# Health score: penalty multiplier per priority level
-HEALTH_SCORE_PENALTY_PER_PRIORITY: int = 5
-
 # Guardrail: risk levels at or below this value count as low risk
 LOW_RISK_LEVEL_THRESHOLD: int = 2
 

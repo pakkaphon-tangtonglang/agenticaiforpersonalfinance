@@ -539,7 +539,8 @@
     setStat("statNet", ov.net_savings, true);
     $("statRate").textContent = pct(ov.savings_rate);
 
-    renderGauge(r.health_score ?? 0);
+    renderGauge(r.health_score ?? null, r.health_missing_data || []);
+    renderPillars(r.health_pillars || {});
     renderExpenseChart(r.expense_breakdown || {});
     renderPortfolio(r.investment_portfolio || {});
     renderGoals(r.goal_progress || {});
@@ -558,20 +559,56 @@
     }
   }
 
-  function renderGauge(score) {
+  const UNKNOWN_SCORE_LABEL = "ไม่ทราบ";
+  const HEALTH_PILLAR_LABELS = {
+    spend: "การใช้จ่าย", save: "การออม", invest: "การลงทุน", plan: "การวางแผน",
+  };
+
+  function renderGauge(score, missingData) {
+    if (score === null) {
+      renderUnknownGauge(missingData);
+      return;
+    }
     const s = Math.max(0, Math.min(100, score));
-    const fill = $("gaugeFill");
-    const circumference = 251;
-    fill.style.strokeDashoffset = String(circumference * (1 - s / 100));
+    $("gaugeFill").style.strokeDashoffset = String(251 * (1 - s / 100));
+    $("gaugeValue").classList.remove("is-unknown");
+    $("gaugeUnit").hidden = false;
     animateNumber($("gaugeValue"), s);
-    const chip = $("healthChip");
-    const dot = chip.querySelector(".health-dot");
-    dot.className = "health-dot " + (s >= 70 ? "good" : s >= 40 ? "warn" : "bad");
+    // Bands follow the FinHealth Score: 80+ healthy, 40-79 coping, <40 vulnerable
+    const band = s >= 80 ? "good" : s >= 40 ? "warn" : "bad";
+    $("healthChip").querySelector(".health-dot").className = "health-dot " + band;
     $("healthValue").textContent = s;
     $("gaugeCaption").textContent =
       s >= 80 ? "สุขภาพการเงินดีเยี่ยม" :
-      s >= 60 ? "สุขภาพการเงินดี" :
+      s >= 60 ? "สุขภาพการเงินพอใช้" :
       s >= 40 ? "ควรปรับปรุง" : "ต้องดูแลด่วน";
+  }
+
+  function renderUnknownGauge(missingData) {
+    $("gaugeFill").style.strokeDashoffset = "251";
+    $("gaugeValue").textContent = UNKNOWN_SCORE_LABEL;
+    $("gaugeValue").classList.add("is-unknown");
+    $("gaugeUnit").hidden = true;
+    $("healthChip").querySelector(".health-dot").className = "health-dot";
+    $("healthValue").textContent = UNKNOWN_SCORE_LABEL;
+    $("gaugeCaption").textContent = missingData.length
+      ? "ข้อมูลยังไม่พอ — เพิ่ม" + missingData.join(", ")
+      : "ข้อมูลยังไม่พอสำหรับการประเมิน";
+  }
+
+  function renderPillars(pillars) {
+    const list = $("pillarList");
+    list.replaceChildren();
+    let known = 0;
+    for (const [key, label] of Object.entries(HEALTH_PILLAR_LABELS)) {
+      const value = pillars[key];
+      const isKnown = value !== null && value !== undefined;
+      if (isKnown) known += 1;
+      list.append(el("li", {}, label, el("span",
+        { class: "pillar-score" + (isKnown ? "" : " is-unknown") },
+        isKnown ? value : UNKNOWN_SCORE_LABEL)));
+    }
+    $("pillarCoverage").textContent = `คำนวณจาก ${known}/4 ด้าน`;
   }
 
   function animateNumber(node, target) {

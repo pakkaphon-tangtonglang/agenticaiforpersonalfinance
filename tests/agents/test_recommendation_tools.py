@@ -100,8 +100,9 @@ class TestGetFinancialHealthScore:
         assert "health_score" in result
         assert "total_recommendations" in result
         assert "top_issues" in result
-        assert isinstance(result["health_score"], int)
-        assert 0 <= result["health_score"] <= 100
+        assert result["health_score"] is None
+        assert result["health_status"] == "insufficient_data"
+        assert result["health_missing_data"] == ["รายรับเดือนนี้", "รายจ่ายเดือนนี้"]
 
     def test_top_issues_limited_to_three(
         self,
