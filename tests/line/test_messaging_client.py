@@ -8,6 +8,7 @@ from finance_ai.line.messaging_client import (
     CLARIFY_QUICK_REPLY_LABELS,
     LOADING_ANIMATION_SECONDS,
     send_line_push,
+    send_line_reply,
     show_line_loading,
 )
 
@@ -26,6 +27,10 @@ class FakeMessagingApi:
 
     def show_loading_animation(self, **kwargs: Any) -> None:
         """Record the loading request for assertions."""
+        FakeMessagingApi.calls.append(kwargs)
+
+    def reply_message(self, **kwargs: Any) -> None:
+        """Record the reply request for assertions."""
         FakeMessagingApi.calls.append(kwargs)
 
 
@@ -95,3 +100,19 @@ class TestShowLineLoading:
 
         monkeypatch.setattr("finance_ai.line.messaging_client.MessagingApi", ExplodingApi)
         show_line_loading("token-123", "Uline-user-1")
+
+
+class TestSendLineReply:
+    """Tests for send_line_reply (free Reply API, used for the processing notice)."""
+
+    def setup_method(self) -> None:
+        """Clear recorded calls between tests."""
+        FakeMessagingApi.calls = []
+
+    def test_replies_with_text_to_token(self, monkeypatch: Any) -> None:
+        """The text is sent with the event's reply token."""
+        monkeypatch.setattr("finance_ai.line.messaging_client.MessagingApi", FakeMessagingApi)
+        send_line_reply("token-123", "reply-token-1", "ได้รับคำถามแล้ว")
+        request = FakeMessagingApi.calls[0]["reply_message_request"]
+        assert request.reply_token == "reply-token-1"
+        assert request.messages[0].text == "ได้รับคำถามแล้ว"

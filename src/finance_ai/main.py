@@ -1181,6 +1181,7 @@ async def line_webhook(request: Request, background_tasks: BackgroundTasks) -> d
             session_factory=_session_factory,
             chat_model_provider=get_chat_model,
             access_token=settings.line_channel_access_token,
+            reply_token=event.reply_token,
         )
     return {"status": "ok"}
 
