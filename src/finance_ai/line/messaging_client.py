@@ -8,6 +8,7 @@ from linebot.v3.messaging import (
     PushMessageRequest,
     QuickReply,
     QuickReplyItem,
+    ReplyMessageRequest,
     ShowLoadingAnimationRequest,
     TextMessage,
 )
@@ -48,6 +49,28 @@ def send_line_push(access_token: str, line_user_id: str, text: str) -> None:
         push_message_request=PushMessageRequest(
             to=line_user_id,
             messages=[TextMessage(text=text, quick_reply=_clarify_quick_reply())],
+        )
+    )
+
+
+def send_line_reply(access_token: str, reply_token: str, text: str) -> None:
+    """Send a text with the Reply API (free, does not count toward quota).
+
+    The reply token is single-use and expires about a minute after the
+    event, so this suits instant messages such as a processing notice.
+
+    Args:
+        access_token: LINE channel access token.
+        reply_token: Reply token from the webhook event.
+        text: Text (in Thai) to send.
+
+    Example:
+        >>> send_line_reply(token, event.reply_token, "ได้รับคำถามแล้ว")
+    """
+    messaging_api = MessagingApi(ApiClient(Configuration(access_token=access_token)))
+    messaging_api.reply_message(
+        reply_message_request=ReplyMessageRequest(
+            reply_token=reply_token, messages=[TextMessage(text=text)]
         )
     )
 

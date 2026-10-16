@@ -6,7 +6,11 @@ from unittest.mock import MagicMock, patch
 from sqlalchemy.orm import Session, sessionmaker
 
 from finance_ai.database.models.user import User
-from finance_ai.line.line_bot_service import handle_line_event, process_line_message
+from finance_ai.line.line_bot_service import (
+    PROCESSING_NOTICE,
+    handle_line_event,
+    process_line_message,
+)
 from finance_ai.line.mapping_service import get_or_create_line_mapping
 
 LINE_USER_ID = "Uline-user-xyz"
@@ -116,6 +120,7 @@ class TestHandleLineEvent:
             ),
             patch("finance_ai.line.line_bot_service.send_line_push") as mock_push,
             patch("finance_ai.line.line_bot_service.show_line_loading"),
+            patch("finance_ai.line.line_bot_service.send_line_reply"),
         ):
             handle_line_event(
                 line_user_id=LINE_USER_ID,
@@ -141,6 +146,7 @@ class TestHandleLineEvent:
             ),
             patch("finance_ai.line.line_bot_service.send_line_push") as mock_push,
             patch("finance_ai.line.line_bot_service.show_line_loading"),
+            patch("finance_ai.line.line_bot_service.send_line_reply"),
         ):
             handle_line_event(
                 line_user_id=LINE_USER_ID,
@@ -162,6 +168,7 @@ class TestHandleLineEvent:
             ),
             patch("finance_ai.line.line_bot_service.send_line_push") as mock_push,
             patch("finance_ai.line.line_bot_service.show_line_loading"),
+            patch("finance_ai.line.line_bot_service.send_line_reply"),
         ):
             handle_line_event(
                 line_user_id=LINE_USER_ID,
@@ -176,14 +183,61 @@ class TestHandleLineEvent:
         assert "ขออภัย" in pushed_text
         assert "boom" not in pushed_text  # internal details (SQL, ids) stay in logs
 
-    def test_shows_loading_before_processing(self) -> None:
-        """The typing indicator is shown before the agent starts working."""
+    def _run_with_manager(self, text: str, reply_token: str) -> MagicMock:
+        """Run handle_line_event with all LINE calls recorded on one mock."""
         manager = MagicMock()
         manager.process.return_value = "คำตอบ"
         with (
+            patch("finance_ai.line.line_bot_service.send_line_reply", manager.notice),
             patch("finance_ai.line.line_bot_service.show_line_loading", manager.loading),
             patch("finance_ai.line.line_bot_service.process_line_message", manager.process),
-            patch("finance_ai.line.line_bot_service.send_line_push"),
+            patch("finance_ai.line.line_bot_service.send_line_push", manager.push),
+        ):
+            handle_line_event(
+                line_user_id=LINE_USER_ID,
+                text=text,
+                session_factory=MagicMock(),
+                chat_model_provider=None,
+                access_token="token-123",
+                reply_token=reply_token,
+            )
+        return manager
+
+    def test_notice_then_loading_then_answer(self) -> None:
+        """The notice goes first, since any bot message hides the loading animation."""
+        manager = self._run_with_manager("ราคา PTT", "reply-token-1")
+        manager.notice.assert_called_once_with("token-123", "reply-token-1", PROCESSING_NOTICE)
+        manager.loading.assert_called_once_with("token-123", LINE_USER_ID)
+        called_in_order = [name for name, _, _ in manager.mock_calls]
+        assert called_in_order == ["notice", "loading", "process", "push"]
+
+    def test_notice_mentions_wait_time(self) -> None:
+        """The notice tells the user roughly how long to wait."""
+        assert "10-15 วินาที" in PROCESSING_NOTICE
+
+    def test_no_notice_for_link_command(self) -> None:
+        """Link commands answer instantly, so no notice is sent."""
+        manager = self._run_with_manager(
+            "เชื่อมต่อ 00000000-1111-2222-3333-444444444444", "reply-token-1"
+        )
+        manager.notice.assert_not_called()
+
+    def test_no_notice_without_reply_token(self) -> None:
+        """Without a reply token there is nothing to reply to, so no notice."""
+        manager = self._run_with_manager("ราคา PTT", "")
+        manager.notice.assert_not_called()
+        manager.loading.assert_called_once()
+
+    def test_notice_failure_does_not_block_answer(self) -> None:
+        """A failed notice is logged and the answer is still pushed."""
+        with (
+            patch(
+                "finance_ai.line.line_bot_service.send_line_reply",
+                side_effect=ConnectionError("LINE API unreachable"),
+            ),
+            patch("finance_ai.line.line_bot_service.show_line_loading"),
+            patch("finance_ai.line.line_bot_service.process_line_message", return_value="คำตอบ"),
+            patch("finance_ai.line.line_bot_service.send_line_push") as mock_push,
         ):
             handle_line_event(
                 line_user_id=LINE_USER_ID,
@@ -191,8 +245,6 @@ class TestHandleLineEvent:
                 session_factory=MagicMock(),
                 chat_model_provider=None,
                 access_token="token-123",
+                reply_token="reply-token-1",
             )
-
-        manager.loading.assert_called_once_with("token-123", LINE_USER_ID)
-        called_in_order = [name for name, _, _ in manager.mock_calls]
-        assert called_in_order == ["loading", "process"]
+        assert mock_push.call_args[0][2] == "คำตอบ"

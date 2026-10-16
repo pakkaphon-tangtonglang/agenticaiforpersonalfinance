@@ -16,7 +16,7 @@ from finance_ai.line.link_command import (
 )
 from finance_ai.line.mapping_service import get_or_create_line_mapping
 from finance_ai.line.markdown_to_text import markdown_to_line_text
-from finance_ai.line.messaging_client import send_line_push, show_line_loading
+from finance_ai.line.messaging_client import send_line_push, send_line_reply, show_line_loading
 from finance_ai.tools.conversation_service import (
     get_recent_history_as_tuples,
     save_assistant_message,
@@ -26,6 +26,11 @@ from finance_ai.tools.conversation_service import (
 logger = get_logger(__name__)
 
 LINE_ERROR_REPLY: str = "ขออภัยครับ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง"
+
+# Sent with the free Reply API before the loading animation starts
+PROCESSING_NOTICE: str = (
+    "⏳ ได้รับคำถามแล้วครับ กำลังวิเคราะห์ข้อมูลให้ รอสักครู่ประมาณ 10-15 วินาที"
+)
 
 
 def process_line_message(
@@ -90,21 +95,22 @@ def _maybe_handle_link_command(session: Session, mapping: LineUserMapping, text:
     return reply
 
 
-def handle_line_event(
+def handle_line_event(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     line_user_id: str,
     text: str,
     session_factory: sessionmaker[Session],
     chat_model_provider: Callable[[], Any] | None,
     access_token: str,
+    reply_token: str = "",
 ) -> None:
     """Process one LINE text event end-to-end and push the answer back.
 
     Designed to run as a FastAPI background task so the webhook returns
     200 within LINE's ~1s window while the agent (10-30s) runs after.
-    LINE's loading animation is shown first so the user sees the bot
-    "typing" while the agent works. The reply is converted from markdown
-    to LINE-friendly plain text before pushing (LINE bubbles render
-    markdown literally). Errors are logged; the user gets a generic
+    The user first gets a short wait-time notice, then LINE's loading
+    animation. The notice must come first because any bot message hides
+    the animation. The reply is converted from markdown to LINE-friendly
+    plain text before pushing. Errors are logged; the user gets a generic
     Thai message without internal details such as SQL.
 
     Args:
@@ -113,10 +119,12 @@ def handle_line_event(
         session_factory: Factory creating database sessions.
         chat_model_provider: Callable returning the chat model.
         access_token: LINE channel access token for the Push API.
+        reply_token: Reply token of the event, used for the wait-time notice.
 
     Example:
-        >>> handle_line_event(uid, "ภาษีของฉัน", factory, get_chat_model, token)
+        >>> handle_line_event(uid, "ภาษีของฉัน", factory, get_chat_model, token, rtoken)
     """
+    _send_processing_notice(access_token, reply_token, text)
     show_line_loading(access_token, line_user_id)
     try:
         reply = process_line_message(session_factory, chat_model_provider, line_user_id, text)
@@ -124,3 +132,38 @@ def handle_line_event(
         logger.exception("LINE message processing failed for %s", line_user_id)
         reply = LINE_ERROR_REPLY
     send_line_push(access_token, line_user_id, markdown_to_line_text(reply))
+
+
+def _send_processing_notice(access_token: str, reply_token: str, text: str) -> None:
+    """Reply with the wait-time notice when the agent is about to run.
+
+    Skipped for link/unlink commands (they answer instantly) and when the
+    event has no reply token. Failures are logged and never block the answer.
+
+    Args:
+        access_token: LINE channel access token.
+        reply_token: Reply token of the event ("" when unavailable).
+        text: The user's message, used to detect link commands.
+    """
+    if not reply_token or _is_link_command(text):
+        return
+    try:
+        send_line_reply(access_token, reply_token, PROCESSING_NOTICE)
+    except Exception as error:  # pylint: disable=broad-exception-caught
+        logger.warning("Failed to send LINE processing notice: %s", error)
+
+
+def _is_link_command(text: str) -> bool:
+    """Report whether the text is a link/unlink command (answered instantly).
+
+    Args:
+        text: Raw user text from the LINE event.
+
+    Returns:
+        True for link or unlink commands.
+
+    Example:
+        >>> _is_link_command("ราคา PTT")
+        False
+    """
+    return parse_unlink_command(text) or parse_link_command(text) is not None
