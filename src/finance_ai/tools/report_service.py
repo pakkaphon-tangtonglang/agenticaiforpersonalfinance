@@ -137,6 +137,10 @@ def _assemble_report(
         goal_progress=build_goal_progress(data["goals"]),
         tax_status=build_tax_status(data["tax"], year),
         health_score=recommendations.health_score,
+        health_status=recommendations.health_detail.status,
+        health_pillars=recommendations.health_detail.pillars,
+        health_coverage=recommendations.health_detail.coverage,
+        health_missing_data=recommendations.health_detail.missing_data,
         highlights=highlights,
     )
 

@@ -7,8 +7,6 @@ from finance_ai.tools.recommendation_constants import (
     EXPENSE_CONCENTRATION_THRESHOLD,
     GOAL_BEHIND_SCHEDULE_PERCENTAGE,
     GOAL_DEADLINE_WARNING_MONTHS,
-    HEALTH_SCORE_BASE,
-    HEALTH_SCORE_PENALTY_PER_PRIORITY,
     INVESTMENT_CONCENTRATION_THRESHOLD,
     OVERSPENDING_THRESHOLD,
     RECOMMENDATION_CATEGORIES,
@@ -91,11 +89,3 @@ class TestThresholds:
     def test_goal_behind_schedule_valid(self) -> None:
         """Goal behind schedule percentage should be valid."""
         assert Decimal("0") < GOAL_BEHIND_SCHEDULE_PERCENTAGE <= Decimal("100")
-
-    def test_health_score_base_is_100(self) -> None:
-        """Health score base should be 100."""
-        assert HEALTH_SCORE_BASE == 100
-
-    def test_health_score_penalty_positive(self) -> None:
-        """Health score penalty per priority should be positive."""
-        assert HEALTH_SCORE_PENALTY_PER_PRIORITY > 0

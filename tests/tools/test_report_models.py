@@ -152,7 +152,8 @@ class TestFinancialReport:
             generated_at="2026-03-10T00:00:00",
         )
         assert report.user_id == "test-user"
-        assert report.health_score == 100
+        assert report.health_score is None
+        assert report.health_status == "insufficient_data"
         assert report.highlights == []
 
     def test_health_score_bounds(self) -> None:

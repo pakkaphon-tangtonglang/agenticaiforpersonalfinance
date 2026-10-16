@@ -3,6 +3,7 @@
 from decimal import Decimal
 from unittest.mock import MagicMock, patch
 
+from finance_ai.tools.health_score_models import HealthScoreResult
 from finance_ai.tools.report_models import (
     ExpenseBreakdownSection,
     FinancialReport,
@@ -328,6 +329,12 @@ class TestGenerateFinancialReport:
         }
         mock_rec_report = MagicMock()
         mock_rec_report.health_score = 85
+        mock_rec_report.health_detail = HealthScoreResult(
+            score=85,
+            status="scored",
+            pillars={"spend": 80, "save": 90, "invest": None, "plan": None},
+            coverage=Decimal("0.5000"),
+        )
         mock_rec_report.recommendations = []
         mock_recs.return_value = mock_rec_report
 
@@ -339,6 +346,9 @@ class TestGenerateFinancialReport:
         assert report.year == 2026
         assert report.month == 3
         assert report.health_score == 85
+        assert report.health_status == "scored"
+        assert report.health_pillars["invest"] is None
+        assert report.health_coverage == Decimal("0.5000")
         assert report.monthly_overview.total_income == Decimal("50000")
         assert report.tax_status.status == "filed"
 
@@ -355,12 +365,16 @@ class TestGenerateFinancialReport:
             "tax": {},
         }
         mock_rec_report = MagicMock()
-        mock_rec_report.health_score = 100
+        mock_rec_report.health_score = None
+        mock_rec_report.health_detail = HealthScoreResult(
+            missing_data=["รายรับเดือนนี้", "รายจ่ายเดือนนี้"],
+        )
         mock_rec_report.recommendations = []
         mock_recs.return_value = mock_rec_report
 
         session = MagicMock()
         report = generate_financial_report(session, "user-2", 2026, 1)
 
-        assert report.health_score == 100
+        assert report.health_score is None
+        assert report.health_missing_data == ["รายรับเดือนนี้", "รายจ่ายเดือนนี้"]
         assert report.monthly_overview.total_income == Decimal("0")
