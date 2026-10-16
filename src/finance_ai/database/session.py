@@ -1,11 +1,44 @@
 """Database engine creation and session management."""
 
 from collections.abc import Generator
+from typing import Any
 
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from finance_ai.core.config import get_settings
+
+# Neon closes idle connections (scale-to-zero, ~5 min), so recycle pooled
+# connections before that and ping each one on checkout.
+POOL_RECYCLE_SECONDS: int = 300
+
+
+def build_engine_options(db_url: str) -> dict[str, Any]:
+    """
+    Build create_engine keyword options for the given database URL.
+
+    SQLite needs ``check_same_thread=False``. Server databases get
+    ``pool_pre_ping`` and ``pool_recycle`` so a connection dropped by the
+    server (e.g. "SSL connection has been closed unexpectedly") is replaced
+    instead of failing the request.
+
+    Args:
+        db_url: SQLAlchemy database URL.
+
+    Returns:
+        dict[str, Any]: Keyword arguments for ``create_engine``.
+
+    Example:
+        >>> build_engine_options("sqlite:///./local.db")["connect_args"]
+        {'check_same_thread': False}
+    """
+    if db_url.startswith("sqlite"):
+        return {"connect_args": {"check_same_thread": False}}
+    return {
+        "connect_args": {},
+        "pool_pre_ping": True,
+        "pool_recycle": POOL_RECYCLE_SECONDS,
+    }
 
 
 def create_database_engine() -> Engine:
@@ -19,13 +52,10 @@ def create_database_engine() -> Engine:
         >>> engine = create_database_engine()
     """
     settings = get_settings()
-    connect_args: dict[str, bool] = {}
-    if settings.db_url.startswith("sqlite"):
-        connect_args["check_same_thread"] = False
     return create_engine(
         settings.db_url,
         echo=settings.debug,
-        connect_args=connect_args,
+        **build_engine_options(settings.db_url),
     )
 
 

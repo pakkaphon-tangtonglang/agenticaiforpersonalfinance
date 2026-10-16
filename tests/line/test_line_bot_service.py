@@ -115,6 +115,7 @@ class TestHandleLineEvent:
                 return_value=markdown_reply,
             ),
             patch("finance_ai.line.line_bot_service.send_line_push") as mock_push,
+            patch("finance_ai.line.line_bot_service.show_line_loading"),
         ):
             handle_line_event(
                 line_user_id=LINE_USER_ID,
@@ -139,6 +140,7 @@ class TestHandleLineEvent:
                 return_value=link_reply,
             ),
             patch("finance_ai.line.line_bot_service.send_line_push") as mock_push,
+            patch("finance_ai.line.line_bot_service.show_line_loading"),
         ):
             handle_line_event(
                 line_user_id=LINE_USER_ID,
@@ -159,6 +161,7 @@ class TestHandleLineEvent:
                 side_effect=RuntimeError("boom"),
             ),
             patch("finance_ai.line.line_bot_service.send_line_push") as mock_push,
+            patch("finance_ai.line.line_bot_service.show_line_loading"),
         ):
             handle_line_event(
                 line_user_id=LINE_USER_ID,
@@ -171,4 +174,25 @@ class TestHandleLineEvent:
         assert mock_push.call_count == 1
         pushed_text = mock_push.call_args[0][2]
         assert "ขออภัย" in pushed_text
-        assert "boom" in pushed_text
+        assert "boom" not in pushed_text  # internal details (SQL, ids) stay in logs
+
+    def test_shows_loading_before_processing(self) -> None:
+        """The typing indicator is shown before the agent starts working."""
+        manager = MagicMock()
+        manager.process.return_value = "คำตอบ"
+        with (
+            patch("finance_ai.line.line_bot_service.show_line_loading", manager.loading),
+            patch("finance_ai.line.line_bot_service.process_line_message", manager.process),
+            patch("finance_ai.line.line_bot_service.send_line_push"),
+        ):
+            handle_line_event(
+                line_user_id=LINE_USER_ID,
+                text="ราคา PTT",
+                session_factory=MagicMock(),
+                chat_model_provider=None,
+                access_token="token-123",
+            )
+
+        manager.loading.assert_called_once_with("token-123", LINE_USER_ID)
+        called_in_order = [name for name, _, _ in manager.mock_calls]
+        assert called_in_order == ["loading", "process"]
