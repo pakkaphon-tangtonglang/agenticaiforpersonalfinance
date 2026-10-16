@@ -6,7 +6,9 @@ import pytest
 
 from finance_ai.line.messaging_client import (
     CLARIFY_QUICK_REPLY_LABELS,
+    LOADING_ANIMATION_SECONDS,
     send_line_push,
+    show_line_loading,
 )
 
 
@@ -20,6 +22,10 @@ class FakeMessagingApi:
 
     def push_message(self, **kwargs: Any) -> None:
         """Record the request for assertions."""
+        FakeMessagingApi.calls.append(kwargs)
+
+    def show_loading_animation(self, **kwargs: Any) -> None:
+        """Record the loading request for assertions."""
         FakeMessagingApi.calls.append(kwargs)
 
 
@@ -58,3 +64,34 @@ class TestSendLinePush:
         monkeypatch.setattr("finance_ai.line.messaging_client.MessagingApi", ExplodingApi)
         with pytest.raises(ConnectionError):
             send_line_push("token-123", "Uline-user-1", "คำตอบ")
+
+
+class TestShowLineLoading:
+    """Tests for show_line_loading (the LINE "typing" indicator)."""
+
+    def setup_method(self) -> None:
+        """Clear recorded calls between tests."""
+        FakeMessagingApi.calls = []
+
+    def test_requests_loading_animation_for_chat(self, monkeypatch: Any) -> None:
+        """The loading animation is shown in the user's 1:1 chat."""
+        monkeypatch.setattr("finance_ai.line.messaging_client.MessagingApi", FakeMessagingApi)
+        show_line_loading("token-123", "Uline-user-1")
+        request = FakeMessagingApi.calls[0]["show_loading_animation_request"]
+        assert request.chat_id == "Uline-user-1"
+        assert request.loading_seconds == LOADING_ANIMATION_SECONDS
+
+    def test_loading_seconds_is_valid_for_line(self) -> None:
+        """LINE accepts 5-60 seconds in steps of 5."""
+        assert 5 <= LOADING_ANIMATION_SECONDS <= 60
+        assert LOADING_ANIMATION_SECONDS % 5 == 0
+
+    def test_api_failure_is_swallowed(self, monkeypatch: Any) -> None:
+        """The indicator is cosmetic, so its failure must not block the answer."""
+
+        class ExplodingApi(FakeMessagingApi):
+            def show_loading_animation(self, **kwargs: Any) -> None:
+                raise ConnectionError("LINE API unreachable")
+
+        monkeypatch.setattr("finance_ai.line.messaging_client.MessagingApi", ExplodingApi)
+        show_line_loading("token-123", "Uline-user-1")

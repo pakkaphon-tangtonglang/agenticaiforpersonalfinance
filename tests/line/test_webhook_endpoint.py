@@ -41,6 +41,9 @@ class FakeMessagingApi:
         """Record the push request."""
         FakeMessagingApi.calls.append(kwargs)
 
+    def show_loading_animation(self, **kwargs: Any) -> None:
+        """Accept the loading request without hitting the LINE API."""
+
 
 def _make_client(test_engine: Engine, monkeypatch: Any) -> TestClient:
     """Build a TestClient wired to the in-memory engine and fake credentials."""

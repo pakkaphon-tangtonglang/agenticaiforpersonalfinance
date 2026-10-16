@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy.orm import Session, sessionmaker
 
 from finance_ai.agents.router_agent import orchestrate_query
+from finance_ai.core.logging import get_logger
 from finance_ai.database.models.line_user_mapping import LineUserMapping
 from finance_ai.line.link_command import (
     link_line_user,
@@ -15,12 +16,16 @@ from finance_ai.line.link_command import (
 )
 from finance_ai.line.mapping_service import get_or_create_line_mapping
 from finance_ai.line.markdown_to_text import markdown_to_line_text
-from finance_ai.line.messaging_client import send_line_push
+from finance_ai.line.messaging_client import send_line_push, show_line_loading
 from finance_ai.tools.conversation_service import (
     get_recent_history_as_tuples,
     save_assistant_message,
     save_user_message,
 )
+
+logger = get_logger(__name__)
+
+LINE_ERROR_REPLY: str = "ขออภัยครับ ระบบขัดข้องชั่วคราว กรุณาลองใหม่อีกครั้ง"
 
 
 def process_line_message(
@@ -96,8 +101,11 @@ def handle_line_event(
 
     Designed to run as a FastAPI background task so the webhook returns
     200 within LINE's ~1s window while the agent (10-30s) runs after.
-    The reply is converted from markdown to LINE-friendly plain text
-    before pushing (LINE bubbles render markdown literally).
+    LINE's loading animation is shown first so the user sees the bot
+    "typing" while the agent works. The reply is converted from markdown
+    to LINE-friendly plain text before pushing (LINE bubbles render
+    markdown literally). Errors are logged; the user gets a generic
+    Thai message without internal details such as SQL.
 
     Args:
         line_user_id: LINE platform userId of the sender.
@@ -109,8 +117,10 @@ def handle_line_event(
     Example:
         >>> handle_line_event(uid, "ภาษีของฉัน", factory, get_chat_model, token)
     """
+    show_line_loading(access_token, line_user_id)
     try:
         reply = process_line_message(session_factory, chat_model_provider, line_user_id, text)
-    except Exception as exc:  # pylint: disable=broad-exception-caught
-        reply = f"ขออภัยครับ เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง ({exc})"
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.exception("LINE message processing failed for %s", line_user_id)
+        reply = LINE_ERROR_REPLY
     send_line_push(access_token, line_user_id, markdown_to_line_text(reply))
