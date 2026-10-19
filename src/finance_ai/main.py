@@ -52,7 +52,12 @@ from finance_ai.tools.conversation_service import (
     load_conversation_messages,
     save_assistant_message,
     save_user_message,
-    update_conversation_title,
+)
+from finance_ai.tools.conversation_constants import CONVERSATION_TITLE_MAX_LENGTH
+from finance_ai.tools.conversation_title_service import (
+    auto_title_conversation,
+    delete_user_conversation,
+    rename_conversation,
 )
 from finance_ai.tools.market_data_models import AssetFetchResult
 from finance_ai.tools.report_service import generate_financial_report
@@ -170,6 +175,30 @@ class CreateConversationRequest(BaseModel):
 
     user_id: str = Field(..., description="User UUID")
     title: str = Field(default="แชทใหม่", description="Conversation title")
+
+
+class RenameConversationRequest(BaseModel):
+    """Rename conversation request."""
+
+    user_id: str = Field(..., description="User UUID that owns the conversation")
+    title: str = Field(
+        ...,
+        description="New conversation title",
+        min_length=1,
+        max_length=CONVERSATION_TITLE_MAX_LENGTH,
+    )
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def strip_title(cls, value: str) -> str:
+        """Strip surrounding whitespace so blank titles fail min_length."""
+        return value.strip() if isinstance(value, str) else value
+
+
+class ConversationOwnerRequest(BaseModel):
+    """Request body that only identifies the conversation owner."""
+
+    user_id: str = Field(..., description="User UUID that owns the conversation")
 
 
 class AssetFetchRequest(BaseModel):
@@ -477,6 +506,81 @@ def create_new_conv(
     """
     conv = create_conversation(session, req.user_id, req.title)
     return ConversationSummary(id=str(conv.id), title=conv.title or "แชทใหม่")
+
+
+_CONVERSATION_NOT_FOUND = "ไม่พบบทสนทนานี้ หรือบทสนทนาไม่ได้เป็นของผู้ใช้"
+
+
+@app.patch("/conversations/{conversation_id}", response_model=ConversationSummary)
+def rename_conv(
+    conversation_id: str,
+    req: RenameConversationRequest,
+    session: Session = Depends(get_session),
+) -> ConversationSummary:
+    """Rename a conversation owned by the user.
+
+    Args:
+        conversation_id: Conversation UUID.
+        req: Owner user_id and the new title.
+        session: Database session.
+
+    Returns:
+        Updated conversation summary.
+
+    Raises:
+        HTTPException: 404 when the conversation is missing or not owned.
+    """
+    conversation = rename_conversation(session, conversation_id, req.user_id, req.title)
+    if conversation is None:
+        raise HTTPException(status_code=404, detail=_CONVERSATION_NOT_FOUND)
+    return ConversationSummary(id=str(conversation.id), title=conversation.title)
+
+
+@app.post("/conversations/{conversation_id}/auto-title", response_model=ConversationSummary)
+def auto_title_conv(
+    conversation_id: str,
+    req: ConversationOwnerRequest,
+    session: Session = Depends(get_session),
+) -> ConversationSummary:
+    """Let the agent name a conversation from its first exchange.
+
+    Args:
+        conversation_id: Conversation UUID.
+        req: Owner user_id.
+        session: Database session.
+
+    Returns:
+        Conversation summary with the (possibly unchanged) title.
+
+    Raises:
+        HTTPException: 404 when the conversation is missing or not owned.
+    """
+    title = auto_title_conversation(session, conversation_id, req.user_id, get_chat_model())
+    if title is None:
+        raise HTTPException(status_code=404, detail=_CONVERSATION_NOT_FOUND)
+    return ConversationSummary(id=conversation_id, title=title)
+
+
+@app.delete("/conversations/{conversation_id}")
+def delete_conv(
+    conversation_id: str, user_id: str, session: Session = Depends(get_session)
+) -> dict[str, str]:
+    """Delete a conversation and its messages.
+
+    Args:
+        conversation_id: Conversation UUID.
+        user_id: User UUID that owns the conversation.
+        session: Database session.
+
+    Returns:
+        {"status": "ok"}.
+
+    Raises:
+        HTTPException: 404 when the conversation is missing or not owned.
+    """
+    if not delete_user_conversation(session, conversation_id, user_id):
+        raise HTTPException(status_code=404, detail=_CONVERSATION_NOT_FOUND)
+    return {"status": "ok"}
 
 
 @app.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])

@@ -72,6 +72,7 @@
     mode: "hero", // "hero" | "thread"
     riskProfile: null, // latest risk assessment {risk_category, risk_level, total_score}
     recommendationDisclaimerShown: false, // show the disclaimer once per session
+    conversations: [], // sidebar list [{id, title}] from the last loadConversations
   };
 
   // ─── DOM helpers ───
@@ -300,25 +301,107 @@
   }
 
   // ─── Conversations ───
+  const DEFAULT_CONV_TITLE = "แชทใหม่";
+
   async function loadConversations() {
     try {
       const convs = await api("GET", "/conversations", { params: { user_id: state.userId } });
+      state.conversations = convs;
       const list = $("convList");
       list.innerHTML = "";
       if (!convs.length) {
         list.append(el("li", { class: "notif-empty" }, "ยังไม่มีบทสนทนา"));
         return;
       }
-      for (const c of convs) {
-        const li = el("li", {
-          class: c.id === state.conversationId ? "is-active" : "",
-          dataset: { id: c.id },
-          onclick: () => selectConversation(c.id, c.title),
-          title: c.title,
-        }, c.title || "แชทใหม่");
-        list.append(li);
-      }
+      for (const c of convs) list.append(conversationItem(c));
     } catch (e) { /* silent — sidebar not critical */ }
+  }
+
+  function conversationItem(conv) {
+    const withoutOpening = (fn) => (e) => { e.stopPropagation(); fn(); };
+    const rename = withoutOpening(() => startRename(li, conv));
+    const li = el("li", {
+      class: conv.id === state.conversationId ? "is-active" : "",
+      dataset: { id: conv.id },
+      onclick: () => selectConversation(conv.id, conv.title),
+      title: conv.title,
+    },
+      el("span", { class: "conv-title", ondblclick: rename }, conv.title || DEFAULT_CONV_TITLE),
+      el("span", { class: "conv-actions" },
+        el("button", { class: "conv-action", type: "button", "aria-label": "เปลี่ยนชื่อแชท",
+          title: "เปลี่ยนชื่อ", onclick: rename }, "✎"),
+        el("button", { class: "conv-action is-danger", type: "button", "aria-label": "ลบแชท",
+          title: "ลบแชท", onclick: withoutOpening(() => deleteConversation(conv)) }, "🗑"),
+      ),
+    );
+    return li;
+  }
+
+  // Inline rename: Enter/blur saves, Esc cancels.
+  function startRename(li, conv) {
+    const input = el("input", { class: "conv-rename-input", value: conv.title,
+      maxlength: "50", "aria-label": "ชื่อแชท", onclick: (e) => e.stopPropagation() });
+    let finished = false;
+    const finish = async (save) => {
+      if (finished) return;
+      finished = true;
+      const title = input.value.trim();
+      if (save && title && title !== conv.title) await renameConversation(conv.id, title);
+      loadConversations();
+    };
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); finish(true); }
+      else if (e.key === "Escape") finish(false);
+    });
+    input.addEventListener("blur", () => finish(true));
+    li.replaceChildren(input);
+    input.focus();
+    input.select();
+  }
+
+  async function renameConversation(id, title) {
+    try {
+      await api("PATCH", `/conversations/${id}`, { json: { user_id: state.userId, title } });
+    } catch (e) { toast("เปลี่ยนชื่อแชทไม่สำเร็จ", true); }
+  }
+
+  async function deleteConversation(conv) {
+    if (!confirm(`ลบแชท "${conv.title}" ใช่ไหม? ข้อความทั้งหมดในแชทนี้จะหายไป`)) return;
+    try {
+      await api("DELETE", `/conversations/${conv.id}`, { params: { user_id: state.userId } });
+    } catch (e) { toast("ลบแชทไม่สำเร็จ", true); return; }
+    if (conv.id === state.conversationId) {
+      state.conversationId = "";
+      localStorage.removeItem("pfai_conv");
+      clearChat();
+    }
+    toast("ลบแชทแล้ว");
+    loadConversations();
+  }
+
+  // The server picks a conversation silently when none is sent, so create
+  // one up front — the client needs its id to title it afterwards.
+  async function ensureConversation() {
+    if (state.conversationId) return;
+    const conv = await api("POST", "/conversations", {
+      json: { user_id: state.userId, title: DEFAULT_CONV_TITLE },
+    });
+    state.conversationId = conv.id;
+    localStorage.setItem("pfai_conv", conv.id);
+    state.conversations.unshift(conv);
+  }
+
+  // After a reply, let the agent name a still-untitled conversation.
+  async function maybeAutoTitle() {
+    const current = state.conversations.find((c) => c.id === state.conversationId);
+    if (current && current.title === DEFAULT_CONV_TITLE) {
+      try {
+        await api("POST", `/conversations/${state.conversationId}/auto-title`, {
+          json: { user_id: state.userId },
+        });
+      } catch (e) { /* title is cosmetic — keep the default */ }
+    }
+    loadConversations();
   }
 
   async function selectConversation(id, title) {
@@ -339,7 +422,7 @@
   async function newConversation() {
     try {
       const conv = await api("POST", "/conversations", {
-        json: { user_id: state.userId, title: "แชทใหม่" },
+        json: { user_id: state.userId, title: DEFAULT_CONV_TITLE },
       });
       state.conversationId = conv.id;
       localStorage.setItem("pfai_conv", conv.id);
@@ -402,6 +485,7 @@
     assistantBubble.classList.add("msg-cursor");
     state.streaming = true;
     setComposerDisabled(true);
+    try { await ensureConversation(); } catch (e) { /* server falls back to the latest chat */ }
 
     let full = "";
     let intent = "unknown";
@@ -426,7 +510,7 @@
 
       assistantBubble.classList.remove("msg-cursor");
       appendIntentExtras(assistantBubble.closest(".msg"), intent);
-      loadConversations();
+      maybeAutoTitle();
     } catch (e) {
       assistantBubble.classList.remove("msg-cursor");
       assistantBubble.textContent = "เชื่อมต่อสตรีมไม่สำเร็จ กำลังลองใหม่แบบไม่สตรีม…";
@@ -439,7 +523,7 @@
         });
         assistantBubble.innerHTML = renderMarkdown(res.response);
         appendIntentExtras(assistantBubble.closest(".msg"), res.intent);
-        loadConversations();
+        maybeAutoTitle();
       } catch (e2) {
         assistantBubble.textContent = "ส่งข้อความไม่สำเร็จ โปรดลองอีกครั้ง";
         toast("ส่งข้อความไม่สำเร็จ", true);

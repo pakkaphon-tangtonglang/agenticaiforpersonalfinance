@@ -18,3 +18,13 @@ VALID_MESSAGE_ROLES: tuple[str, ...] = ("user", "assistant")
 
 # Maximum conversations stored per user
 MAX_CONVERSATIONS_PER_USER: int = 50
+
+# System prompt for the LLM that names a conversation after its first exchange
+CONVERSATION_TITLE_PROMPT: str = (
+    "ตั้งชื่อบทสนทนานี้ให้สั้นและสื่อความหมาย สำหรับแสดงในรายการประวัติแชท\n"
+    "\n"
+    "กฎ:\n"
+    "- ภาษาไทย ไม่เกิน 6 คำ หรือ 30 ตัวอักษร (คำศัพท์เฉพาะใช้ภาษาอังกฤษได้)\n"
+    "- สรุปหัวข้อหลักที่ผู้ใช้ถาม เช่น 'คำนวณภาษีเงินเดือน' หรือ 'วางแผนออมซื้อรถ'\n"
+    "- ตอบเฉพาะชื่อเท่านั้น ห้ามมีเครื่องหมายคำพูด คำอธิบาย หรือขึ้นบรรทัดใหม่\n"
+)
