@@ -215,6 +215,10 @@ cover_letter*.md
 *.cover_letter
 resume*.md
 resume*.pdf
+resume*.docx
+*[Rr]esume*.pdf
+*[Rr]esume*.docx
+scripts/make_resume_docx.py
 
 # Unrelated design-system reference (not part of this project)
 designref/
