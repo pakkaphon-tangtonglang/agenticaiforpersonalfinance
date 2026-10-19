@@ -1,5 +1,7 @@
 """Tests for FastAPI frontend serving routes (root page + static assets)."""
 
+import re
+
 from fastapi.testclient import TestClient
 
 from finance_ai.main import app
@@ -152,12 +154,14 @@ class TestAssetFetchCardsAndWatchlist:
 
     client: TestClient = TestClient(app)
 
-    def test_index_bumps_static_versions_to_v5(self) -> None:
-        """Every static reference in index.html is cache-busted to v=5."""
+    def test_index_cache_busts_static_assets_with_one_version(self) -> None:
+        """styles.css, config.js and app.js share the same ?v= cache-buster."""
         response = self.client.get("/")
-        assert 'href="styles.css?v=5"' in response.text
-        assert 'src="config.js?v=5"' in response.text
-        assert 'src="app.js?v=5"' in response.text
+        versions = {
+            re.search(rf'{asset}\?v=(\d+)"', response.text).group(1)  # type: ignore[union-attr]
+            for asset in (r"styles\.css", r"config\.js", r"app\.js")
+        }
+        assert len(versions) == 1, f"static assets use different versions: {versions}"
         assert "?v=4" not in response.text
 
     def test_manual_symbol_form_removed(self) -> None:

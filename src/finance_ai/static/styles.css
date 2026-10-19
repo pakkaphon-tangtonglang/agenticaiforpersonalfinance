@@ -178,12 +178,32 @@ a:hover { text-decoration: underline; }
 .conv-new:hover { background: var(--color-accent-tint); }
 .conv-list { overflow-y: auto; flex: 1; }
 .conv-list li {
+  display: flex; align-items: center; gap: var(--sp-1);
   padding: var(--sp-2) var(--sp-3); border-radius: var(--radius-sm);
   color: var(--color-graphite); cursor: pointer;
   font-size: var(--text-body);
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
+.conv-list li.notif-empty { cursor: default; }
+.conv-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-actions { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s var(--ease); }
+.conv-list li:hover .conv-actions,
+.conv-list li:focus-within .conv-actions { opacity: 1; }
+.conv-action {
+  width: 24px; height: 24px; border-radius: var(--radius-sm);
+  font-size: var(--text-body-sm); line-height: 1; color: var(--color-graphite);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.conv-action:hover { background: var(--color-warm-mist-soft); color: var(--color-ink); }
+.conv-action.is-danger:hover { background: rgba(168, 68, 44, 0.12); color: #a8442c; }
+.conv-action:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.conv-rename-input {
+  flex: 1; min-width: 0; font: inherit; color: var(--color-ink);
+  padding: 2px var(--sp-2); border-radius: var(--radius-sm);
+  border: 1px solid var(--color-accent); background: var(--color-soft-paper);
+}
+.conv-rename-input:focus { outline: none; box-shadow: 0 0 0 2px rgba(19, 70, 17, 0.12); }
+@media (hover: none) { .conv-actions { opacity: 1; } }
 .conv-list li:hover { background: var(--color-parchment); color: var(--color-ink); }
 .conv-list li.is-active {
   background: var(--color-accent-tint); color: var(--color-ink);
