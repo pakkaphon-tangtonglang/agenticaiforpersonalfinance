@@ -385,8 +385,9 @@
   }
 
   function appendIntentExtras(msgEl, intent) {
-    const cfg = INTENT_CONFIG[intent] || INTENT_CONFIG.unknown;
-    msgEl.append(intentBadge(cfg));
+    // An "unknown" badge tells the user nothing, so skip it.
+    const cfg = INTENT_CONFIG[intent];
+    if (cfg && intent !== "unknown") msgEl.append(intentBadge(cfg));
     if (intent === "recommendation" && !state.recommendationDisclaimerShown) {
       state.recommendationDisclaimerShown = true;
       msgEl.append(intentDisclaimer());
@@ -416,7 +417,7 @@
           $("chatThread").scrollTop = $("chatThread").scrollHeight;
         });
         source.addEventListener("complete", (ev) => {
-          try { intent = ev.data || "unknown"; } catch (_) { /* noop */ }
+          try { intent = JSON.parse(ev.data) || "unknown"; } catch (_) { /* noop */ }
           source.close();
           resolve();
         });
