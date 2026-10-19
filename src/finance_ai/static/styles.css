@@ -380,7 +380,7 @@ a:hover { text-decoration: underline; }
 .msg-bubble {
   padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-lg);
   line-height: var(--leading-relaxed);
-  white-space: pre-wrap; word-break: break-word;
+  word-break: break-word;
   font-size: var(--text-body-lg);
 }
 .msg.user .msg-bubble {
@@ -970,7 +970,9 @@ a:hover { text-decoration: underline; }
   font-family: "Inter", "Sarabun", monospace;
   white-space: nowrap;
 }
-.msg-bubble p { margin: 0.4rem 0; }
+.msg-bubble p { margin: 0.4rem 0; white-space: pre-line; }
+.msg-bubble > :first-child { margin-top: 0; }
+.msg-bubble > :last-child { margin-bottom: 0; }
 .msg-bubble ul,
 .msg-bubble ol { margin: 0.4rem 0; padding-left: 1.5rem; }
 .msg-bubble h1,
