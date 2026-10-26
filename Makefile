@@ -1,4 +1,4 @@
-.PHONY: install dev run test coverage lint typecheck format check clean help bootstrap bundle-frontend guru-index guru-fetch guru-clean guru-gaps
+.PHONY: install dev run test coverage lint typecheck format check clean help bootstrap bundle-frontend guru-index guru-fetch guru-clean guru-gaps guru-sync
 
 # Variables
 PYTHON := uv run python
@@ -95,6 +95,9 @@ guru-fetch:  ## Fetch allowlisted guru sources into data/guru_raw/ (no LLM)
 
 guru-clean:  ## Trim fetched pages into data/guru_clean/ for review (no LLM)
 	$(PYTHON) scripts/clean_guru_raw.py
+
+guru-sync:  ## Fetch allowlisted sources into docs/guru_knowledge/*/fetched/ and reindex
+	$(PYTHON) scripts/sync_guru_sources.py
 
 guru-gaps:  ## Show the most-asked guru questions the knowledge base could not answer
 	$(PYTHON) scripts/report_guru_gaps.py $(ARGS)

@@ -7,7 +7,8 @@ Run with: make dev (development, port 8080) or make run (production)
 """
 
 import json
-from collections.abc import Generator, Iterator
+from collections.abc import AsyncIterator, Generator, Iterator
+from contextlib import asynccontextmanager
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
@@ -34,6 +35,7 @@ from finance_ai.agents.guru_stream import guru_intent, stream_guru_query
 from finance_ai.agents.router_agent import orchestrate_query
 from finance_ai.agents.stream_utils import StreamEvent, orchestrate_query_stream
 from finance_ai.core.api_security import install_api_security
+from finance_ai.core.bootstrap import start_guru_refresh_in_background
 from finance_ai.core.config import get_settings
 from finance_ai.core.logging import get_logger
 from finance_ai.database.crud.watched_asset_crud import WatchedAssetCRUD
@@ -82,10 +84,30 @@ from finance_ai.tools.symbol_guard import (
 
 logger = get_logger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Start background jobs once the API is up.
+
+    With GURU_FETCH_ON_STARTUP=true (deploys), allowlisted guru sources are
+    fetched and indexed in a background thread so startup is not delayed.
+
+    Args:
+        _app: The FastAPI application.
+
+    Yields:
+        Control back to FastAPI while the app runs.
+    """
+    if get_settings().guru_fetch_on_startup:
+        start_guru_refresh_in_background()
+    yield
+
+
 app = FastAPI(
     title="Personal Finance AI",
     description="Multi-Agent AI system for personal finance management",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.add_middleware(

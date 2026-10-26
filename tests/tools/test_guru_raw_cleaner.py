@@ -2,7 +2,14 @@
 
 from pathlib import Path
 
-from finance_ai.tools.guru_raw_cleaner import clean_raw_file, clean_text, rule_for_url
+from finance_ai.tools.guru_raw_cleaner import (
+    clean_raw_file,
+    clean_text,
+    markers_found,
+    rule_for_entry,
+    rule_for_url,
+)
+from finance_ai.tools.guru_source_fetcher import SourceEntry
 
 FINNOMENA_PAGE = """แจ้งเตือน
 คลังความรู้
@@ -111,3 +118,68 @@ class TestCleanRawFile:
         assert "reviewed: false" in content
         assert "แจ้งเตือน" not in content
         assert raw_file.read_text(encoding="utf-8") == raw_text
+
+
+PDF_LETTER = """Insurance results were fine.
+Some Thoughts About Investing
+Investment is most intelligent when it is most busi-
+nesslike. Put 10% of the cash in short-term government
+bonds and 90% in a very low-cost S&P 500 index fund.
+17
+************
+Local and state financial problems are accelerating.
+"""
+
+
+class TestEntryMarkersAndPdf:
+    """Per-source markers and PDF unwrapping (used for Berkshire letters)."""
+
+    def _entry(self, **markers: str) -> SourceEntry:
+        return SourceEntry(
+            guru_id="buffett",
+            url="https://www.berkshirehathaway.com/letters/2013ltr.pdf",
+            **markers,
+        )
+
+    def test_entry_markers_override_site_rules(self) -> None:
+        """start_marker/end_marker cut one section, keeping the heading."""
+        rule = rule_for_entry(
+            self._entry(
+                start_marker="^Some Thoughts About Investing", end_marker="^Local and state"
+            )
+        )
+
+        cleaned = clean_text(PDF_LETTER, rule, is_pdf=True)
+
+        assert cleaned.startswith("Some Thoughts About Investing")
+        assert "Insurance results" not in cleaned
+        assert "Local and state" not in cleaned
+
+    def test_pdf_lines_are_unwrapped_into_sentences(self) -> None:
+        """Hard-wrapped PDF lines, hyphenation, page numbers and separators are fixed."""
+        rule = rule_for_entry(self._entry(start_marker="^Some Thoughts", end_marker="^Local"))
+
+        cleaned = clean_text(PDF_LETTER, rule, is_pdf=True)
+
+        assert "most businesslike." in cleaned
+        assert (
+            "Put 10% of the cash in short-term government bonds and 90% in a very low-cost"
+            " S&P 500 index fund." in cleaned
+        )
+        assert "17" not in cleaned.split()
+        assert "****" not in cleaned
+
+    def test_entry_without_markers_uses_site_rule(self) -> None:
+        """Entries with no markers fall back to the site rule (or None)."""
+        entry = SourceEntry(guru_id="niwes", url="https://www.finnomena.com/dr-niwes/x")
+
+        assert rule_for_entry(entry) == rule_for_url(entry.url)
+
+    def test_markers_found(self) -> None:
+        """markers_found reports whether the start marker exists in the text."""
+        rule = rule_for_entry(self._entry(start_marker="^Some Thoughts"))
+        missing = rule_for_entry(self._entry(start_marker="^Nope"))
+
+        assert markers_found(PDF_LETTER, rule)
+        assert not markers_found(PDF_LETTER, missing)
+        assert markers_found(PDF_LETTER, None)

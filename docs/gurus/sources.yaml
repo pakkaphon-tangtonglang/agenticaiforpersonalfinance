@@ -1,23 +1,30 @@
 # Allowlist for `make guru-fetch`. Only these URLs are downloaded.
 # Rules: public pages only. No Facebook, YouTube, paid books or courses.
-# Output goes to data/guru_raw/<guru_id>/ (gitignored) with reviewed: false.
-# Review each file, trim it to the relevant parts, set reviewed: true, then
-# move it into docs/guru_knowledge/<guru_id>/ and run `make guru-index`.
+# `make guru-sync` (and the deploy-time background refresh) downloads these,
+# keeps only the article body (or the start_marker..end_marker section), and
+# writes docs/guru_knowledge/<guru_id>/fetched/ (gitignored: the public repo
+# stores links only). `make guru-fetch` + `make guru-clean` remain for
+# inspecting raw pages by hand.
 # robots.txt checked 2026-10-27: finnomena.com, thairath.co.th, moneycoach.co.th allow crawling.
 sources:
   # ── Warren Buffett: Berkshire Hathaway (official) ──
   - guru_id: buffett
     url: https://www.berkshirehathaway.com/letters/2013ltr.pdf
     kind: letter
-    title: Berkshire Hathaway 2013 Shareholder Letter
+    title: "Berkshire Hathaway 2013 Letter: Some Thoughts About Investing"
+    start_marker: "^Some Thoughts About Investing"
+    end_marker: "^Local and state financial problems"
   - guru_id: buffett
     url: https://www.berkshirehathaway.com/letters/2017ltr.pdf
     kind: letter
-    title: Berkshire Hathaway 2017 Shareholder Letter
+    title: "Berkshire Hathaway 2017 Letter: The Bet is Over"
+    start_marker: "^“The Bet” is Over"
+    end_marker: "^The Annual Meeting"
   - guru_id: buffett
     url: https://www.berkshirehathaway.com/ownman.pdf
     kind: principle
-    title: Berkshire Hathaway Owner's Manual
+    title: Berkshire Hathaway Owner's Manual (Owner-Related Business Principles)
+    start_marker: "^OWNER-RELATED BUSINESS PRINCIPLES"
 
   # ── Ray Dalio ──
   # No fetched sources: principles.com and economicprinciples.org pages are

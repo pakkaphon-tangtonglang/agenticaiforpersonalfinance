@@ -12,19 +12,24 @@ Example:
     >>> run_bootstrap()  # migrations + RAG index
 """
 
+import threading
 from pathlib import Path
 
+import httpx
 from alembic import command
 from alembic.config import Config
 
 from finance_ai.core.config import get_settings
 from finance_ai.core.logging import get_logger
 from finance_ai.rag.knowledge_base import create_knowledge_base_manager
+from finance_ai.tools.guru_source_fetcher import USER_AGENT, load_source_entries
+from finance_ai.tools.guru_source_sync import sync_guru_sources
 
 logger = get_logger(__name__)
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _DEFAULT_ALEMBIC_CONFIG = _PROJECT_ROOT / "alembic.ini"
+_GURU_SOURCES_FILE = _PROJECT_ROOT / "docs" / "gurus" / "sources.yaml"
 
 
 def run_migrations(alembic_config_path: Path = _DEFAULT_ALEMBIC_CONFIG) -> None:
@@ -137,3 +142,58 @@ def _index_knowledge_base_safely() -> None:
         index_guru_knowledge_if_empty()
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Guru indexing failed (gurus answer from profiles only): %s", exc)
+
+
+def refresh_fetched_guru_knowledge() -> int:
+    """Fetch allowlisted guru sources, write them to fetched/ and index them.
+
+    Runs at deploy time (see start_guru_refresh_in_background) so the public
+    repo keeps only links. Chunk ids are deterministic, so re-indexing the
+    same file upserts instead of duplicating.
+
+    Returns:
+        Number of chunks indexed.
+
+    Example:
+        >>> refresh_fetched_guru_knowledge()
+        412
+    """
+    settings = get_settings()
+    entries = load_source_entries(_GURU_SOURCES_FILE)
+    with httpx.Client(headers={"User-Agent": USER_AGENT}, timeout=30.0) as client:
+        results = sync_guru_sources(entries, client, Path(settings.rag_guru_knowledge_directory))
+    manager = create_knowledge_base_manager(
+        settings, collection_name=settings.rag_guru_collection_name
+    )
+    paths = [Path(result.path) for result in results if result.ok and result.path]
+    count = sum(manager.index_document(path) for path in paths)
+    logger.info("Guru refresh: %d/%d sources, %d chunks", len(paths), len(results), count)
+    return count
+
+
+def _refresh_fetched_guru_knowledge_safely() -> None:
+    """Run the guru refresh, converting any failure into a logged error."""
+    try:
+        refresh_fetched_guru_knowledge()
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        # Broad by design: a background refresh must never affect the API.
+        logger.error("Guru source refresh failed (curated docs still indexed): %s", exc)
+
+
+def start_guru_refresh_in_background() -> threading.Thread:
+    """Start the guru source refresh in a daemon thread.
+
+    The API serves immediately; gurus use the curated docs until the fetched
+    sources are indexed (usually within a minute).
+
+    Returns:
+        The started thread.
+
+    Example:
+        >>> start_guru_refresh_in_background()
+    """
+    thread = threading.Thread(
+        target=_refresh_fetched_guru_knowledge_safely, name="guru-refresh", daemon=True
+    )
+    thread.start()
+    return thread

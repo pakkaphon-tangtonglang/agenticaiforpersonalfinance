@@ -13,9 +13,12 @@ from finance_ai.core.bootstrap import (
     index_guru_knowledge_if_empty,
     index_knowledge_base_if_empty,
     rebuild_guru_knowledge,
+    refresh_fetched_guru_knowledge,
     run_bootstrap,
     run_migrations,
+    start_guru_refresh_in_background,
 )
+from finance_ai.tools.guru_source_sync import SyncResult
 
 
 class TestRunMigrations:
@@ -165,3 +168,41 @@ class TestRebuildGuruKnowledge:
         mock_create_manager.return_value.rebuild_index.assert_called_once_with(
             Path("docs/guru_knowledge"), recursive=True
         )
+
+
+class TestRefreshFetchedGuruKnowledge:
+    """Tests for the deploy-time fetch -> clean -> index refresh."""
+
+    @patch("finance_ai.core.bootstrap.create_knowledge_base_manager")
+    @patch("finance_ai.core.bootstrap.sync_guru_sources")
+    @patch("finance_ai.core.bootstrap.load_source_entries")
+    def test_indexes_only_successfully_synced_files(
+        self, mock_load: MagicMock, mock_sync: MagicMock, mock_create_manager: MagicMock
+    ) -> None:
+        """Skipped or failed sources are not indexed."""
+        mock_load.return_value = ["entry"]
+        mock_sync.return_value = [
+            SyncResult(
+                url="a", ok=True, detail="saved", path="docs/guru_knowledge/niwes/fetched/a.md"
+            ),
+            SyncResult(url="b", ok=False, detail="404"),
+        ]
+        mock_create_manager.return_value.index_document.return_value = 5
+
+        count = refresh_fetched_guru_knowledge()
+
+        assert count == 5
+        mock_create_manager.return_value.index_document.assert_called_once_with(
+            Path("docs/guru_knowledge/niwes/fetched/a.md")
+        )
+
+    @patch("finance_ai.core.bootstrap.refresh_fetched_guru_knowledge")
+    def test_background_refresh_never_raises(self, mock_refresh: MagicMock) -> None:
+        """A failed refresh is logged; the running API is unaffected."""
+        mock_refresh.side_effect = RuntimeError("network down")
+
+        thread = start_guru_refresh_in_background()
+        thread.join(timeout=5)
+
+        assert not thread.is_alive()
+        mock_refresh.assert_called_once()
