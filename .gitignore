@@ -243,3 +243,8 @@ CLAUDE.md
 PROJECT_SPEC.md
 websitehosting.md
 docs/thesis-roadmap.md
+
+# Guru fetcher output (review before promoting to docs/guru_knowledge/)
+data/guru_raw/
+data/guru_clean/
+docs/guru_knowledge/*/fetched/

@@ -73,3 +73,46 @@ class TestConversationCRUD:
         test_session.commit()
         latest = crud.get_latest_by_user(test_session, sample_user.id)
         assert latest is None
+
+
+class TestConversationKind:
+    """Guru chats are kept apart from the main chat list."""
+
+    def test_new_conversation_defaults_to_chat_kind(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """Existing callers keep creating normal chats."""
+        conv = ConversationCRUD().create(test_session, user_id=sample_user.id, title="แชท")
+
+        assert conv.kind == "chat"
+        assert conv.guru_id is None
+
+    def test_get_active_by_user_filters_by_kind(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """Each tab only lists its own conversations."""
+        crud = ConversationCRUD()
+        crud.create(test_session, user_id=sample_user.id, title="แชท")
+        crud.create(
+            test_session, user_id=sample_user.id, title="กูรู", kind="guru", guru_id="dalio"
+        )
+
+        chat_titles = [conv.title for conv in crud.get_active_by_user(test_session, sample_user.id)]
+        guru_titles = [
+            conv.title
+            for conv in crud.get_active_by_user(test_session, sample_user.id, kind="guru")
+        ]
+
+        assert chat_titles == ["แชท"]
+        assert guru_titles == ["กูรู"]
+
+    def test_get_latest_by_user_ignores_guru_chats(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """Main-chat continuity never resumes a guru conversation."""
+        crud = ConversationCRUD()
+        crud.create(
+            test_session, user_id=sample_user.id, title="กูรู", kind="guru", guru_id="dalio"
+        )
+
+        assert crud.get_latest_by_user(test_session, sample_user.id) is None

@@ -456,6 +456,21 @@ class TestStreamAgentResponseFallback:
         assert "5,000 บาท" in token_events[0].content
         mock_graph.invoke.assert_not_called()
 
+    def test_fallback_keeps_extra_state_keys(self) -> None:
+        """Agent-specific keys such as guru_id survive the invoke fallback."""
+        from langchain_core.messages import AIMessage
+
+        mock_graph = MagicMock()
+        mock_graph.stream.return_value = iter([])
+        mock_graph.invoke.return_value = {"messages": [AIMessage(content="ตอบแล้ว")]}
+        input_state = {"messages": [("user", "q")], "user_id": "u1", "guru_id": "dalio"}
+
+        list(stream_agent_response(mock_graph, input_state, "guru:dalio"))
+
+        fallback_state = mock_graph.invoke.call_args.args[0]
+        assert fallback_state["guru_id"] == "dalio"
+        assert fallback_state["messages"] == [("user", "q")]
+
 
 class TestInvokeAndExtract:
     """Tests for _invoke_and_extract."""

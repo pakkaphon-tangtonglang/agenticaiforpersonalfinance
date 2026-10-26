@@ -16,7 +16,7 @@ from finance_ai.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-_COPIED_FILES = ("index.html", "styles.css", "app.js")
+_COPIED_FILES = ("index.html", "styles.css", "app.js", "guru.js")
 
 
 def _validate_api_base_url(api_base_url: str) -> None:
@@ -69,7 +69,7 @@ def bundle_frontend(
 
     Args:
         api_base_url: HTTPS backend base URL written into config.js.
-        source_dir: Directory holding index.html, styles.css, app.js.
+        source_dir: Directory holding index.html, styles.css, app.js, guru.js.
         output_dir: Bundle destination (created when missing).
 
     Returns:

@@ -155,11 +155,11 @@ class TestAssetFetchCardsAndWatchlist:
     client: TestClient = TestClient(app)
 
     def test_index_cache_busts_static_assets_with_one_version(self) -> None:
-        """styles.css, config.js and app.js share the same ?v= cache-buster."""
+        """styles.css, config.js, app.js and guru.js share the same ?v= cache-buster."""
         response = self.client.get("/")
         versions = {
             re.search(rf'{asset}\?v=(\d+)"', response.text).group(1)  # type: ignore[union-attr]
-            for asset in (r"styles\.css", r"config\.js", r"app\.js")
+            for asset in (r"styles\.css", r"config\.js", r"app\.js", r"guru\.js")
         }
         assert len(versions) == 1, f"static assets use different versions: {versions}"
         assert "?v=4" not in response.text
@@ -366,3 +366,65 @@ class TestChatMessageFormatting:
         assert "function normalizeForChat" in response.text
         assert "normalizeForChat(text)" in response.text
         assert "\\n{3,}" in response.text
+
+
+class TestGuruTab:
+    """Tests for the Guru tab markup and script."""
+
+    client: TestClient = TestClient(app)
+
+    def test_guru_nav_and_view_exist(self) -> None:
+        """The sidebar links to a Guru view with a persistent disclaimer."""
+        html = self.client.get("/").text
+        assert 'data-view="guru"' in html
+        assert 'id="view-guru"' in html
+        assert "ไม่ใช่คำพูดหรือคำแนะนำจากบุคคลจริง" in html
+        assert 'data-mode="panel"' in html
+
+    def test_guru_js_served_and_wired(self) -> None:
+        """guru.js calls the guru endpoints and registers GuruView."""
+        response = self.client.get("/static/guru.js")
+        assert response.status_code == 200
+        js = response.text
+        assert "/guru/chat/stream" in js
+        assert "/guru/panel/stream" in js
+        assert "window.GuruView" in js
+        assert 'kind: "guru"' in js
+
+    def test_app_js_exposes_bridge_and_opens_guru_view(self) -> None:
+        """app.js shares helpers with guru.js and opens it on view switch."""
+        js = self.client.get("/static/app.js").text
+        assert "window.FinanceApp" in js
+        assert "window.GuruView.open()" in js
+
+
+class TestChatAttachment:
+    """Tests for attaching slips/receipts/bank files inside the chat."""
+
+    client: TestClient = TestClient(app)
+
+    def test_both_chat_boxes_have_attach_button_and_file_input(self) -> None:
+        """Hero and thread composers each get a 📎 button sharing one file input."""
+        html = self.client.get("/").text
+        assert html.count("data-attach") == 2
+        assert 'id="chatFileInput"' in html
+        assert 'accept="image/*,.pdf,.csv,.xlsx"' in html
+
+    def test_app_js_reuses_upload_endpoints_and_saves_history(self) -> None:
+        """Chat attachments use the existing upload/confirm flow plus the history note."""
+        js = self.client.get("/static/app.js").text
+        assert "function attachFileInChat" in js
+        assert "/upload/receipt" in js and "/upload/bank-statement" in js
+        assert "/transactions/confirm" in js
+        assert "/attachments" in js
+        assert 'upload: { label: "แนบไฟล์"' in js
+
+    def test_upload_tab_uses_plain_wording(self) -> None:
+        """The original tab stays, renamed with easier words."""
+        html = self.client.get("/").text
+        assert 'id="view-upload"' in html
+        assert "เพิ่มรายการจากไฟล์" in html
+        assert "ถ่าย/แนบสลิป-ใบเสร็จ" in html
+        assert "ไฟล์จากแอปธนาคาร" in html
+        assert "เช็กให้ถูกก่อนบันทึก" in html
+        assert "นำเข้าเอกสาร" not in html

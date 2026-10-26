@@ -22,6 +22,10 @@ class Conversation(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False, default="แชทใหม่")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    kind: Mapped[str] = mapped_column(
+        String(20), default="chat", server_default="chat", nullable=False
+    )
+    guru_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
     user: Mapped["User"] = relationship(back_populates="conversations")
     messages: Mapped[list["ConversationMessage"]] = relationship(

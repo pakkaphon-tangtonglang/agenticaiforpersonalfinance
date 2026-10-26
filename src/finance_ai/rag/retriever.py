@@ -53,6 +53,27 @@ class FinanceRetriever:
         """
         return self._vector_store.search(query=query, top_k=self._top_k, domain_filter=domain)
 
+    def retrieve_by_metadata(
+        self,
+        query: str,
+        metadata_filter: dict[str, str],
+    ) -> list[RetrievalResult]:
+        """Retrieve documents whose metadata matches every given pair.
+
+        Args:
+            query: Natural language search query.
+            metadata_filter: Exact-match metadata, e.g. {"guru_id": "buffett"}.
+
+        Returns:
+            List of RetrievalResult objects sorted by relevance.
+
+        Example:
+            >>> results = retriever.retrieve_by_metadata("ตลาดตก", {"guru_id": "buffett"})
+        """
+        return self._vector_store.search(
+            query=query, top_k=self._top_k, metadata_filter=metadata_filter
+        )
+
     def retrieve_as_context(
         self,
         query: str,
@@ -73,10 +94,24 @@ class FinanceRetriever:
         results = self.retrieve(query, domain=domain)
         if not results:
             return ""
-        return _format_results_as_context(results)
+        return format_results_as_context(results)
 
 
-def _format_results_as_context(results: list[RetrievalResult]) -> str:
+def _format_source_label(result: RetrievalResult) -> str:
+    """Build the source label, appending the public URL when known.
+
+    Args:
+        result: A retrieval result.
+
+    Returns:
+        'file' or 'file | url'.
+    """
+    if result.source_url:
+        return f"{result.source_file} | {result.source_url}"
+    return result.source_file
+
+
+def format_results_as_context(results: list[RetrievalResult]) -> str:
     """Format retrieval results into a context string with source attribution.
 
     Args:
@@ -84,6 +119,12 @@ def _format_results_as_context(results: list[RetrievalResult]) -> str:
 
     Returns:
         Formatted string with source headers and content.
+
+    Example:
+        >>> format_results_as_context(results)
+        '[แหล่งที่มา: tax_guide.md]\\nค่าลดหย่อน...'
     """
-    sections = [f"[แหล่งที่มา: {result.source_file}]\n{result.content}" for result in results]
+    sections = [
+        f"[แหล่งที่มา: {_format_source_label(result)}]\n{result.content}" for result in results
+    ]
     return "\n\n".join(sections)

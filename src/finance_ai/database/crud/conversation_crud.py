@@ -40,12 +40,15 @@ class ConversationCRUD(BaseCRUD[Conversation]):
         )
         return list(session.execute(statement).scalars().all())
 
-    def get_active_by_user(self, session: Session, user_id: str) -> list[Conversation]:
-        """Get active conversations for a user.
+    def get_active_by_user(
+        self, session: Session, user_id: str, kind: str = "chat"
+    ) -> list[Conversation]:
+        """Get active conversations of one kind for a user.
 
         Args:
             session: Database session.
             user_id: UUID of the user.
+            kind: Conversation kind ("chat" for the main tab, "guru" for the Guru tab).
 
         Returns:
             List of active Conversation instances.
@@ -55,17 +58,21 @@ class ConversationCRUD(BaseCRUD[Conversation]):
             .where(
                 Conversation.user_id == user_id,
                 Conversation.is_active.is_(True),
+                Conversation.kind == kind,
             )
             .order_by(Conversation.updated_at.desc())
         )
         return list(session.execute(statement).scalars().all())
 
-    def get_latest_by_user(self, session: Session, user_id: str) -> Optional[Conversation]:
-        """Get the most recently updated active conversation.
+    def get_latest_by_user(
+        self, session: Session, user_id: str, kind: str = "chat"
+    ) -> Optional[Conversation]:
+        """Get the most recently updated active conversation of one kind.
 
         Args:
             session: Database session.
             user_id: UUID of the user.
+            kind: Conversation kind (defaults to the main chat).
 
         Returns:
             Latest active Conversation or None.
@@ -75,6 +82,7 @@ class ConversationCRUD(BaseCRUD[Conversation]):
             .where(
                 Conversation.user_id == user_id,
                 Conversation.is_active.is_(True),
+                Conversation.kind == kind,
             )
             .order_by(Conversation.updated_at.desc())
             .limit(1)

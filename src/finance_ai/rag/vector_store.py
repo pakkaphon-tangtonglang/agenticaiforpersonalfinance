@@ -71,6 +71,7 @@ class FinanceVectorStore:
         query: str,
         top_k: int = 3,
         domain_filter: str | None = None,
+        metadata_filter: dict[str, str] | None = None,
     ) -> list[RetrievalResult]:
         """Search for relevant chunks by similarity.
 
@@ -78,6 +79,7 @@ class FinanceVectorStore:
             query: Natural language search query.
             top_k: Maximum number of results to return.
             domain_filter: Optional domain to filter results (e.g., "tax").
+            metadata_filter: Optional exact-match metadata (e.g., {"guru_id": "buffett"}).
 
         Returns:
             List of RetrievalResult objects sorted by relevance.
@@ -86,8 +88,9 @@ class FinanceVectorStore:
             >>> results = store.search("ค่าลดหย่อน", domain_filter="tax")
         """
         kwargs: dict[str, Any] = {"query": query, "k": top_k}
-        if domain_filter:
-            kwargs["filter"] = {"domain": domain_filter}
+        chroma_filter = _build_chroma_filter(domain_filter, metadata_filter)
+        if chroma_filter:
+            kwargs["filter"] = chroma_filter
         docs_with_scores = self._store.similarity_search_with_score(**kwargs)
         return _convert_search_results(docs_with_scores)
 
@@ -112,6 +115,59 @@ class FinanceVectorStore:
         return int(self._store._collection.count())
 
 
+def _build_chroma_filter(
+    domain_filter: str | None,
+    metadata_filter: dict[str, str] | None,
+) -> dict[str, Any] | None:
+    """Combine domain and metadata filters into one Chroma where-clause.
+
+    Args:
+        domain_filter: Optional domain value.
+        metadata_filter: Optional exact-match metadata pairs.
+
+    Returns:
+        A single condition, an "$and" of several, or None when empty.
+
+    Example:
+        >>> _build_chroma_filter("guru", {"guru_id": "dalio"})
+        {'$and': [{'domain': 'guru'}, {'guru_id': 'dalio'}]}
+    """
+    conditions: list[dict[str, Any]] = []
+    if domain_filter:
+        conditions.append({"domain": domain_filter})
+    for key, value in (metadata_filter or {}).items():
+        conditions.append({key: value})
+    if not conditions:
+        return None
+    if len(conditions) == 1:
+        return conditions[0]
+    return {"$and": conditions}
+
+
+def _chunk_to_chroma_metadata(chunk: DocumentChunk) -> dict[str, str]:
+    """Build Chroma metadata for one chunk, skipping unset optional fields.
+
+    Chroma rejects None values, so guru_id and source_url are only
+    included when present.
+
+    Args:
+        chunk: The chunk to describe.
+
+    Returns:
+        Flat string metadata dict.
+    """
+    metadata = {
+        "source_file": chunk.metadata.source_file,
+        "domain": chunk.metadata.domain,
+        "title": chunk.metadata.title,
+    }
+    if chunk.metadata.guru_id:
+        metadata["guru_id"] = chunk.metadata.guru_id
+    if chunk.metadata.source_url:
+        metadata["source_url"] = chunk.metadata.source_url
+    return metadata
+
+
 def _prepare_chunk_data(
     chunks: list[DocumentChunk],
 ) -> tuple[list[str], list[dict[str, str]], list[str]]:
@@ -124,14 +180,7 @@ def _prepare_chunk_data(
         Tuple of (texts, metadatas, ids).
     """
     texts = [chunk.content for chunk in chunks]
-    metadatas = [
-        {
-            "source_file": chunk.metadata.source_file,
-            "domain": chunk.metadata.domain,
-            "title": chunk.metadata.title,
-        }
-        for chunk in chunks
-    ]
+    metadatas = [_chunk_to_chroma_metadata(chunk) for chunk in chunks]
     ids = [chunk.chunk_id for chunk in chunks]
     return texts, metadatas, ids
 
@@ -153,6 +202,8 @@ def _convert_search_results(
             source_file=doc.metadata.get("source_file", ""),
             domain=doc.metadata.get("domain", "general"),
             relevance_score=score,
+            guru_id=doc.metadata.get("guru_id"),
+            source_url=doc.metadata.get("source_url"),
         )
         for doc, score in docs_with_scores
     ]

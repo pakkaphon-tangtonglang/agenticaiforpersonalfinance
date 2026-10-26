@@ -476,3 +476,59 @@ class EvaluationReport(BaseModel):
     quality: QualityAggregateResult | None = None
     recommendation_safety: RecommendationSafetyAggregateResult | None = None
     performance: PerformanceAggregateResult | None = None
+
+
+# =============================================================================
+# Guru persona evaluation (deterministic checks + optional judge)
+# =============================================================================
+
+
+class GuruEvalCase(EvaluationCase):
+    """One question asked to one guru persona.
+
+    Attributes:
+        guru_id: Persona id (e.g. "buffett").
+        expect_decline: True when the topic is on the persona's avoid list.
+    """
+
+    guru_id: str = Field(min_length=1)
+    expect_decline: bool = Field(default=False)
+
+
+class GuruEvalDataset(BaseModel):
+    """Dataset of guru persona evaluation cases."""
+
+    name: str
+    version: str
+    cases: list[GuruEvalCase]
+
+
+class GuruEvalResult(BaseModel):
+    """Outcome of one guru case.
+
+    Attributes:
+        case_id: Case identifier.
+        guru_id: Persona evaluated.
+        failures: Deterministic failure codes (empty means pass).
+        persona_score: Judge score 1-5, or None when no judge was used.
+    """
+
+    case_id: str
+    guru_id: str
+    failures: list[str] = Field(default_factory=list)
+    persona_score: int | None = Field(default=None, ge=1, le=5)
+
+    @property
+    def passed(self) -> bool:
+        """True when no deterministic check failed."""
+        return not self.failures
+
+
+class GuruEvalSummary(BaseModel):
+    """Aggregate guru evaluation metrics."""
+
+    total_cases: int
+    pass_rate: Decimal
+    failure_counts: dict[str, int]
+    mean_persona_score: Decimal | None
+    results: list[GuruEvalResult]

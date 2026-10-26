@@ -189,6 +189,21 @@ class Settings(BaseSettings):
     rag_knowledge_base_directory: str = Field(
         default="docs/knowledge_base", description="Directory containing knowledge base documents"
     )
+    rag_guru_collection_name: str = Field(
+        default="guru_knowledge", description="ChromaDB collection for guru persona documents"
+    )
+    rag_guru_gap_distance_threshold: float = Field(
+        default=1.0,
+        ge=0.0,
+        description=(
+            "Chroma distance above which a guru search counts as a knowledge gap"
+            " (lower distance = closer). Tune from logged best_distance values."
+        ),
+    )
+    rag_guru_knowledge_directory: str = Field(
+        default="docs/guru_knowledge",
+        description="Directory holding one subfolder of documents per guru",
+    )
 
     # API
     api_host: str = Field(default="127.0.0.1", description="API host")  # nosec B104

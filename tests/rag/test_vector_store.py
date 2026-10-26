@@ -181,3 +181,97 @@ class TestGetDocumentCount:
         mock_chroma.return_value._collection = mock_collection
         store = FinanceVectorStore(embeddings=mock_embeddings)
         assert store.get_document_count() == 42
+
+
+@pytest.fixture
+def guru_chunk() -> DocumentChunk:
+    """Create a chunk from a guru knowledge document."""
+    metadata = DocumentMetadata(
+        source_file="letter_2008.md",
+        domain="guru",
+        title="Berkshire 2008 Letter",
+        guru_id="buffett",
+        source_url="https://example.com/2008.pdf",
+    )
+    return DocumentChunk(chunk_id="g0", content="Be fearful", metadata=metadata, chunk_index=0)
+
+
+class TestGuruMetadata:
+    """Tests for guru_id and source_url metadata handling."""
+
+    @patch("finance_ai.rag.vector_store.Chroma")
+    def test_add_chunks_stores_guru_fields(
+        self, mock_chroma: MagicMock, mock_embeddings: MagicMock, guru_chunk: DocumentChunk
+    ) -> None:
+        """guru_id and source_url are written to Chroma metadata."""
+        store = FinanceVectorStore(embeddings=mock_embeddings)
+
+        store.add_chunks([guru_chunk])
+
+        stored_metadata = mock_chroma.return_value.add_texts.call_args.kwargs["metadatas"][0]
+        assert stored_metadata["guru_id"] == "buffett"
+        assert stored_metadata["source_url"] == "https://example.com/2008.pdf"
+
+    @patch("finance_ai.rag.vector_store.Chroma")
+    def test_add_chunks_omits_empty_guru_fields(
+        self,
+        mock_chroma: MagicMock,
+        mock_embeddings: MagicMock,
+        sample_chunks: list[DocumentChunk],
+    ) -> None:
+        """Chroma rejects None values, so unset fields are left out."""
+        store = FinanceVectorStore(embeddings=mock_embeddings)
+
+        store.add_chunks(sample_chunks)
+
+        stored_metadata = mock_chroma.return_value.add_texts.call_args.kwargs["metadatas"][0]
+        assert "guru_id" not in stored_metadata
+        assert "source_url" not in stored_metadata
+
+    @patch("finance_ai.rag.vector_store.Chroma")
+    def test_search_with_metadata_filter(
+        self, mock_chroma: MagicMock, mock_embeddings: MagicMock
+    ) -> None:
+        """A metadata filter is passed straight to Chroma."""
+        mock_chroma.return_value.similarity_search_with_score.return_value = []
+        store = FinanceVectorStore(embeddings=mock_embeddings)
+
+        store.search("query", metadata_filter={"guru_id": "buffett"})
+
+        call_kwargs = mock_chroma.return_value.similarity_search_with_score.call_args.kwargs
+        assert call_kwargs["filter"] == {"guru_id": "buffett"}
+
+    @patch("finance_ai.rag.vector_store.Chroma")
+    def test_search_combines_domain_and_metadata_filters(
+        self, mock_chroma: MagicMock, mock_embeddings: MagicMock
+    ) -> None:
+        """Two filters are combined with Chroma's $and operator."""
+        mock_chroma.return_value.similarity_search_with_score.return_value = []
+        store = FinanceVectorStore(embeddings=mock_embeddings)
+
+        store.search("query", domain_filter="guru", metadata_filter={"guru_id": "dalio"})
+
+        call_kwargs = mock_chroma.return_value.similarity_search_with_score.call_args.kwargs
+        assert call_kwargs["filter"] == {"$and": [{"domain": "guru"}, {"guru_id": "dalio"}]}
+
+    @patch("finance_ai.rag.vector_store.Chroma")
+    def test_search_results_carry_guru_fields(
+        self, mock_chroma: MagicMock, mock_embeddings: MagicMock
+    ) -> None:
+        """Results expose guru_id and source_url from stored metadata."""
+        document = MagicMock(
+            page_content="Be fearful",
+            metadata={
+                "source_file": "letter_2008.md",
+                "domain": "guru",
+                "guru_id": "buffett",
+                "source_url": "https://example.com/2008.pdf",
+            },
+        )
+        mock_chroma.return_value.similarity_search_with_score.return_value = [(document, 0.4)]
+        store = FinanceVectorStore(embeddings=mock_embeddings)
+
+        results = store.search("query")
+
+        assert results[0].guru_id == "buffett"
+        assert results[0].source_url == "https://example.com/2008.pdf"

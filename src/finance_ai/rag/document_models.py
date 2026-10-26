@@ -13,6 +13,8 @@ class DocumentMetadata(BaseModel):
         domain: Knowledge domain for filtering retrieval results.
         title: Human-readable document title.
         language: Document language code.
+        guru_id: Persona id for guru knowledge documents, else None.
+        source_url: Public URL the document was taken from, if any.
 
     Example:
         >>> metadata = DocumentMetadata(
@@ -23,9 +25,11 @@ class DocumentMetadata(BaseModel):
     """
 
     source_file: str
-    domain: Literal["tax", "expense", "investment", "general"]
+    domain: Literal["tax", "expense", "investment", "general", "guru"]
     title: str
     language: str = Field(default="th")
+    guru_id: str | None = None
+    source_url: str | None = None
 
 
 class DocumentChunk(BaseModel):
@@ -60,6 +64,8 @@ class RetrievalResult(BaseModel):
         source_file: Original source filename.
         domain: Knowledge domain of the result.
         relevance_score: Similarity or distance score (higher is more relevant).
+        guru_id: Persona id when the result comes from the guru knowledge base.
+        source_url: Public URL of the source document, if any.
 
     Example:
         >>> result = RetrievalResult(
@@ -74,3 +80,5 @@ class RetrievalResult(BaseModel):
     source_file: str
     domain: str
     relevance_score: float = Field(ge=0.0)
+    guru_id: str | None = None
+    source_url: str | None = None

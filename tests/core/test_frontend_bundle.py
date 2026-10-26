@@ -22,7 +22,7 @@ class TestBundleFrontend:
     """Tests for building the iHost upload folder."""
 
     def test_bundles_all_static_files(self, static_dir: Path, tmp_path: Path) -> None:
-        """index.html, styles.css, and app.js are copied into the bundle."""
+        """index.html, styles.css, app.js and guru.js are copied into the bundle."""
         output = tmp_path / "bundle"
 
         copied = bundle_frontend(
@@ -32,7 +32,7 @@ class TestBundleFrontend:
         )
 
         copied_names = {path.name for path in copied}
-        assert copied_names == {"index.html", "styles.css", "app.js", "config.js"}
+        assert copied_names == {"index.html", "styles.css", "app.js", "guru.js", "config.js"}
         for name in copied_names:
             assert (output / name).exists()
 

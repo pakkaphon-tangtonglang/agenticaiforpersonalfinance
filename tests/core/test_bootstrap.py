@@ -10,7 +10,9 @@ from unittest.mock import MagicMock, patch
 
 from finance_ai.core.bootstrap import (
     _DEFAULT_ALEMBIC_CONFIG,
+    index_guru_knowledge_if_empty,
     index_knowledge_base_if_empty,
+    rebuild_guru_knowledge,
     run_bootstrap,
     run_migrations,
 )
@@ -70,21 +72,30 @@ class TestIndexKnowledgeBaseIfEmpty:
 class TestRunBootstrap:
     """Tests for the full bootstrap sequence."""
 
+    @patch("finance_ai.core.bootstrap.index_guru_knowledge_if_empty")
     @patch("finance_ai.core.bootstrap.index_knowledge_base_if_empty")
     @patch("finance_ai.core.bootstrap.run_migrations")
     def test_runs_migrations_then_indexing(
-        self, mock_migrations: MagicMock, mock_indexing: MagicMock
+        self,
+        mock_migrations: MagicMock,
+        mock_indexing: MagicMock,
+        mock_guru_indexing: MagicMock,
     ) -> None:
         """Bootstrap applies migrations first, then indexes the knowledge base."""
         run_bootstrap()
 
         mock_migrations.assert_called_once()
         mock_indexing.assert_called_once()
+        mock_guru_indexing.assert_called_once()
 
+    @patch("finance_ai.core.bootstrap.index_guru_knowledge_if_empty")
     @patch("finance_ai.core.bootstrap.index_knowledge_base_if_empty")
     @patch("finance_ai.core.bootstrap.run_migrations")
     def test_survives_rag_indexing_failure(
-        self, mock_migrations: MagicMock, mock_indexing: MagicMock
+        self,
+        mock_migrations: MagicMock,
+        mock_indexing: MagicMock,
+        mock_guru_indexing: MagicMock,
     ) -> None:
         """A RAG indexing error never blocks startup (hosted API must still boot).
 
@@ -97,3 +108,60 @@ class TestRunBootstrap:
         run_bootstrap()
 
         mock_migrations.assert_called_once()
+        mock_guru_indexing.assert_called_once()
+
+
+class TestIndexGuruKnowledgeIfEmpty:
+    """Tests for indexing the separate guru collection."""
+
+    @patch("finance_ai.core.bootstrap.create_knowledge_base_manager")
+    def test_indexes_guru_folders_into_guru_collection(
+        self, mock_create_manager: MagicMock
+    ) -> None:
+        """Guru docs go to their own collection, read recursively."""
+        mock_manager = MagicMock()
+        mock_manager.get_document_count.return_value = 0
+        mock_manager.index_directory.return_value = 7
+        mock_create_manager.return_value = mock_manager
+
+        with patch("finance_ai.core.bootstrap.get_settings") as mock_settings:
+            mock_settings.return_value.rag_guru_collection_name = "guru_knowledge"
+            mock_settings.return_value.rag_guru_knowledge_directory = "docs/guru_knowledge"
+            count = index_guru_knowledge_if_empty()
+
+        assert count == 7
+        assert mock_create_manager.call_args.kwargs["collection_name"] == "guru_knowledge"
+        mock_manager.index_directory.assert_called_once_with(
+            Path("docs/guru_knowledge"), recursive=True
+        )
+
+    @patch("finance_ai.core.bootstrap.create_knowledge_base_manager")
+    def test_skips_when_guru_store_populated(self, mock_create_manager: MagicMock) -> None:
+        """A populated guru collection is not re-embedded on boot."""
+        mock_manager = MagicMock()
+        mock_manager.get_document_count.return_value = 5
+        mock_create_manager.return_value = mock_manager
+
+        with patch("finance_ai.core.bootstrap.get_settings"):
+            count = index_guru_knowledge_if_empty()
+
+        assert count == 0
+        mock_manager.index_directory.assert_not_called()
+
+
+class TestRebuildGuruKnowledge:
+    """Tests for the explicit rebuild used by make guru-index."""
+
+    @patch("finance_ai.core.bootstrap.create_knowledge_base_manager")
+    def test_rebuild_clears_and_reindexes(self, mock_create_manager: MagicMock) -> None:
+        """Rebuild always re-embeds so new or edited guru docs are picked up."""
+        mock_create_manager.return_value.rebuild_index.return_value = 12
+
+        with patch("finance_ai.core.bootstrap.get_settings") as mock_settings:
+            mock_settings.return_value.rag_guru_knowledge_directory = "docs/guru_knowledge"
+            count = rebuild_guru_knowledge()
+
+        assert count == 12
+        mock_create_manager.return_value.rebuild_index.assert_called_once_with(
+            Path("docs/guru_knowledge"), recursive=True
+        )

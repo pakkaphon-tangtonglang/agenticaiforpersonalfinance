@@ -23,6 +23,7 @@ _BUILDER_MAP: dict[str, str] = {
     "planning": "finance_ai.agents.planning_agent",
     "recommendation": "finance_ai.agents.recommendation_agent",
     "report": "finance_ai.agents.report_agent",
+    "guru": "finance_ai.agents.guru_agent",
 }
 
 _BUILDER_FN: dict[str, str] = {
@@ -32,6 +33,7 @@ _BUILDER_FN: dict[str, str] = {
     "planning": "build_planning_agent_graph",
     "recommendation": "build_recommendation_agent_graph",
     "report": "build_report_agent_graph",
+    "guru": "build_guru_agent_graph",
 }
 
 

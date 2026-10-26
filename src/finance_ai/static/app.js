@@ -20,6 +20,7 @@
     general: { label: "ทั่วไป", icon: "💬", color: "#72706b" },
     general_chat: { label: "แชททั่วไป", icon: "💬", color: "#72706b" },
     clarify: { label: "ขอข้อมูลเพิ่ม", icon: "🤔", color: "#8a7a5a" },
+    upload: { label: "แนบไฟล์", icon: "📎", color: "#4a6b3a" },
     unknown: { label: "ไม่ทราบ", icon: "❓", color: "#92918b" },
     error: { label: "ข้อผิดพลาด", icon: "⚠️", color: "#a8442c" },
   };
@@ -266,7 +267,7 @@
   // ─── View switching ───
   const VIEW_TITLES = {
     chat: "แชท", dashboard: "แดชบอร์ด",
-    upload: "นำเข้าเอกสาร", assets: "สินทรัพย์",
+    upload: "เพิ่มรายการจากไฟล์", assets: "สินทรัพย์", guru: "กูรู",
   };
   function switchView(name) {
     document.querySelectorAll(".view").forEach((v) => v.classList.remove("is-active"));
@@ -276,6 +277,7 @@
     $("minibarTitle").textContent = VIEW_TITLES[name] || name;
     if (name === "assets") { loadNotifications(); loadWatchlist(); }
     if (name === "dashboard") loadDashboard();
+    if (name === "guru" && window.GuruView) window.GuruView.open();
     if (window.innerWidth <= 760) $("sidebar").classList.remove("open");
   }
 
@@ -895,7 +897,7 @@
  else if (uploadMode === "bank" && !isScanFile(file)) await importBankStatement(file);
  else toast("ประเภทไฟล์ไม่ตรงกับโหมดที่เลือก", true);
  } catch (e) {
- toast("นำเข้าไม่สำเร็จ: " + e.message, true);
+ toast("บันทึกจากไฟล์ไม่สำเร็จ: " + e.message, true);
  } finally {
  dz.classList.remove("is-loading");
  }
@@ -909,34 +911,42 @@
  });
  const r = $("uploadResult");
  r.hidden = false;
- r.textContent = `นำเข้าสำเร็จ — บันทึก ${res.inserted} จาก ${res.total} รายการ`;
- toast(`นำเข้า ${res.inserted} รายการ`);
+ r.textContent = `บันทึกแล้ว ${res.inserted} จาก ${res.total} รายการ`;
+ toast(`บันทึกแล้ว ${res.inserted} รายการ`);
+  }
+
+  // Send a slip/receipt image or PDF to the OCR endpoint (100 s timeout).
+  async function fetchReceiptDrafts(file) {
+    const form = new FormData();
+    form.append("file", file);
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 100000);
+    try {
+      return await api("POST", "/upload/receipt", {
+        params: { user_id: state.userId }, form, signal: ctl.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   async function scanReceipt(file) {
- const form = new FormData();
- form.append("file", file);
- const ctl = new AbortController();
- const timer = setTimeout(() => ctl.abort(), 100000);
  const hint = $("dropzoneHint");
  const prevHint = hint ? hint.textContent : "";
- if (hint) hint.textContent = "กำลังอ่านเอกสารด้วย AI... อาจใช้เวลาสักครู่";
+ if (hint) hint.textContent = "กำลังอ่านสลิป/ใบเสร็จด้วย AI... อาจใช้เวลาสักครู่";
  try {
- const res = await api("POST", "/upload/receipt", {
- params: { user_id: state.userId }, form, signal: ctl.signal,
- });
+ const res = await fetchReceiptDrafts(file);
  $("uploadResult").hidden = true;
  if (!res.drafts || !res.drafts.length) {
  toast("ไม่สามารถอ่านข้อมูลจากเอกสารได้ ลองถ่ายใหม่อีกครั้ง", true);
  return;
  }
  renderRecheck(res.drafts);
- toast(`AI กรอกให้ ${res.drafts.length} รายการ — ตรวจสอบก่อนบันทึก`);
+ toast(`AI กรอกให้ ${res.drafts.length} รายการ — เช็กให้ถูกก่อนบันทึก`);
  } catch (e) {
  if (e.name === "AbortError") toast("อ่านเอกสารนานเกินไป กรุณาลองอีกครั้ง", true);
  else throw e;
  } finally {
- clearTimeout(timer);
  if (hint) hint.textContent = prevHint;
  }
   }
@@ -1005,8 +1015,8 @@
  onclick: () => row.remove() }, "✕"));
   }
 
-  function collectRecheckRows() {
- return Array.from($("recheckBody").querySelectorAll(".recheck-row")).map(readRecheckRow);
+  function collectRecheckRows(body = $("recheckBody")) {
+ return Array.from(body.querySelectorAll(".recheck-row")).map(readRecheckRow);
   }
 
   function readRecheckRow(row) {
@@ -1057,6 +1067,140 @@
   function clearRecheck() {
  $("recheckBody").innerHTML = "";
  $("recheckArea").hidden = true;
+  }
+
+  // ─── Attach a file in chat (like GPT/Claude) ───
+  // Slip/receipt → AI fills a check card in the chat → "บันทึกเลย" saves.
+  // Bank CSV/XLSX → saved directly. Every attachment is also written into the
+  // conversation history so reopened chats (and the assistant) see it.
+  const BANK_FILE_PATTERN = /\.(csv|xlsx)$/i;
+
+  function setupChatAttach() {
+    const input = $("chatFileInput");
+    document.querySelectorAll("[data-attach]").forEach((btn) =>
+      btn.addEventListener("click", () => { if (!state.streaming) input.click(); }));
+    input.addEventListener("change", () => {
+      const file = input.files[0];
+      input.value = "";
+      if (file) attachFileInChat(file);
+    });
+    setupChatDrop($("view-chat"));
+  }
+
+  function setupChatDrop(view) {
+    const hasFiles = (e) => Array.from(e.dataTransfer?.types || []).includes("Files");
+    ["dragenter", "dragover"].forEach((ev) => view.addEventListener(ev, (e) => {
+      if (hasFiles(e)) { e.preventDefault(); view.classList.add("drag"); }
+    }));
+    ["dragleave", "drop"].forEach((ev) =>
+      view.addEventListener(ev, () => view.classList.remove("drag")));
+    view.addEventListener("drop", (e) => {
+      if (!hasFiles(e)) return;
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (file) attachFileInChat(file);
+    });
+  }
+
+  async function attachFileInChat(file) {
+    if (state.streaming) return;
+    const scan = isScanFile(file);
+    if (!scan && !BANK_FILE_PATTERN.test(file.name || "")) {
+      toast("แนบได้เฉพาะรูปสลิป/ใบเสร็จ, PDF หรือไฟล์ CSV/Excel จากแอปธนาคาร", true);
+      return;
+    }
+    if (state.mode === "hero") enterThreadMode();
+    appendMessage("user", `📎 ${file.name}`);
+    const bubble = appendMessage("assistant",
+      scan ? "กำลังอ่านสลิป/ใบเสร็จด้วย AI… อาจใช้เวลาสักครู่" : "กำลังบันทึกรายการจากไฟล์ธนาคาร…");
+    bubble.classList.add("msg-cursor");
+    state.streaming = true;
+    setComposerDisabled(true);
+    try {
+      await ensureConversation();
+      await (scan ? scanInChat(file, bubble) : importBankInChat(file, bubble));
+    } catch (e) {
+      const reason = e.name === "AbortError" ? "AI อ่านไฟล์นานเกินไป" : "อ่านไฟล์ไม่สำเร็จ";
+      await finishAttachment(file, bubble, `${reason} ลองใหม่อีกครั้งนะ`);
+    } finally {
+      bubble.classList.remove("msg-cursor");
+      state.streaming = false;
+      setComposerDisabled(false);
+    }
+  }
+
+  async function importBankInChat(file, bubble) {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await api("POST", "/upload/bank-statement", { params: { user_id: state.userId }, form });
+    await finishAttachment(file, bubble,
+      `บันทึกแล้ว **${res.inserted}** จาก ${res.total} รายการ จากไฟล์ธนาคาร ดูสรุปได้ที่แดชบอร์ด`);
+  }
+
+  async function scanInChat(file, bubble) {
+    const res = await fetchReceiptDrafts(file);
+    if (!res.drafts || !res.drafts.length) {
+      await finishAttachment(file, bubble, "อ่านข้อมูลจากไฟล์นี้ไม่ได้ ลองถ่ายให้ชัดขึ้นแล้วแนบใหม่นะ");
+      return;
+    }
+    bubble.innerHTML = "";
+    bubble.append(buildChatRecheckCard(file, bubble, res.drafts));
+    $("chatThread").scrollTop = $("chatThread").scrollHeight;
+  }
+
+  function buildChatRecheckCard(file, bubble, drafts) {
+    const body = el("tbody");
+    drafts.forEach((draft) => body.append(buildRecheckRow(draft)));
+    const head = el("thead", {}, el("tr", {},
+      ...["ประเภท", "จำนวนเงิน", "วันที่", "หมวดหมู่", "รายละเอียด", ""].map((h) => el("th", {}, h))));
+    const saveBtn = el("button", { type: "button", class: "btn btn-primary" }, "บันทึกเลย");
+    const cancelBtn = el("button", { type: "button", class: "btn btn-ghost" }, "ยกเลิก");
+    saveBtn.addEventListener("click", () => saveChatRecheck(file, bubble, body, [saveBtn, cancelBtn]));
+    cancelBtn.addEventListener("click", () =>
+      finishAttachment(file, bubble, "ยกเลิกแล้ว ไม่ได้บันทึกรายการจากไฟล์นี้"));
+    return el("div", { class: "chat-recheck" },
+      el("p", { class: "chat-recheck-title" }, `AI กรอกให้ ${drafts.length} รายการ — เช็กให้ถูกก่อนบันทึก`),
+      el("p", { class: "chat-recheck-hint" }, "แก้หรือลบรายการได้ แล้วกด “บันทึกเลย”"),
+      el("div", { class: "recheck-table-wrap" }, el("table", { class: "recheck-table" }, head, body)),
+      el("div", { class: "recheck-actions" }, saveBtn, cancelBtn));
+  }
+
+  async function saveChatRecheck(file, bubble, body, buttons) {
+    const rows = collectRecheckRows(body);
+    if (!rows.length) { toast("ไม่มีรายการให้บันทึก", true); return; }
+    buttons.forEach((b) => { b.disabled = true; });
+    try {
+      const res = await api("POST", "/transactions/confirm", {
+        json: { user_id: state.userId, transactions: rows },
+      });
+      alignDashboardFilterTo(rows);
+      await finishAttachment(file, bubble, savedRowsSummary(res, rows));
+    } catch (e) {
+      toast("บันทึกไม่สำเร็จ: " + e.message, true);
+      buttons.forEach((b) => { b.disabled = false; });
+    }
+  }
+
+  function savedRowsSummary(res, rows) {
+    const lines = rows.map((r) => {
+      const kind = r.transaction_type === "income" ? "รายรับ" : "รายจ่าย";
+      const category = THAI_CATEGORY_LABELS[r.category] || r.category;
+      const amount = Number(r.amount).toLocaleString("th-TH", { minimumFractionDigits: 2 });
+      return `- ${kind} ${amount} บาท · ${category} · ${r.transaction_date}${r.description ? ` · ${r.description}` : ""}`;
+    });
+    return [`บันทึกแล้ว **${res.inserted}** จาก ${res.total} รายการ`, ...lines].join("\n");
+  }
+
+  async function finishAttachment(file, bubble, summary) {
+    bubble.classList.remove("msg-cursor");
+    bubble.innerHTML = renderMarkdown(summary);
+    appendIntentExtras(bubble.closest(".msg"), "upload");
+    if (!state.conversationId) return;
+    try {
+      await api("POST", `/conversations/${state.conversationId}/attachments`, {
+        json: { user_id: state.userId, file_name: file.name || "file", summary },
+      });
+    } catch (e) { /* chat history is best-effort; the transactions are already saved */ }
   }
 
   // ─── Assets ───
@@ -1588,6 +1732,7 @@
     setupComposer();
     setupCategoryNav();
     setupUpload();
+    setupChatAttach();
     setupAssets();
     setupRiskAssessment();
     maybeShowRiskAssessment();
@@ -1596,6 +1741,16 @@
     if (state.conversationId) selectConversation(state.conversationId, "");
     else enterHeroMode();
   }
+
+  // Shared helpers for guru.js (Guru tab), which runs in its own scope.
+  window.FinanceApp = {
+    apiBase: API_BASE,
+    api,
+    el,
+    renderMarkdown,
+    toast,
+    getUserId: () => state.userId,
+  };
 
   document.addEventListener("DOMContentLoaded", init);
 })();
