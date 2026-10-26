@@ -40,6 +40,8 @@ class SourceEntry(BaseModel):
     kind: str = "article"
     title: str | None = None
     note: str | None = None
+    start_marker: str | None = None
+    end_marker: str | None = None
 
     @field_validator("url")
     @classmethod
@@ -149,9 +151,22 @@ def is_allowed_by_robots(url: str, client: httpx.Client) -> bool:
     return parser.can_fetch(USER_AGENT, url)
 
 
+class DownloadedSource(BaseModel):
+    """Text extracted from one fetched source."""
+
+    title: str
+    text: str
+    is_pdf: bool
+
+
+def _is_pdf_response(response: httpx.Response) -> bool:
+    """True when the response is a PDF document."""
+    return "pdf" in response.headers.get("content-type", "") or response.url.path.endswith(".pdf")
+
+
 def _response_to_text(response: httpx.Response) -> tuple[str, str]:
     """Turn an HTML or PDF response into (title, text)."""
-    if "pdf" in response.headers.get("content-type", "") or response.url.path.endswith(".pdf"):
+    if _is_pdf_response(response):
         from pypdf import PdfReader  # pylint: disable=import-outside-toplevel
 
         pages = PdfReader(io.BytesIO(response.content)).pages
@@ -159,8 +174,39 @@ def _response_to_text(response: httpx.Response) -> tuple[str, str]:
     return html_to_text(response.text)
 
 
-def _slug(url: str) -> str:
-    """Filesystem-safe name derived from the URL path."""
+def download_source(entry: SourceEntry, client: httpx.Client) -> DownloadedSource:
+    """Check robots.txt, download one source and extract its text.
+
+    Args:
+        entry: The allowlisted source.
+        client: HTTP client.
+
+    Returns:
+        DownloadedSource with title, text and whether it was a PDF.
+
+    Raises:
+        SourceBlockedError: If robots.txt disallows the URL.
+        httpx.HTTPStatusError: If the download fails.
+
+    Example:
+        >>> download_source(entry, client).is_pdf
+        True
+    """
+    if not is_allowed_by_robots(entry.url, client):
+        raise SourceBlockedError(f"robots.txt disallows fetching {entry.url}")
+    response = client.get(entry.url, follow_redirects=True)
+    response.raise_for_status()
+    title, text = _response_to_text(response)
+    return DownloadedSource(title=title, text=text, is_pdf=_is_pdf_response(response))
+
+
+def source_slug(url: str) -> str:
+    """Filesystem-safe name derived from the URL path.
+
+    Example:
+        >>> source_slug("https://www.finnomena.com/dr-niwes/vi-to-ai")
+        'www_finnomena_com_dr_niwes_vi_to_ai'
+    """
     parts = urlsplit(url)
     raw = f"{parts.netloc}{parts.path}".rstrip("/") or parts.netloc
     return re.sub(r"[^A-Za-z0-9]+", "_", raw).strip("_")[:80]
@@ -201,14 +247,10 @@ def fetch_source(entry: SourceEntry, client: httpx.Client, output_dir: Path) -> 
     Example:
         >>> fetch_source(entry, httpx.Client(), Path("data/guru_raw"))
     """
-    if not is_allowed_by_robots(entry.url, client):
-        raise SourceBlockedError(f"robots.txt disallows fetching {entry.url}")
-    response = client.get(entry.url, follow_redirects=True)
-    response.raise_for_status()
-    title, text = _response_to_text(response)
-    target = output_dir / entry.guru_id / f"{_slug(entry.url)}.md"
+    source = download_source(entry, client)
+    target = output_dir / entry.guru_id / f"{source_slug(entry.url)}.md"
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(_to_markdown(entry, title, text), encoding="utf-8")
+    target.write_text(_to_markdown(entry, source.title, source.text), encoding="utf-8")
     logger.info("Saved %s -> %s", entry.url, target)
     return target
 

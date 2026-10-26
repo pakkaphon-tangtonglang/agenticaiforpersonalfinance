@@ -200,6 +200,13 @@ class Settings(BaseSettings):
             " (lower distance = closer). Tune from logged best_distance values."
         ),
     )
+    guru_fetch_on_startup: bool = Field(
+        default=False,
+        description=(
+            "Fetch allowlisted guru sources in the background after the API starts"
+            " (enable on deploys; the repo stores links only)"
+        ),
+    )
     rag_guru_knowledge_directory: str = Field(
         default="docs/guru_knowledge",
         description="Directory holding one subfolder of documents per guru",

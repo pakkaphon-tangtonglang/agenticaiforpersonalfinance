@@ -2,8 +2,8 @@
 
 Per-site rules cut menus, view counts, tag blocks and "related articles"
 footers, then rejoin Thai text that inline HTML tags split into fragments.
-Unknown sites (e.g. Berkshire PDFs) only lose bare URL lines; they still
-need manual trimming. Output goes to data/guru_clean for human review.
+Sources can also carry their own start/end markers (e.g. one section of a
+Berkshire letter), and PDF text is unwrapped into whole sentences.
 No LLM calls.
 """
 
@@ -15,9 +15,12 @@ import yaml
 from pydantic import BaseModel
 
 from finance_ai.rag.document_loader import parse_front_matter
+from finance_ai.tools.guru_source_fetcher import SourceEntry
 
 FRAGMENT_LENGTH = 40
 _URL_LINE = re.compile(r"^https?://\S+$")
+_PDF_NOISE_LINE = re.compile(r"^(\d+|\*{3,})$")
+_SENTENCE_END = re.compile(r"[.!?:”\")]$")
 
 
 class CleanRule(BaseModel):
@@ -52,6 +55,36 @@ def rule_for_url(url: str) -> CleanRule | None:
     """
     host = urlsplit(url).netloc.removeprefix("www.")
     return SITE_RULES.get(host)
+
+
+def rule_for_entry(entry: SourceEntry) -> CleanRule | None:
+    """Return the entry's own section markers, else its site's rule.
+
+    Example:
+        >>> rule_for_entry(SourceEntry(guru_id="buffett", url=url, start_marker="^The Bet"))
+        CleanRule(start_pattern='^The Bet', start_offset=0, ...)
+    """
+    if entry.start_marker or entry.end_marker:
+        return CleanRule(
+            start_pattern=entry.start_marker, start_offset=0, end_pattern=entry.end_marker
+        )
+    return rule_for_url(entry.url)
+
+
+def markers_found(text: str, rule: CleanRule | None) -> bool:
+    """True when the rule's start marker occurs in the text (or there is none).
+
+    Used to skip a source whose page layout changed instead of indexing
+    the whole page.
+
+    Example:
+        >>> markers_found("a\\nThe Bet\\nb", CleanRule(start_pattern="^The Bet"))
+        True
+    """
+    if rule is None or rule.start_pattern is None:
+        return True
+    pattern = re.compile(rule.start_pattern)
+    return any(pattern.match(line.strip()) for line in text.splitlines())
 
 
 def _start_index(lines: list[str], rule: CleanRule) -> int:
@@ -94,12 +127,35 @@ def _join_fragments(lines: list[str]) -> list[str]:
     return joined
 
 
-def clean_text(text: str, rule: CleanRule | None) -> str:
+def unwrap_pdf_lines(lines: list[str]) -> list[str]:
+    """Rejoin hard-wrapped PDF lines into sentences.
+
+    Drops page numbers and '****' separators, joins hyphenated words, and
+    starts a new line only after sentence-ending punctuation.
+
+    Example:
+        >>> unwrap_pdf_lines(["Invest-", "ment is simple.", "17"])
+        ['Investment is simple.']
+    """
+    out: list[str] = []
+    current = ""
+    for line in lines:
+        if _PDF_NOISE_LINE.match(line):
+            continue
+        current = current[:-1] + line if current.endswith("-") else f"{current} {line}".strip()
+        if _SENTENCE_END.search(line):
+            out.append(current)
+            current = ""
+    return out + [current] if current else out
+
+
+def clean_text(text: str, rule: CleanRule | None, is_pdf: bool = False) -> str:
     """Cut a page's text down to its article body.
 
     Args:
         text: Extracted page text (one block per line).
-        rule: Site rule, or None to only drop bare URL lines.
+        rule: Section rule, or None to only drop bare URL lines.
+        is_pdf: Rejoin hard-wrapped PDF lines instead of HTML fragments.
 
     Returns:
         Cleaned body text. Missing markers keep the whole text.
@@ -113,10 +169,11 @@ def clean_text(text: str, rule: CleanRule | None) -> str:
         start = _start_index(lines, rule)
         lines = lines[start : _end_index(lines, start, rule)]
         lines = [line for line in lines if not _is_dropped(line, rule)]
-        lines = _join_fragments(lines)
     else:
         lines = [line for line in lines if not _URL_LINE.match(line)]
-    return "\n".join(lines)
+    if is_pdf:
+        return "\n".join(unwrap_pdf_lines(lines))
+    return "\n".join(_join_fragments(lines) if rule is not None else lines)
 
 
 def _strip_heading(body: str) -> str:

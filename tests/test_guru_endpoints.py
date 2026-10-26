@@ -294,3 +294,40 @@ class TestGuruConversationOwnership:
 
         assert response.status_code == 404
         assert not panel_calls
+
+
+class TestStartupGuruRefresh:
+    """The background source refresh only starts when enabled."""
+
+    def test_refresh_starts_when_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """GURU_FETCH_ON_STARTUP=true starts the background refresh on startup."""
+        started: list[bool] = []
+        monkeypatch.setattr(
+            "finance_ai.main.start_guru_refresh_in_background", lambda: started.append(True)
+        )
+        monkeypatch.setattr("finance_ai.main.get_settings", lambda: _Settings(True))
+
+        with TestClient(app):
+            pass
+
+        assert started == [True]
+
+    def test_refresh_off_by_default(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Local runs and tests never hit the network on startup."""
+        started: list[bool] = []
+        monkeypatch.setattr(
+            "finance_ai.main.start_guru_refresh_in_background", lambda: started.append(True)
+        )
+        monkeypatch.setattr("finance_ai.main.get_settings", lambda: _Settings(False))
+
+        with TestClient(app):
+            pass
+
+        assert not started
+
+
+class _Settings:  # pylint: disable=too-few-public-methods
+    """Minimal settings stand-in for the startup flag."""
+
+    def __init__(self, guru_fetch_on_startup: bool) -> None:
+        self.guru_fetch_on_startup = guru_fetch_on_startup

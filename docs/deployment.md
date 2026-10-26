@@ -79,6 +79,15 @@ iHost รันได้เฉพาะ PHP จึงใส่ FastAPI ลงไ
 **Bootstrap ทำอะไร** — `scripts/bootstrap_runtime.py` (logic อยู่ใน
 `finance_ai.core.bootstrap`) รันได้ซ้ำได้ (idempotent) ทุกครั้งที่ service เริ่มทำงาน:
 (1) `alembic upgrade head` แล้ว (2) สร้าง RAG index — ข้ามอัตโนมัติถ้ามี index อยู่แล้ว
+(รวม index ของกูรูจากเอกสารสรุปใน `docs/guru_knowledge/`)
+
+**แหล่งข้อมูลกูรู (GURU_FETCH_ON_STARTUP=true)** — repo เก็บแค่ลิงก์ใน
+`docs/gurus/sources.yaml` ไม่เก็บตัวบทความ (repo เป็น public) หลัง API เริ่มทำงาน
+จะมี background thread ดาวน์โหลดลิงก์เหล่านั้น (เคารพ robots.txt, เว้น 1 วินาทีต่อคำขอ)
+ตัดเหลือเฉพาะเนื้อบทความ เขียนลง `docs/guru_knowledge/*/fetched/` แล้ว index เพิ่ม
+— ไม่ทำให้ start ช้าลง ระหว่างนั้นกูรูตอบจากเอกสารสรุปไปก่อน ถ้าเว็บต้นทางเปลี่ยน
+layout หรือดาวน์โหลดไม่ได้ แหล่งนั้นจะถูกข้าม (ดู log) โดยไม่กระทบ API
+ในเครื่องให้ใช้ `make guru-sync` แทน
 
 ### ติดตั้ง Frontend (iHost)
 
