@@ -11,6 +11,7 @@ from finance_ai.rag.document_loader import (
     load_markdown_file,
     load_pdf_file,
     load_text_file,
+    parse_front_matter,
 )
 
 
@@ -229,3 +230,84 @@ class TestDiscoverDocuments:
         paths = discover_documents(tmp_path)
         assert paths[0].name == "a_doc.md"
         assert paths[1].name == "b_doc.md"
+
+
+GURU_MARKDOWN = """\
+---
+guru_id: buffett
+source_title: Berkshire 2008 Letter
+source_url: https://example.com/2008.pdf
+---
+# Be fearful when others are greedy
+
+Body text.
+"""
+
+
+class TestFrontMatter:
+    """Tests for YAML front-matter parsing in markdown files."""
+
+    def test_parse_front_matter_splits_header_and_body(self) -> None:
+        """Front-matter becomes a dict and is removed from the body."""
+        front_matter, body = parse_front_matter(GURU_MARKDOWN)
+
+        assert front_matter["guru_id"] == "buffett"
+        assert body.startswith("# Be fearful")
+
+    def test_parse_front_matter_without_header_returns_empty_dict(self) -> None:
+        """Plain markdown is returned unchanged."""
+        front_matter, body = parse_front_matter("# Title\n\nBody\n")
+
+        assert front_matter == {}
+        assert body == "# Title\n\nBody\n"
+
+    def test_parse_front_matter_rejects_non_mapping(self) -> None:
+        """A front-matter list is reported clearly."""
+        with pytest.raises(ValueError, match="front-matter must be a YAML mapping"):
+            parse_front_matter("---\n- a\n---\nBody\n")
+
+    def test_guru_markdown_gets_guru_metadata(self, tmp_path: Path) -> None:
+        """A guru_id in front-matter sets the guru domain, id, title and url."""
+        file_path = tmp_path / "letter_2008.md"
+        file_path.write_text(GURU_MARKDOWN, encoding="utf-8")
+
+        content, metadata = load_markdown_file(file_path)
+
+        assert metadata.domain == "guru"
+        assert metadata.guru_id == "buffett"
+        assert metadata.source_url == "https://example.com/2008.pdf"
+        assert metadata.title == "Berkshire 2008 Letter"
+        assert "guru_id" not in content
+
+
+class TestDiscoverDocumentsRecursive:
+    """Tests for recursive discovery used by the guru knowledge base."""
+
+    def test_recursive_finds_files_in_subfolders(self, tmp_path: Path) -> None:
+        """Files inside per-guru folders are found when recursive=True."""
+        (tmp_path / "buffett").mkdir()
+        (tmp_path / "buffett" / "a.md").write_text("# A\n", encoding="utf-8")
+        (tmp_path / "top.md").write_text("# Top\n", encoding="utf-8")
+
+        flat_names = [path.name for path in discover_documents(tmp_path)]
+        recursive_names = [path.name for path in discover_documents(tmp_path, recursive=True)]
+
+        assert flat_names == ["top.md"]
+        assert recursive_names == ["a.md", "top.md"]
+
+
+class TestShippedGuruKnowledge:
+    """Every committed guru doc must load with a guru_id matching its folder."""
+
+    def test_all_guru_docs_have_matching_guru_metadata(self) -> None:
+        """Front-matter guru_id equals the folder and each doc has a source URL."""
+        root = Path("docs/guru_knowledge")
+        paths = discover_documents(root, recursive=True)
+
+        guru_folders = {path.relative_to(root).parts[0] for path in paths}
+        assert guru_folders == {"buffett", "dalio", "niwes", "coach_noom"}
+        for path in paths:
+            _, metadata = load_document(path)
+            assert metadata.domain == "guru"
+            assert metadata.guru_id == path.relative_to(root).parts[0]
+            assert metadata.source_url

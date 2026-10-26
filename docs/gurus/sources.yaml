@@ -1,0 +1,72 @@
+# Allowlist for `make guru-fetch`. Only these URLs are downloaded.
+# Rules: public pages only. No Facebook, YouTube, paid books or courses.
+# Output goes to data/guru_raw/<guru_id>/ (gitignored) with reviewed: false.
+# Review each file, trim it to the relevant parts, set reviewed: true, then
+# move it into docs/guru_knowledge/<guru_id>/ and run `make guru-index`.
+# robots.txt checked 2026-10-27: finnomena.com, thairath.co.th, moneycoach.co.th allow crawling.
+sources:
+  # ── Warren Buffett: Berkshire Hathaway (official) ──
+  - guru_id: buffett
+    url: https://www.berkshirehathaway.com/letters/2013ltr.pdf
+    kind: letter
+    title: Berkshire Hathaway 2013 Shareholder Letter
+  - guru_id: buffett
+    url: https://www.berkshirehathaway.com/letters/2017ltr.pdf
+    kind: letter
+    title: Berkshire Hathaway 2017 Shareholder Letter
+  - guru_id: buffett
+    url: https://www.berkshirehathaway.com/ownman.pdf
+    kind: principle
+    title: Berkshire Hathaway Owner's Manual
+
+  # ── Ray Dalio ──
+  # No fetched sources: principles.com and economicprinciples.org pages are
+  # navigation/promos, and the "economic machine" PDF link currently serves the
+  # unrelated "Productivity and Structural Reform" study (checked 2026-10-27).
+  # Dalio relies on the curated summaries in docs/guru_knowledge/dalio/.
+
+  # ── ดร.นิเวศน์ เหมวชิรวรากร: his column on Finnomena ──
+  - guru_id: niwes
+    url: https://www.finnomena.com/dr-niwes/quotes-and-tales-vi
+    kind: article
+  - guru_id: niwes
+    url: https://www.finnomena.com/dr-niwes/value-for-money
+    kind: article
+  - guru_id: niwes
+    url: https://www.finnomena.com/dr-niwes/stock-bubble-burst
+    kind: article
+  - guru_id: niwes
+    url: https://www.finnomena.com/dr-niwes/thai-stocks-flash-sale
+    kind: article
+  - guru_id: niwes
+    url: https://www.finnomena.com/dr-niwes/age45-retire-or-jobless
+    kind: article
+  - guru_id: niwes
+    url: https://www.finnomena.com/dr-niwes/vi-to-ai
+    kind: article
+
+  # ── โค้ชหนุ่ม จักรพงษ์ เมษพันธุ์: official Money Coach blog + talk coverage ──
+  - guru_id: coach_noom
+    url: https://www.moneycoach.co.th/th/blog/%E0%B8%A2%E0%B8%B4%E0%B9%88%E0%B8%87%E0%B9%80%E0%B8%87%E0%B8%B4%E0%B8%99%E0%B8%99%E0%B9%89%E0%B8%AD%E0%B8%A2-%E0%B8%A2%E0%B8%B4%E0%B9%88%E0%B8%87%E0%B8%95%E0%B9%89%E0%B8%AD%E0%B8%87%E0%B8%A7%E0%B8%B2%E0%B8%87%E0%B9%81%E0%B8%9C%E0%B8%99%E0%B8%81%E0%B8%B2%E0%B8%A3%E0%B9%80%E0%B8%87%E0%B8%B4%E0%B8%99
+    kind: article
+    title: ยิ่งเงินน้อย ยิ่งต้องวางแผนการเงิน
+  - guru_id: coach_noom
+    url: https://www.moneycoach.co.th/th/blog/%E0%B8%A7%E0%B8%B4%E0%B8%98%E0%B8%B5%E0%B8%AA%E0%B8%A3%E0%B9%89%E0%B8%B2%E0%B8%87%E0%B8%84%E0%B8%A7%E0%B8%B2%E0%B8%A1%E0%B8%89%E0%B8%A5%E0%B8%B2%E0%B8%94%E0%B8%97%E0%B8%B2%E0%B8%87%E0%B8%81%E0%B8%B2%E0%B8%A3%E0%B9%80%E0%B8%87%E0%B8%B4%E0%B8%99%E0%B9%83%E0%B8%AB%E0%B9%89%E0%B8%95%E0%B8%B1%E0%B8%A7%E0%B9%80%E0%B8%AD%E0%B8%87
+    kind: article
+    title: วิธีสร้างความฉลาดทางการเงินให้ตัวเอง
+  - guru_id: coach_noom
+    url: https://www.moneycoach.co.th/th/blog/%E0%B8%A7%E0%B8%B4%E0%B8%98%E0%B8%B5%E0%B9%81%E0%B8%81%E0%B9%89%E0%B8%AB%E0%B8%99%E0%B8%B5%E0%B9%89%E0%B8%97%E0%B8%B5%E0%B9%88%E0%B8%94%E0%B8%B5%E0%B8%97%E0%B8%B5%E0%B9%88%E0%B8%AA%E0%B8%B8%E0%B8%94-%E0%B8%84%E0%B8%B7%E0%B8%AD-%E0%B8%81%E0%B8%B2%E0%B8%A3%E0%B8%AA%E0%B8%A3%E0%B9%89%E0%B8%B2%E0%B8%87%E0%B8%97%E0%B8%A3%E0%B8%B1%E0%B8%9E%E0%B8%A2%E0%B9%8C%E0%B8%AA%E0%B8%B4%E0%B8%99
+    kind: article
+    title: วิธีแก้หนี้ที่ดีที่สุด คือ การสร้างทรัพย์สิน
+  - guru_id: coach_noom
+    url: https://www.moneycoach.co.th/th/blog/%E0%B8%AD%E0%B8%B4%E0%B8%AA%E0%B8%A3%E0%B8%A0%E0%B8%B2%E0%B8%9E%E0%B8%81%E0%B8%B2%E0%B8%A3%E0%B9%80%E0%B8%87%E0%B8%B4%E0%B8%99%E0%B8%82%E0%B8%AD%E0%B8%87%E0%B8%84%E0%B8%99%E0%B8%97%E0%B8%B3%E0%B8%87%E0%B8%B2%E0%B8%99%E0%B8%9B%E0%B8%A3%E0%B8%B0%E0%B8%88%E0%B8%B3
+    kind: article
+    title: อิสรภาพการเงินของคนทำงานประจำ
+  - guru_id: coach_noom
+    url: https://www.thairath.co.th/money/personal_finance/financial_planning/2888885
+    kind: interview
+    title: "เปิดสมุดการเงิน โค้ชหนุ่ม: 5 ข้อสู่อิสรภาพทางการเงิน (ไทยรัฐ)"
+  - guru_id: coach_noom
+    url: https://www.thairath.co.th/money/personal_finance/financial_planning/2867239
+    kind: interview
+    title: "ถอดรหัสวางแผนการเงินฉบับ โค้ชหนุ่ม (ไทยรัฐ)"

@@ -91,7 +91,9 @@ def stream_agent_response(
 
     # FALLBACK: streaming produced no content → invoke graph with fresh state
     if not full_response.strip():
+        # Keep every input key (e.g. guru_id); only reset messages to the originals.
         fallback_state = {
+            **input_state,
             "messages": original_messages,
             "user_id": input_state.get("user_id", ""),
             "db_session_factory": input_state.get("db_session_factory"),

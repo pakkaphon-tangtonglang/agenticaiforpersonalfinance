@@ -6,6 +6,7 @@ from typing import Any
 import yaml
 
 from finance_ai.evaluation.models import (
+    GuruEvalDataset,
     HallucinationDataset,
     QualityDataset,
     RAGDataset,
@@ -155,3 +156,19 @@ def load_recommendation_safety_dataset(path: str) -> RecommendationSafetyDataset
     """
     data = _load_yaml_file(path)
     return RecommendationSafetyDataset(**data)
+
+
+def load_guru_eval_dataset(path: str) -> GuruEvalDataset:
+    """Load the guru persona evaluation dataset from YAML.
+
+    Args:
+        path: Path to the YAML file.
+
+    Returns:
+        Parsed GuruEvalDataset.
+
+    Example:
+        >>> dataset = load_guru_eval_dataset("data/evaluation/guru_dataset.yaml")
+    """
+    data = _load_yaml_file(path)
+    return GuruEvalDataset(**data)

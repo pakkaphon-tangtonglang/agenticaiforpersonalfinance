@@ -65,11 +65,12 @@ class KnowledgeBaseManager:
         logger.info("Indexed %s: %d chunks", file_path.name, count)
         return count
 
-    def index_directory(self, directory: Path) -> int:
+    def index_directory(self, directory: Path, recursive: bool = False) -> int:
         """Index all documents in a directory.
 
         Args:
             directory: Path to the directory containing documents.
+            recursive: Also index documents in subfolders.
 
         Returns:
             Total number of chunks indexed across all documents.
@@ -77,7 +78,7 @@ class KnowledgeBaseManager:
         Example:
             >>> total = manager.index_directory(Path("docs/knowledge_base"))
         """
-        paths = discover_documents(directory)
+        paths = discover_documents(directory, recursive=recursive)
         total = sum(self.index_document(path) for path in paths)
         logger.info("Indexed %d documents, %d total chunks", len(paths), total)
         return total
@@ -93,11 +94,12 @@ class KnowledgeBaseManager:
         """
         return self._vector_store.get_document_count()
 
-    def rebuild_index(self, directory: Path) -> int:
+    def rebuild_index(self, directory: Path, recursive: bool = False) -> int:
         """Clear the collection and re-index all documents.
 
         Args:
             directory: Path to the directory containing documents.
+            recursive: Also index documents in subfolders.
 
         Returns:
             Total number of chunks indexed after rebuild.
@@ -107,16 +109,18 @@ class KnowledgeBaseManager:
         """
         self._vector_store.clear_collection()
         logger.info("Cleared vector store, rebuilding index")
-        return self.index_directory(directory)
+        return self.index_directory(directory, recursive=recursive)
 
 
 def create_knowledge_base_manager(
     settings: Settings | None = None,
+    collection_name: str | None = None,
 ) -> KnowledgeBaseManager:
     """Create a fully configured KnowledgeBaseManager from settings.
 
     Args:
         settings: Optional settings override. Uses get_settings() if None.
+        collection_name: Optional collection override (e.g. the guru collection).
 
     Returns:
         Configured KnowledgeBaseManager instance.
@@ -130,7 +134,7 @@ def create_knowledge_base_manager(
     vector_store = FinanceVectorStore(
         embeddings=embeddings,
         persist_directory=settings.rag_chroma_persist_directory,
-        collection_name=settings.rag_chroma_collection_name,
+        collection_name=collection_name or settings.rag_chroma_collection_name,
     )
     return KnowledgeBaseManager(
         vector_store=vector_store,

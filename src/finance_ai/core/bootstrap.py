@@ -3,6 +3,7 @@
 Prepares the environment before the API starts:
 1. Applies database migrations (``alembic upgrade head``).
 2. Indexes the RAG knowledge base when the vector store is empty.
+3. Indexes the guru knowledge collection when it is empty.
 
 Idempotent by design: safe to run on every boot, whether the disk is
 fresh (Render free tier wipes it) or already populated.
@@ -63,6 +64,47 @@ def index_knowledge_base_if_empty() -> int:
     return count
 
 
+def index_guru_knowledge_if_empty() -> int:
+    """Index the guru collection (one subfolder per guru) when it is empty.
+
+    Returns:
+        Number of chunks indexed (0 when the collection is already populated).
+
+    Example:
+        >>> count = index_guru_knowledge_if_empty()
+    """
+    settings = get_settings()
+    manager = create_knowledge_base_manager(
+        settings, collection_name=settings.rag_guru_collection_name
+    )
+    if manager.get_document_count() > 0:
+        logger.info("Guru collection already indexed, skipping")
+        return 0
+    directory = Path(settings.rag_guru_knowledge_directory)
+    count = manager.index_directory(directory, recursive=True)
+    logger.info("Indexed guru knowledge: %d chunks", count)
+    return count
+
+
+def rebuild_guru_knowledge() -> int:
+    """Clear and re-index the guru collection so edited docs are picked up.
+
+    Returns:
+        Number of chunks indexed.
+
+    Example:
+        >>> count = rebuild_guru_knowledge()  # make guru-index
+    """
+    settings = get_settings()
+    manager = create_knowledge_base_manager(
+        settings, collection_name=settings.rag_guru_collection_name
+    )
+    directory = Path(settings.rag_guru_knowledge_directory)
+    count = manager.rebuild_index(directory, recursive=True)
+    logger.info("Rebuilt guru knowledge: %d chunks", count)
+    return count
+
+
 def run_bootstrap() -> None:
     """Run the full bootstrap sequence: migrations, then RAG indexing.
 
@@ -91,3 +133,7 @@ def _index_knowledge_base_safely() -> None:
     except Exception as exc:  # pylint: disable=broad-exception-caught
         # Broad by design: API startup must never be blocked by RAG.
         logger.error("RAG indexing failed (agents run without knowledge base): %s", exc)
+    try:
+        index_guru_knowledge_if_empty()
+    except Exception as exc:  # pylint: disable=broad-exception-caught
+        logger.error("Guru indexing failed (gurus answer from profiles only): %s", exc)

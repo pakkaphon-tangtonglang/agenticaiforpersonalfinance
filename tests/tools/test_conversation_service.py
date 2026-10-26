@@ -12,12 +12,15 @@ from finance_ai.tools.conversation_constants import (
     DEFAULT_CONVERSATION_TITLE,
 )
 from finance_ai.tools.conversation_service import (
+    ATTACHMENT_INTENT,
     create_conversation,
     get_or_create_active_conversation,
+    get_owned_guru_conversation,
     get_recent_history_as_tuples,
     list_user_conversations,
     load_conversation_messages,
     save_assistant_message,
+    save_attachment_note,
     save_user_message,
     update_conversation_title,
 )
@@ -207,3 +210,104 @@ class TestListUserConversations:
         """Test listing for user with no conversations."""
         convs = list_user_conversations(test_session, sample_user.id)
         assert convs == []
+
+
+class TestGuruConversations:
+    """Tests for creating and listing guru conversations."""
+
+    def test_create_guru_conversation(self, test_session: Session, sample_user: User) -> None:
+        """kind and guru_id are stored on creation."""
+        conv = create_conversation(
+            test_session, sample_user.id, "ถาม Dalio", kind="guru", guru_id="dalio"
+        )
+
+        assert conv.kind == "guru"
+        assert conv.guru_id == "dalio"
+
+    def test_list_defaults_to_main_chats(self, test_session: Session, sample_user: User) -> None:
+        """The main sidebar does not show guru chats."""
+        create_conversation(test_session, sample_user.id, "แชท")
+        create_conversation(test_session, sample_user.id, "กูรู", kind="guru", guru_id="buffett")
+
+        main_titles = [conv.title for conv in list_user_conversations(test_session, sample_user.id)]
+        guru_titles = [
+            conv.title
+            for conv in list_user_conversations(test_session, sample_user.id, kind="guru")
+        ]
+
+        assert main_titles == ["แชท"]
+        assert guru_titles == ["กูรู"]
+
+
+class TestGetOwnedGuruConversation:
+    """Tests for get_owned_guru_conversation."""
+
+    def test_returns_matching_conversation(self, test_session: Session, sample_user: User) -> None:
+        """Owner, kind and guru all match."""
+        conv = create_conversation(test_session, sample_user.id, "q", kind="guru", guru_id="dalio")
+
+        found = get_owned_guru_conversation(test_session, conv.id, sample_user.id, "dalio")
+
+        assert found is not None and found.id == conv.id
+
+    def test_other_users_conversation_is_hidden(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """Another user's id gets None, not their chat."""
+        conv = create_conversation(test_session, sample_user.id, "q", kind="guru", guru_id="dalio")
+
+        assert get_owned_guru_conversation(test_session, conv.id, "someone-else", "dalio") is None
+
+    def test_wrong_guru_or_main_chat_is_rejected(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """A Dalio chat cannot be continued as Buffett, and main chats are not guru chats."""
+        guru_conv = create_conversation(
+            test_session, sample_user.id, "q", kind="guru", guru_id="dalio"
+        )
+        main_conv = create_conversation(test_session, sample_user.id, "q")
+
+        assert (
+            get_owned_guru_conversation(test_session, guru_conv.id, sample_user.id, "buffett")
+            is None
+        )
+        assert (
+            get_owned_guru_conversation(test_session, main_conv.id, sample_user.id, "dalio") is None
+        )
+
+
+class TestSaveAttachmentNote:
+    """Tests for recording an in-chat file upload in the conversation."""
+
+    def test_saves_user_and_assistant_messages(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """The file name and the result summary become two chat messages."""
+        conv = create_conversation(test_session, sample_user.id)
+
+        saved = save_attachment_note(
+            test_session, conv.id, sample_user.id, "slip.jpg", "บันทึกแล้ว 2 รายการ"
+        )
+
+        messages = load_conversation_messages(test_session, conv.id)
+        assert saved
+        assert [(m["role"], m["content"]) for m in messages] == [
+            ("user", "📎 slip.jpg"),
+            ("assistant", "บันทึกแล้ว 2 รายการ"),
+        ]
+        assert messages[1]["intent"] == ATTACHMENT_INTENT
+
+    def test_rejects_other_users_conversation(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """Nothing is written into someone else's chat."""
+        conv = create_conversation(test_session, sample_user.id)
+
+        assert not save_attachment_note(test_session, conv.id, "intruder", "a.jpg", "x")
+        assert load_conversation_messages(test_session, conv.id) == []
+
+    def test_rejects_guru_conversation(self, test_session: Session, sample_user: User) -> None:
+        """Attachments belong to the main chat only."""
+        conv = create_conversation(test_session, sample_user.id, kind="guru", guru_id="dalio")
+
+        assert not save_attachment_note(test_session, conv.id, sample_user.id, "a.jpg", "x")

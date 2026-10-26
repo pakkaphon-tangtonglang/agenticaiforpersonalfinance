@@ -27,6 +27,8 @@ def create_conversation(
     session: Session,
     user_id: str,
     title: str = DEFAULT_CONVERSATION_TITLE,
+    kind: str = "chat",
+    guru_id: str | None = None,
 ) -> Conversation:
     """Create a new conversation for a user.
 
@@ -34,6 +36,8 @@ def create_conversation(
         session: Database session.
         user_id: UUID of the user.
         title: Conversation title.
+        kind: "chat" for the main tab or "guru" for the Guru tab.
+        guru_id: Persona id for guru conversations.
 
     Returns:
         Created Conversation instance.
@@ -46,7 +50,9 @@ def create_conversation(
     )
 
     ensure_user_exists(session, user_id)
-    conversation = _conversation_crud.create(session, user_id=user_id, title=title)
+    conversation = _conversation_crud.create(
+        session, user_id=user_id, title=title, kind=kind, guru_id=guru_id
+    )
     session.commit()
     session.refresh(conversation)
     return conversation
@@ -233,13 +239,15 @@ def list_user_conversations(
     session: Session,
     user_id: str,
     limit: int = MAX_CONVERSATIONS_PER_USER,
+    kind: str = "chat",
 ) -> list[Conversation]:
-    """List active conversations for sidebar display.
+    """List active conversations of one kind for sidebar display.
 
     Args:
         session: Database session.
         user_id: UUID of the user.
         limit: Maximum conversations to return.
+        kind: "chat" for the main tab or "guru" for the Guru tab.
 
     Returns:
         List of active Conversations, most recent first.
@@ -247,5 +255,72 @@ def list_user_conversations(
     Example:
         >>> convs = list_user_conversations(session, uid)
     """
-    conversations = _conversation_crud.get_active_by_user(session, user_id)
+    conversations = _conversation_crud.get_active_by_user(session, user_id, kind=kind)
     return conversations[:limit]
+
+
+def get_owned_guru_conversation(
+    session: Session,
+    conversation_id: str,
+    user_id: str,
+    guru_id: str,
+) -> Optional[Conversation]:
+    """Return a guru conversation only if the user owns it and it is for this guru.
+
+    Args:
+        session: Database session.
+        conversation_id: Conversation UUID from the client.
+        user_id: User UUID that must own the conversation.
+        guru_id: Persona id (or "panel") the conversation must belong to.
+
+    Returns:
+        The Conversation, or None when missing, not owned, not a guru chat,
+        or created for a different guru.
+
+    Example:
+        >>> get_owned_guru_conversation(session, conv_id, uid, "dalio")
+    """
+    conversation = _conversation_crud.get_by_id(session, conversation_id)
+    if conversation is None or conversation.user_id != user_id:
+        return None
+    if conversation.kind != "guru" or conversation.guru_id != guru_id:
+        return None
+    return conversation
+
+
+ATTACHMENT_INTENT = "upload"
+
+
+def save_attachment_note(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    session: Session,
+    conversation_id: str,
+    user_id: str,
+    file_name: str,
+    summary: str,
+) -> bool:
+    """Record an in-chat file upload as a user/assistant message pair.
+
+    Keeps the chat history complete ("📎 slip.jpg" -> "บันทึกแล้ว 2 รายการ"),
+    so reopened chats show the upload and later answers know what was saved.
+
+    Args:
+        session: Database session.
+        conversation_id: Main-chat conversation UUID.
+        user_id: User UUID that must own the conversation.
+        file_name: Name of the attached file.
+        summary: What happened (saved items, cancelled, failed).
+
+    Returns:
+        True when saved; False if the conversation is missing, not owned,
+        or not a main chat.
+
+    Example:
+        >>> save_attachment_note(session, conv_id, uid, "slip.jpg", "บันทึกแล้ว 1 รายการ")
+        True
+    """
+    conversation = _conversation_crud.get_by_id(session, conversation_id)
+    if conversation is None or conversation.user_id != user_id or conversation.kind != "chat":
+        return False
+    save_user_message(session, conversation_id, f"📎 {file_name}")
+    save_assistant_message(session, conversation_id, summary, ATTACHMENT_INTENT)
+    return True

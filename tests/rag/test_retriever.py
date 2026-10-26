@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from finance_ai.rag.document_models import RetrievalResult
-from finance_ai.rag.retriever import FinanceRetriever
+from finance_ai.rag.retriever import FinanceRetriever, format_results_as_context
 
 
 @pytest.fixture
@@ -103,3 +103,39 @@ class TestRetrieveAsContext:
         mock_vector_store.search.assert_called_once_with(
             query="query", top_k=3, domain_filter="investment"
         )
+
+
+class TestRetrieveByMetadata:
+    """Tests for metadata-filtered retrieval used by the guru tool."""
+
+    def test_passes_metadata_filter(
+        self, mock_vector_store: MagicMock, sample_results: list[RetrievalResult]
+    ) -> None:
+        """The metadata filter is forwarded to the vector store."""
+        mock_vector_store.search.return_value = sample_results
+        retriever = FinanceRetriever(vector_store=mock_vector_store)
+
+        results = retriever.retrieve_by_metadata("query", {"guru_id": "buffett"})
+
+        assert results == sample_results
+        mock_vector_store.search.assert_called_once_with(
+            query="query", top_k=3, metadata_filter={"guru_id": "buffett"}
+        )
+
+
+class TestFormatResultsAsContext:
+    """Tests for the public context formatter."""
+
+    def test_includes_source_url_when_present(self) -> None:
+        """Guru results show their public URL next to the file name."""
+        result = RetrievalResult(
+            content="Be fearful",
+            source_file="letter_2008.md",
+            domain="guru",
+            relevance_score=0.4,
+            source_url="https://example.com/2008.pdf",
+        )
+
+        context = format_results_as_context([result])
+
+        assert context == "[แหล่งที่มา: letter_2008.md | https://example.com/2008.pdf]\nBe fearful"

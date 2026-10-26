@@ -1,4 +1,4 @@
-.PHONY: install dev run test coverage lint typecheck format check clean help bootstrap bundle-frontend
+.PHONY: install dev run test coverage lint typecheck format check clean help bootstrap bundle-frontend guru-index guru-fetch guru-clean guru-gaps
 
 # Variables
 PYTHON := uv run python
@@ -87,6 +87,18 @@ bootstrap:  ## Prepare runtime: apply migrations + index RAG knowledge base
 	$(PYTHON) scripts/bootstrap_runtime.py
 	@echo "Bootstrap complete!"
 
+guru-index:  ## Rebuild the guru knowledge collection (embeddings only)
+	$(PYTHON) scripts/index_guru_knowledge.py
+
+guru-fetch:  ## Fetch allowlisted guru sources into data/guru_raw/ (no LLM)
+	$(PYTHON) scripts/fetch_guru_sources.py
+
+guru-clean:  ## Trim fetched pages into data/guru_clean/ for review (no LLM)
+	$(PYTHON) scripts/clean_guru_raw.py
+
+guru-gaps:  ## Show the most-asked guru questions the knowledge base could not answer
+	$(PYTHON) scripts/report_guru_gaps.py $(ARGS)
+
 init-db:  ## Initialize database with migrations
 	@echo "Initializing database..."
 	$(PYTHON) -m alembic upgrade head
@@ -111,9 +123,12 @@ evaluate-routing:  ## Run routing evaluation only
 evaluate-rag:  ## Run RAG evaluation only
 	$(PYTHON) -m finance_ai.evaluation.cli --eval rag
 
+evaluate-gurus:  ## Evaluate guru personas (add ARGS=--judge for persona scoring)
+	$(PYTHON) scripts/evaluate_gurus.py $(ARGS)
+
 evaluate-compare:  ## Compare multiple models
 	$(PYTHON) -m finance_ai.evaluation.cli --provider google --eval all
 	$(PYTHON) -m finance_ai.evaluation.cli --provider openrouter --eval all
 
-.PHONY: all evaluate evaluate-routing evaluate-rag evaluate-compare
+.PHONY: all evaluate evaluate-routing evaluate-rag evaluate-compare evaluate-gurus
 all: check  ## Alias for 'check' target

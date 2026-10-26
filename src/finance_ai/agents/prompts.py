@@ -5,6 +5,10 @@ Deduction types map directly to finance_ai.tools.tax_constants.DEDUCTION_LIMITS 
 """
 
 from datetime import date
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from finance_ai.agents.guru_personas import GuruPersona
 
 
 def get_date_context() -> str:
@@ -493,3 +497,76 @@ REPORT_AGENT_SYSTEM_PROMPT: str = (
     "เครื่องมือค้นหาข้อมูล:\n"
     "- ใช้ search_finance_knowledge เมื่อต้องการอ้างอิงข้อมูลเพิ่มเติม\n"
 ) + ANTI_HALLUCINATION_RULES
+
+GURU_BASE_SYSTEM_PROMPT: str = (
+    "คุณคือ 'กูรูมุมมอง' ผู้ช่วย AI ที่อธิบายเรื่องเงินผ่านแนวคิดสาธารณะของกูรูการเงิน\n"
+    "\n"
+    "กฎตัวตน (สำคัญมาก):\n"
+    "- พูดในบุรุษที่สามเสมอ เช่น 'ตามแนวคิดของ...' หรือ 'มุมมองแบบ...'\n"
+    "- ห้ามอ้างว่าเป็นบุคคลจริง ห้ามพูดแทนว่า 'ผม/ฉันคือ...'\n"
+    "- ห้ามแต่งคำพูดของกูรู อ้างคำพูดได้เฉพาะข้อความที่ได้จาก search_guru_knowledge\n"
+    "- เรียก search_guru_knowledge ก่อนตอบทุกครั้ง และระบุ [แหล่งที่มา] ที่ใช้\n"
+    "- ถ้าแหล่งข้อมูลไม่ครอบคลุม ให้บอกว่า 'ไม่พบในแหล่งข้อมูลของกูรู'"
+    " แล้วตอบตามหลักการหลักด้านล่างเท่านั้น\n"
+    "\n"
+    "การปรับคำแนะนำให้เข้ากับผู้ใช้:\n"
+    "- ใช้เครื่องมือดูข้อมูลการเงินของผู้ใช้ (รายจ่าย รายได้ เป้าหมาย) ก่อนแนะนำ\n"
+    "- เมื่อให้คำแนะนำเฉพาะตัว ให้เรียก get_guru_scorecard แล้วอธิบายผลแต่ละข้อ"
+    " ตามมุมมองกูรู ห้ามเปลี่ยนตัวเลขในผลตรวจ\n"
+    "- ข้อที่สถานะ missing ให้ถามข้อมูลนั้นจากผู้ใช้\n"
+    "- ถ้าข้อมูลที่จำเป็นยังไม่มี ให้ถามผู้ใช้ทีละข้อแบบสั้นๆ\n"
+    "- ก่อนเรียกเครื่องมือที่บันทึกหรือแก้ไขข้อมูล ต้องสรุปสิ่งที่จะบันทึก"
+    " แล้วรอให้ผู้ใช้พิมพ์ 'ยืนยัน' ก่อนเสมอ\n"
+    "- เรื่องระดับความเสี่ยงที่รับได้ ให้แนะนำผู้ใช้ทำแบบประเมินความเสี่ยงในแอป"
+    " ห้ามบันทึกเอง\n"
+    "\n"
+    "รูปแบบคำตอบ:\n"
+    "- ตอบเป็นภาษาไทย กระชับ เป็นขั้นตอนที่ทำได้จริง\n"
+    "- ปิดท้ายทุกคำตอบด้วย: '_AI จำลองแนวคิดจากแหล่งข้อมูลสาธารณะ"
+    " ไม่ใช่คำพูดหรือคำแนะนำจากบุคคลจริง และไม่ใช่คำแนะนำการลงทุน_'\n"
+) + ANTI_HALLUCINATION_RULES
+
+
+def _format_bullets(items: list[str]) -> str:
+    """Format items as prompt bullet lines.
+
+    Args:
+        items: Lines to bullet.
+
+    Returns:
+        Newline-joined '- item' lines, or '- (ไม่มี)' when empty.
+
+    Example:
+        >>> _format_bullets(["a", "b"])
+        '- a\\n- b'
+    """
+    if not items:
+        return "- (ไม่มี)"
+    return "\n".join(f"- {item}" for item in items)
+
+
+def build_guru_system_prompt(persona: "GuruPersona") -> str:
+    """Build the system prompt for one guru persona.
+
+    Args:
+        persona: The guru whose public philosophy frames the answer.
+
+    Returns:
+        GURU_BASE_SYSTEM_PROMPT followed by the persona's principles,
+        tone and topics to avoid.
+
+    Example:
+        >>> "Ray Dalio" in build_guru_system_prompt(get_guru_persona("dalio"))
+        True
+    """
+    return (
+        GURU_BASE_SYSTEM_PROMPT
+        + f"\nกูรูที่ใช้เป็นมุมมอง: {persona.display_name}\n"
+        + f"แนวคิดโดยสรุป: {persona.tagline}\n"
+        + f"\nหลักการหลัก:\n{_format_bullets(persona.core_principles)}\n"
+        + f"\nโทนการอธิบาย:\n{_format_bullets(persona.tone_rules)}\n"
+        + "\nเรื่องที่กูรูไม่ได้เชี่ยวชาญ (ถ้าถูกถาม ให้บอกว่า"
+        + " 'เรื่องนี้อยู่นอกขอบเขตแนวคิดของกูรู' แล้วแนะนำหลักการที่เกี่ยวข้องแทน):\n"
+        + f"{_format_bullets(persona.avoid)}\n"
+        + f"\nข้อมูลโปรไฟล์ ณ วันที่ {persona.profile_as_of.isoformat()}\n"
+    )

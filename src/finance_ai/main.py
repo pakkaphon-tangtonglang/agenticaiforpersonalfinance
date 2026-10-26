@@ -7,7 +7,7 @@ Run with: make dev (development, port 8080) or make run (production)
 """
 
 import json
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
@@ -24,6 +24,13 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from finance_ai.agents.llm_factory import create_chat_model, create_ocr_chat_model
+from finance_ai.agents.guru_panel import PanelEvent, run_guru_panel, synthesis_to_markdown
+from finance_ai.agents.guru_personas import (
+    UnknownGuruError,
+    get_default_guru_personas,
+    get_guru_persona,
+)
+from finance_ai.agents.guru_stream import guru_intent, stream_guru_query
 from finance_ai.agents.router_agent import orchestrate_query
 from finance_ai.agents.stream_utils import StreamEvent, orchestrate_query_stream
 from finance_ai.core.api_security import install_api_security
@@ -47,10 +54,12 @@ from finance_ai.tools.expense_constants import VALID_EXPENSE_CATEGORIES
 from finance_ai.tools.conversation_service import (
     create_conversation,
     get_or_create_active_conversation,
+    get_owned_guru_conversation,
     get_recent_history_as_tuples,
     list_user_conversations,
     load_conversation_messages,
     save_assistant_message,
+    save_attachment_note,
     save_user_message,
 )
 from finance_ai.tools.conversation_constants import CONVERSATION_TITLE_MAX_LENGTH
@@ -160,6 +169,18 @@ class ConversationSummary(BaseModel):
     id: str
     title: str
     message_count: int = 0
+    guru_id: str | None = None
+
+
+class GuruSummary(BaseModel):
+    """Guru card shown in the Guru tab."""
+
+    guru_id: str
+    display_name: str
+    region: str
+    tagline: str
+    focus_areas: list[str]
+    typical_questions: list[str]
 
 
 class MessageOut(BaseModel):
@@ -175,6 +196,8 @@ class CreateConversationRequest(BaseModel):
 
     user_id: str = Field(..., description="User UUID")
     title: str = Field(default="แชทใหม่", description="Conversation title")
+    kind: Literal["chat", "guru"] = Field(default="chat", description="Which tab owns the chat")
+    guru_id: str | None = Field(default=None, description="Persona id, or 'panel'")
 
 
 class RenameConversationRequest(BaseModel):
@@ -199,6 +222,14 @@ class ConversationOwnerRequest(BaseModel):
     """Request body that only identifies the conversation owner."""
 
     user_id: str = Field(..., description="User UUID that owns the conversation")
+
+
+class AttachmentNoteRequest(BaseModel):
+    """Record of a file attached in the chat and what was saved from it."""
+
+    user_id: str = Field(..., description="User UUID that owns the conversation")
+    file_name: str = Field(..., min_length=1, max_length=255, description="Attached file name")
+    summary: str = Field(..., min_length=1, max_length=2000, description="Result shown in chat")
 
 
 class AssetFetchRequest(BaseModel):
@@ -413,16 +444,34 @@ def _stream_generator(
     Yields:
         SSE-formatted event strings.
     """
-    full_response = ""
-    intent = "unknown"
-
-    for event in orchestrate_query_stream(
+    events = orchestrate_query_stream(
         query=query,
         chat_model=get_chat_model(),
         user_id=user_id,
         db_session_factory=_session_factory,
         chat_history=history,
-    ):
+    )
+    yield from _relay_events_and_save(events, conversation_id, session)
+
+
+def _relay_events_and_save(
+    events: Iterator[StreamEvent],
+    conversation_id: str,
+    session: Session,
+) -> Generator[str, None, None]:
+    """Relay stream events as SSE, then save the full assistant answer.
+
+    Args:
+        events: StreamEvents from an agent stream.
+        conversation_id: Conversation UUID to save into.
+        session: Database session.
+
+    Yields:
+        SSE-formatted event strings.
+    """
+    full_response = ""
+    intent = "unknown"
+    for event in events:
         sse_data = _format_sse_event(event)
         if sse_data:
             yield sse_data
@@ -476,19 +525,25 @@ def _load_history(
 
 @app.get("/conversations", response_model=list[ConversationSummary])
 def list_conversations(
-    user_id: str, session: Session = Depends(get_session)
+    user_id: str,
+    kind: Literal["chat", "guru"] = "chat",
+    session: Session = Depends(get_session),
 ) -> list[ConversationSummary]:
-    """List conversations for a user.
+    """List conversations of one kind for a user.
 
     Args:
         user_id: User UUID.
+        kind: "chat" for the main sidebar, "guru" for the Guru tab.
         session: Database session.
 
     Returns:
         List of conversation summaries.
     """
-    convs = list_user_conversations(session, user_id, limit=50)
-    return [ConversationSummary(id=str(conv.id), title=conv.title or "แชทใหม่") for conv in convs]
+    convs = list_user_conversations(session, user_id, limit=50, kind=kind)
+    return [
+        ConversationSummary(id=str(conv.id), title=conv.title or "แชทใหม่", guru_id=conv.guru_id)
+        for conv in convs
+    ]
 
 
 @app.post("/conversations", response_model=ConversationSummary)
@@ -504,8 +559,14 @@ def create_new_conv(
     Returns:
         Created conversation summary.
     """
-    conv = create_conversation(session, req.user_id, req.title)
-    return ConversationSummary(id=str(conv.id), title=conv.title or "แชทใหม่")
+    conv = create_conversation(
+        session,
+        req.user_id,
+        req.title[:CONVERSATION_TITLE_MAX_LENGTH],
+        kind=req.kind,
+        guru_id=req.guru_id,
+    )
+    return ConversationSummary(id=str(conv.id), title=conv.title or "แชทใหม่", guru_id=conv.guru_id)
 
 
 _CONVERSATION_NOT_FOUND = "ไม่พบบทสนทนานี้ หรือบทสนทนาไม่ได้เป็นของผู้ใช้"
@@ -583,6 +644,31 @@ def delete_conv(
     return {"status": "ok"}
 
 
+@app.post("/conversations/{conversation_id}/attachments")
+def add_attachment_note(
+    conversation_id: str,
+    req: AttachmentNoteRequest,
+    session: Session = Depends(get_session),
+) -> dict[str, bool]:
+    """Save an in-chat upload ("📎 file" + result summary) into the chat history.
+
+    Args:
+        conversation_id: Main-chat conversation UUID.
+        req: Owner, file name and result summary.
+        session: Database session.
+
+    Returns:
+        {"saved": True}.
+
+    Raises:
+        HTTPException: 404 when the conversation is missing or not owned.
+    """
+    saved = save_attachment_note(session, conversation_id, req.user_id, req.file_name, req.summary)
+    if not saved:
+        raise HTTPException(status_code=404, detail=_CONVERSATION_NOT_FOUND)
+    return {"saved": True}
+
+
 @app.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])
 def get_messages(conversation_id: str, session: Session = Depends(get_session)) -> list[MessageOut]:
     """Get all messages in a conversation.
@@ -603,6 +689,207 @@ def get_messages(conversation_id: str, session: Session = Depends(get_session)) 
         )
         for msg in messages
     ]
+
+
+# ──────────────────────── Guru tab ───────────────────────────────
+
+
+@app.get("/gurus", response_model=list[GuruSummary])
+def list_gurus() -> list[GuruSummary]:
+    """List the guru personas for the Guru tab cards.
+
+    Returns:
+        One summary per persona in docs/gurus.
+    """
+    return [
+        GuruSummary(**persona.model_dump(include=set(GuruSummary.model_fields)))
+        for persona in get_default_guru_personas().values()
+    ]
+
+
+def _resolve_guru_conversation(
+    session: Session,
+    conversation_id: str | None,
+    user_id: str,
+    guru_id: str,
+) -> str:
+    """Create a guru conversation, or verify the client-supplied one.
+
+    Args:
+        session: Database session.
+        conversation_id: Existing conversation UUID, or None to start one.
+        user_id: User UUID.
+        guru_id: Persona id, or "panel" for panel chats.
+
+    Returns:
+        A conversation UUID the user owns for this guru.
+
+    Raises:
+        HTTPException: 404 when the conversation is missing, not owned,
+            or belongs to another guru.
+    """
+    if not conversation_id:
+        return create_conversation(session, user_id, kind="guru", guru_id=guru_id).id
+    if get_owned_guru_conversation(session, conversation_id, user_id, guru_id) is None:
+        raise HTTPException(status_code=404, detail=_CONVERSATION_NOT_FOUND)
+    return conversation_id
+
+
+@app.get("/guru/chat/stream")
+def guru_chat_stream(
+    query: str,
+    user_id: str,
+    guru_id: str,
+    conversation_id: str | None = None,
+    session: Session = Depends(get_session),
+) -> StreamingResponse:
+    """Chat with one guru persona over SSE (skips the router).
+
+    Args:
+        query: User's question.
+        user_id: User UUID.
+        guru_id: Persona id (e.g. "buffett").
+        conversation_id: Existing guru conversation, or None to start one.
+        session: Database session.
+
+    Returns:
+        StreamingResponse with Server-Sent Events.
+
+    Raises:
+        HTTPException: 422 when guru_id is unknown.
+    """
+    try:
+        get_guru_persona(guru_id)
+    except UnknownGuruError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    conversation_id = _resolve_guru_conversation(session, conversation_id, user_id, guru_id)
+    history = _load_history(session, conversation_id)
+    save_user_message(session, conversation_id, query)
+    events = stream_guru_query(
+        query=query,
+        guru_id=guru_id,
+        user_id=user_id,
+        db_session_factory=_session_factory,
+        chat_model=get_chat_model(),
+        chat_history=history,
+    )
+    return StreamingResponse(
+        _relay_events_and_save(events, conversation_id, session),
+        media_type="text/event-stream",
+    )
+
+
+PANEL_CONVERSATION_GURU_ID = "panel"
+
+
+def _parse_guru_ids(raw_guru_ids: str) -> list[str]:
+    """Parse a comma-separated guru list (empty means every guru).
+
+    Args:
+        raw_guru_ids: e.g. "buffett,dalio" or "".
+
+    Returns:
+        Validated persona ids.
+
+    Raises:
+        HTTPException: 422 when any id is unknown.
+    """
+    requested = [guru_id.strip() for guru_id in raw_guru_ids.split(",") if guru_id.strip()]
+    guru_ids = requested or sorted(get_default_guru_personas())
+    try:
+        for guru_id in guru_ids:
+            get_guru_persona(guru_id)
+    except UnknownGuruError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return guru_ids
+
+
+def _sse(event_name: str, payload: Any) -> str:
+    """Format a named SSE event with a JSON payload."""
+    return f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _format_panel_event(event: PanelEvent) -> str:
+    """Format a PanelEvent as a named SSE event.
+
+    Args:
+        event: Panel event from run_guru_panel.
+
+    Returns:
+        SSE string; synthesis carries the structured comparison.
+    """
+    if event.event_type == "synthesis" and event.synthesis is not None:
+        return _sse("synthesis", event.synthesis.model_dump())
+    return _sse(event.event_type, {"guru_id": event.guru_id, "content": event.content})
+
+
+def _panel_stream_generator(
+    events: Iterator[PanelEvent],
+    conversation_id: str,
+    session: Session,
+) -> Generator[str, None, None]:
+    """Relay panel events as SSE and save each answer and the comparison.
+
+    Args:
+        events: Events from run_guru_panel.
+        conversation_id: Panel conversation UUID.
+        session: Database session.
+
+    Yields:
+        SSE-formatted event strings, ending with a complete event.
+    """
+    for event in events:
+        yield _format_panel_event(event)
+        if event.event_type == "guru_answer":
+            save_assistant_message(
+                session, conversation_id, event.content, guru_intent(event.guru_id or "")
+            )
+        if event.event_type == "synthesis" and event.synthesis is not None:
+            markdown = synthesis_to_markdown(event.synthesis)
+            save_assistant_message(session, conversation_id, markdown, "guru:synthesis")
+    yield _sse("complete", guru_intent(PANEL_CONVERSATION_GURU_ID))
+
+
+@app.get("/guru/panel/stream")
+def guru_panel_stream(
+    query: str,
+    user_id: str,
+    guru_ids: str = "",
+    conversation_id: str | None = None,
+    session: Session = Depends(get_session),
+) -> StreamingResponse:
+    """Ask several gurus one question and stream their answers plus a comparison.
+
+    Args:
+        query: User's question.
+        user_id: User UUID.
+        guru_ids: Comma-separated persona ids; empty asks every guru.
+        conversation_id: Existing panel conversation, or None to start one.
+        session: Database session.
+
+    Returns:
+        StreamingResponse with named SSE events (guru_answer, guru_error,
+        synthesis, synthesis_error, complete).
+
+    Raises:
+        HTTPException: 422 when any guru id is unknown.
+    """
+    selected_guru_ids = _parse_guru_ids(guru_ids)
+    conversation_id = _resolve_guru_conversation(
+        session, conversation_id, user_id, PANEL_CONVERSATION_GURU_ID
+    )
+    save_user_message(session, conversation_id, query)
+    events = run_guru_panel(
+        query=query,
+        guru_ids=selected_guru_ids,
+        user_id=user_id,
+        db_session_factory=_session_factory,
+        chat_model=get_chat_model(),
+    )
+    return StreamingResponse(
+        _panel_stream_generator(events, conversation_id, session),
+        media_type="text/event-stream",
+    )
 
 
 # ──────────────────────── Upload ─────────────────────────────────

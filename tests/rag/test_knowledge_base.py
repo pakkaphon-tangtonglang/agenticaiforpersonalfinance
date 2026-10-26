@@ -212,3 +212,33 @@ class TestCreateKnowledgeBaseManager:
         manager = create_knowledge_base_manager(settings)
         mock_create_embeddings.assert_called_once_with(settings)
         assert isinstance(manager, KnowledgeBaseManager)
+
+
+class TestRecursiveIndexing:
+    """Tests for indexing the per-guru folder layout."""
+
+    @patch("finance_ai.rag.knowledge_base.discover_documents")
+    def test_index_directory_forwards_recursive_flag(
+        self, mock_discover: MagicMock, mock_vector_store: MagicMock
+    ) -> None:
+        """recursive=True is passed through to discovery."""
+        mock_discover.return_value = []
+        manager = KnowledgeBaseManager(vector_store=mock_vector_store)
+
+        manager.index_directory(Path("docs/guru_knowledge"), recursive=True)
+
+        mock_discover.assert_called_once_with(Path("docs/guru_knowledge"), recursive=True)
+
+    @patch("finance_ai.rag.knowledge_base.FinanceVectorStore")
+    @patch("finance_ai.rag.knowledge_base.create_embeddings")
+    def test_factory_accepts_collection_override(
+        self, _mock_create_embeddings: MagicMock, mock_store_class: MagicMock
+    ) -> None:
+        """A custom collection name keeps guru docs out of finance_knowledge."""
+        settings = MagicMock(
+            rag_chroma_persist_directory="./db", rag_chunk_size=500, rag_chunk_overlap=50
+        )
+
+        create_knowledge_base_manager(settings, collection_name="guru_knowledge")
+
+        assert mock_store_class.call_args.kwargs["collection_name"] == "guru_knowledge"

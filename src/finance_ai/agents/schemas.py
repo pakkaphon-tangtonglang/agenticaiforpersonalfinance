@@ -158,3 +158,27 @@ class ReportAgentState(TypedDict):
     messages: Annotated[list[Any], add_messages]
     user_id: str
     db_session_factory: Callable[[], Session] | None
+
+
+class GuruAgentState(TypedDict):
+    """State for the Guru Agent LangGraph graph.
+
+    One compiled graph serves every persona; guru_id selects which one.
+
+    Attributes:
+        messages: Conversation messages (LangGraph manages append via add_messages).
+        user_id: UUID of the user for DB operations.
+        db_session_factory: Optional session factory for DB access (injected into tools).
+        guru_id: Persona id from docs/gurus (e.g. "buffett").
+
+    Example:
+        >>> state: GuruAgentState = {
+        ...     "messages": [], "user_id": "abc-123",
+        ...     "db_session_factory": None, "guru_id": "dalio",
+        ... }
+    """
+
+    messages: Annotated[list[Any], add_messages]
+    user_id: str
+    db_session_factory: Callable[[], Session] | None
+    guru_id: str
