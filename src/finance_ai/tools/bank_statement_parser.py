@@ -575,7 +575,7 @@ def parse_with_llm(
     preview = raw_content[:_MAX_PREVIEW_CHARS]
     prompt = _LLM_PARSE_PROMPT.format(content=preview)
     response = chat_model.invoke([HumanMessage(content=prompt)])
-    return _parse_llm_response(str(response.content))
+    return _parse_llm_response(response.text)
 
 
 def _parse_llm_response(

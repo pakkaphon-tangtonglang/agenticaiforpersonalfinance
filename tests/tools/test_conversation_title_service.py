@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from langchain_core.messages import AIMessage
 from sqlalchemy.orm import Session
 
 from finance_ai.database.models.conversation import Conversation
@@ -24,27 +25,24 @@ from finance_ai.tools.conversation_title_service import (
 )
 
 
-class _FakeResponse:
-    """Minimal stand-in for an LLM AIMessage."""
-
-    def __init__(self, content: str) -> None:
-        self.content = content
-
-
 class FakeChatModel:
     """Chat model double that records calls and returns a fixed reply."""
 
-    def __init__(self, reply: str = "วางแผนภาษีปีนี้", error: Exception | None = None) -> None:
+    def __init__(
+        self,
+        reply: str | list[str | dict[str, Any]] = "วางแผนภาษีปีนี้",
+        error: Exception | None = None,
+    ) -> None:
         self.reply = reply
         self.error = error
         self.calls = 0
 
-    def invoke(self, _messages: Any) -> _FakeResponse:
+    def invoke(self, _messages: Any) -> AIMessage:
         """Return the canned reply, or raise the configured error."""
         self.calls += 1
         if self.error is not None:
             raise self.error
-        return _FakeResponse(self.reply)
+        return AIMessage(content=self.reply)
 
 
 def _conversation_with_exchange(session: Session, user: User) -> Conversation:
@@ -88,6 +86,14 @@ class TestGenerateConversationTitle:
         model = FakeChatModel(reply='"สรุปรายจ่ายเดือนนี้"')
         title = generate_conversation_title(model, "สรุปรายจ่าย", "รายจ่ายคือ...")
         assert title == "สรุปรายจ่ายเดือนนี้"
+
+    def test_gemini_content_blocks_are_joined_as_text(self) -> None:
+        """Gemini 3 returns a list of parts; the title is their text, not the list repr."""
+        model = FakeChatModel(
+            reply=[{"type": "text", "text": "วางแผนการออมเงิน", "extras": {"signature": "x"}}]
+        )
+        title = generate_conversation_title(model, "ช่วยวางแผนการออม", "ได้เลย...")
+        assert title == "วางแผนการออมเงิน"
 
     def test_llm_error_falls_back_to_user_message(self) -> None:
         """An LLM failure falls back to the first user message."""

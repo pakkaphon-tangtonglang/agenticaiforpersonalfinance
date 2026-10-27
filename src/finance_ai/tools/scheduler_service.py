@@ -389,7 +389,7 @@ def _summarize_with_llm(
     )
     try:
         response = chat_model.invoke(prompt)
-        return str(response.content)
+        return str(response.text)
     except Exception as exc:  # noqa: BLE001
         logger.error("LLM summarization failed for %s: %s", symbol, exc)
         return f"📰 **ข่าวล่าสุด {symbol}**\n{raw_news}"
