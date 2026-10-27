@@ -9,6 +9,7 @@ from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
+from langchain_core.messages import AIMessage
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -25,19 +26,12 @@ from finance_ai.tools.conversation_service import (
 USER_ID = "conv-endpoint-user"
 
 
-class _FakeResponse:
-    """Minimal stand-in for an LLM AIMessage."""
-
-    def __init__(self, content: str) -> None:
-        self.content = content
-
-
 class _FakeChatModel:
     """Chat model double that always returns the same title."""
 
-    def invoke(self, _messages: Any) -> _FakeResponse:
+    def invoke(self, _messages: Any) -> AIMessage:
         """Return a fixed title."""
-        return _FakeResponse("คำนวณภาษีเงินเดือน")
+        return AIMessage(content="คำนวณภาษีเงินเดือน")
 
 
 @pytest.fixture

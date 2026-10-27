@@ -126,7 +126,7 @@ def create_guardrail_node() -> Any:
             return {"messages": []}
         had_tool_results = any(isinstance(m, ToolMessage) for m in state["messages"])
         risk_level = get_user_risk_level(state["user_id"], state["db_session_factory"])
-        answer = str(last_message.content)
+        answer = last_message.text
         warning = check_recommendation_response(answer, risk_level, had_tool_results)
         if not warning:
             return {"messages": []}

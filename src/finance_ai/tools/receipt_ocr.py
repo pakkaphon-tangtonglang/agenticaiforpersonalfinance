@@ -142,7 +142,7 @@ def extract_document_fields(
     )
     message = _build_vision_message(prepared_bytes, prepared_mime)
     response = _invoke_vision_model(chat_model, [message])
-    items = _parse_ocr_json_response(str(response.content))
+    items = _parse_ocr_json_response(response.text)
     return _convert_ocr_items(items)
 
 

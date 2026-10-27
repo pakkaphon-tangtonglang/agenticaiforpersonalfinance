@@ -179,7 +179,7 @@ def _handle_ai_chunk(chunk: AIMessageChunk) -> StreamEvent | None:
     if chunk.content:
         return StreamEvent(
             event_type="token",
-            content=str(chunk.content),
+            content=chunk.text,
         )
     return None
 
@@ -209,7 +209,7 @@ def _handle_complete_ai_message(message: AIMessage) -> StreamEvent | None:
     if message.content:
         return StreamEvent(
             event_type="token",
-            content=str(message.content),
+            content=message.text,
         )
     return None
 
@@ -251,13 +251,13 @@ def _extract_last_ai_from_messages(messages: list[Any]) -> str:
             continue
         if isinstance(msg, AIMessage) and msg.content:
             if not msg.tool_calls:
-                return str(msg.content)
+                return msg.text
         break
 
     # Fallback: use last ToolMessage content when AI returned empty
     for msg in reversed(messages):
         if isinstance(msg, ToolMessage) and msg.content:
-            return str(msg.content)
+            return msg.text
         if isinstance(msg, AIMessage) and msg.tool_calls:
             break
     return ""

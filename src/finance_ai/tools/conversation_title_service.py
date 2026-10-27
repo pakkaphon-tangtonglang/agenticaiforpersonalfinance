@@ -94,7 +94,7 @@ def generate_conversation_title(
         ),
     ]
     try:
-        title = clean_generated_title(str(chat_model.invoke(messages).content))
+        title = clean_generated_title(chat_model.invoke(messages).text)
     except Exception:  # noqa: BLE001 — any LLM failure must not break the chat
         logger.warning("Conversation title generation failed", exc_info=True)
         title = ""
