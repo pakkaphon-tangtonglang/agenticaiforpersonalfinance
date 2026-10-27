@@ -90,6 +90,12 @@ iHost รันได้เฉพาะ PHP จึงใส่ FastAPI ลงไ
 layout หรือดาวน์โหลดไม่ได้ แหล่งนั้นจะถูกข้าม (ดู log) โดยไม่กระทบ API
 ในเครื่องให้ใช้ `make guru-sync` แทน
 
+**Embedding cache (RAG_EMBEDDING_CACHE_ENABLED=true)** — ดิสก์ Render ถูกล้างทุกครั้งที่ start
+ปกติจึงต้อง embed เอกสารทั้งหมดใหม่ทุกครั้ง (Gemini free tier ให้แค่ 1,000 ครั้ง/วัน)
+เมื่อเปิด cache เวกเตอร์จะถูกเก็บในตาราง `embedding_cache` บน Neon Postgres
+แต่ละ chunk จึง embed แค่ครั้งแรกครั้งเดียว ครั้งต่อไปอ่านจากฐานข้อมูล (ไม่เรียก API)
+ถ้าเปลี่ยนโมเดล embedding เวกเตอร์ชุดเก่าจะไม่ถูกใช้ (key แยกตาม provider:model)
+
 ### ติดตั้ง Frontend (iHost)
 
 1. คัดลอกไฟล์ทั้งหมดใน `src/finance_ai/static/` (`index.html`, `styles.css`,

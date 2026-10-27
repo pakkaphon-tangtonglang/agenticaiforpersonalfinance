@@ -1,10 +1,13 @@
 """Tests for RAG embedding factory."""
 
+# pylint: disable=redefined-outer-name,unused-argument,protected-access
+
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from finance_ai.core.config import Settings
+from finance_ai.rag.cached_embeddings import CachedEmbeddings
 from finance_ai.rag.embedding_factory import (
     create_embeddings,
     create_google_embeddings,
@@ -173,3 +176,38 @@ class TestCreateEmbeddings:
         with patch("finance_ai.rag.embedding_factory.create_google_embeddings") as mock_create:
             create_embeddings(google_settings)
             mock_create.assert_called_once_with(google_settings)
+
+
+class TestEmbeddingCacheWiring:
+    """create_embeddings wraps the provider in the DB cache when enabled."""
+
+    @patch("finance_ai.rag.embedding_factory.create_database_engine")
+    @patch("finance_ai.rag.embedding_factory.create_google_embeddings")
+    def test_wraps_when_cache_enabled(
+        self, mock_create: MagicMock, _mock_engine: MagicMock
+    ) -> None:
+        """Enabled cache returns CachedEmbeddings namespaced by provider and model."""
+        settings = Settings(
+            _env_file=None,
+            google_api_key="k",
+            rag_embedding_provider="google",
+            rag_embedding_model="models/gemini-embedding-001",
+            rag_embedding_cache_enabled=True,
+        )
+
+        embeddings = create_embeddings(settings)
+
+        assert isinstance(embeddings, CachedEmbeddings)
+        assert (
+            embeddings._namespace == "google:models/gemini-embedding-001"
+        )  # pylint: disable=protected-access
+        assert (
+            embeddings._underlying is mock_create.return_value
+        )  # pylint: disable=protected-access
+
+    @patch("finance_ai.rag.embedding_factory.create_google_embeddings")
+    def test_returns_provider_when_cache_disabled(self, mock_create: MagicMock) -> None:
+        """Disabled cache (the default) returns the provider unchanged."""
+        settings = Settings(_env_file=None, google_api_key="k", rag_embedding_provider="google")
+
+        assert create_embeddings(settings) is mock_create.return_value

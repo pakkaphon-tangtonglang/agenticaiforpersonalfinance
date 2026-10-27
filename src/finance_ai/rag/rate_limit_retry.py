@@ -20,7 +20,9 @@ ResultT = TypeVar("ResultT")
 MAX_RETRY_ATTEMPTS = 6
 MAX_RETRY_DELAY_SECONDS = 60.0
 _RATE_LIMIT_MARKERS = ("429", "resource_exhausted", "rate limit", "too many requests")
-_RETRY_HINT = re.compile(r"retry in ([\d.]+)\s*s", re.IGNORECASE)
+_RETRY_HINT = re.compile(
+    r"retry in (?:(?P<hours>\d+)h)?(?:(?P<minutes>\d+)m)?(?:(?P<seconds>[\d.]+)s)", re.IGNORECASE
+)
 
 
 def is_rate_limit_error(error: Exception) -> bool:
@@ -32,6 +34,21 @@ def is_rate_limit_error(error: Exception) -> bool:
     """
     message = str(error).casefold()
     return any(marker in message for marker in _RATE_LIMIT_MARKERS)
+
+
+def hint_seconds(error: Exception) -> float | None:
+    """Parse the provider's "retry in 20h21m45.4s" hint, if present.
+
+    Example:
+        >>> hint_seconds(RuntimeError("Please retry in 1m30s"))
+        90.0
+    """
+    match = _RETRY_HINT.search(str(error))
+    if match is None:
+        return None
+    hours = int(match.group("hours") or 0)
+    minutes = int(match.group("minutes") or 0)
+    return hours * 3600 + minutes * 60 + float(match.group("seconds"))
 
 
 def retry_delay_seconds(error: Exception, attempt: int) -> float:
@@ -49,9 +66,17 @@ def retry_delay_seconds(error: Exception, attempt: int) -> float:
         >>> retry_delay_seconds(RuntimeError("Please retry in 27.5s"), 0)
         29.0
     """
-    hint = _RETRY_HINT.search(str(error))
-    delay = math.ceil(float(hint.group(1))) + 1 if hint else 2 ** (attempt + 1)
+    hint = hint_seconds(error)
+    delay = math.ceil(hint) + 1 if hint is not None else 2 ** (attempt + 1)
     return float(min(delay, MAX_RETRY_DELAY_SECONDS))
+
+
+def _should_give_up(error: Exception, attempt: int, max_attempts: int) -> bool:
+    """True for non-rate-limit errors, the last attempt, or waits beyond the cap (daily quotas)."""
+    if not is_rate_limit_error(error) or attempt == max_attempts - 1:
+        return True
+    hint = hint_seconds(error)
+    return hint is not None and hint > MAX_RETRY_DELAY_SECONDS
 
 
 def call_with_rate_limit_retry(
@@ -70,8 +95,9 @@ def call_with_rate_limit_retry(
         The function's result.
 
     Raises:
-        Exception: Non-rate-limit errors immediately; the last rate-limit
-            error after max_attempts.
+        Exception: Non-rate-limit errors and long waits (e.g. a daily quota
+            that resets in hours) immediately; the last rate-limit error
+            after max_attempts.
 
     Example:
         >>> call_with_rate_limit_retry(lambda: store.add_texts(texts))
@@ -80,7 +106,7 @@ def call_with_rate_limit_retry(
         try:
             return function()
         except Exception as error:  # pylint: disable=broad-exception-caught
-            if not is_rate_limit_error(error) or attempt == max_attempts - 1:
+            if _should_give_up(error, attempt, max_attempts):
                 raise
             delay = retry_delay_seconds(error, attempt)
             logger.warning("Rate limited, retrying in %.0fs (attempt %d)", delay, attempt + 1)
