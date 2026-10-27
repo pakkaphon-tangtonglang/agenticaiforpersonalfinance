@@ -4,6 +4,8 @@ Wraps langchain_chroma.Chroma with typed methods for adding, searching,
 and managing document chunks.
 """
 
+import time
+from collections.abc import Callable
 from typing import Any
 
 from langchain_chroma import Chroma
@@ -11,6 +13,7 @@ from langchain_core.embeddings import Embeddings
 
 from finance_ai.core.logging import get_logger
 from finance_ai.rag.document_models import DocumentChunk, RetrievalResult
+from finance_ai.rag.rate_limit_retry import call_with_rate_limit_retry
 
 logger = get_logger(__name__)
 
@@ -28,11 +31,13 @@ class FinanceVectorStore:
         >>> results = store.search("ค่าลดหย่อนภาษี")
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments,too-many-positional-arguments
         self,
         embeddings: Embeddings,
         persist_directory: str = "./data/chroma_db",
         collection_name: str = "finance_knowledge",
+        embed_batch_size: int = 20,
+        sleep: Callable[[float], None] = time.sleep,
     ) -> None:
         """Initialize with embeddings and ChromaDB config.
 
@@ -40,7 +45,11 @@ class FinanceVectorStore:
             embeddings: LangChain Embeddings instance for vectorization.
             persist_directory: Path for ChromaDB persistence.
             collection_name: Name of the ChromaDB collection.
+            embed_batch_size: Chunks embedded per request batch.
+            sleep: Delay function for rate-limit retries (injectable for tests).
         """
+        self._embed_batch_size = embed_batch_size
+        self._sleep = sleep
         self._store = Chroma(
             collection_name=collection_name,
             embedding_function=embeddings,
@@ -48,7 +57,7 @@ class FinanceVectorStore:
         )
 
     def add_chunks(self, chunks: list[DocumentChunk]) -> int:
-        """Add document chunks to the vector store.
+        """Add document chunks in batches, retrying provider rate limits.
 
         Args:
             chunks: List of DocumentChunk objects to add.
@@ -61,10 +70,18 @@ class FinanceVectorStore:
         """
         if not chunks:
             return 0
-        texts, metadatas, ids = _prepare_chunk_data(chunks)
-        self._store.add_texts(texts=texts, metadatas=metadatas, ids=ids)
+        for start in range(0, len(chunks), self._embed_batch_size):
+            self._add_batch(chunks[start : start + self._embed_batch_size])
         logger.info("Added %d chunks to vector store", len(chunks))
         return len(chunks)
+
+    def _add_batch(self, batch: list[DocumentChunk]) -> None:
+        """Embed and store one batch, waiting out rate limits."""
+        texts, metadatas, ids = _prepare_chunk_data(batch)
+        call_with_rate_limit_retry(
+            lambda: self._store.add_texts(texts=texts, metadatas=metadatas, ids=ids),
+            sleep=self._sleep,
+        )
 
     def search(
         self,
