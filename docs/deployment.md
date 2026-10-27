@@ -59,15 +59,16 @@ iHost รันได้เฉพาะ PHP จึงใส่ FastAPI ลงไ
    Render กำหนด `$PORT` ให้เอง
 3. ตั้ง Environment variables ในหน้า Dashboard (ค่ามาจาก `.env` ในเครื่อง
    ห้าม commit): ตัวที่ไม่ใช่ความลับ (`APP_ENV`, `DEBUG`, `LOG_LEVEL`,
-   `LLM_PROVIDER=openrouter`, `LLM_MAX_TOKENS`, `OPENROUTER_MODEL`,
-   `OCR_PROVIDER`, `OCR_MODEL`, `RAG_KNOWLEDGE_BASE_DIRECTORY`)
+   `LLM_PROVIDER=google`, `GOOGLE_MODEL`, `LLM_MAX_TOKENS`,
+   `OCR_PROVIDER`, `OCR_MODEL`, `RAG_EMBEDDING_PROVIDER`, `RAG_EMBEDDING_MODEL`,
+   `RAG_KNOWLEDGE_BASE_DIRECTORY`)
    อยู่ใน `render.yaml` อยู่แล้ว — ต้องกรอกเองในหน้า Environment:
 
    | Secret | ค่า |
    |---|---|
    | `DB_URL` | connection string ของ **Neon Postgres** (ใช้ตัว pooled จาก Neon dashboard / `DATABASE_URL` ใน `.env`) — **สำคัญที่สุด** ถ้าไม่ใส่ ข้อมูลจะหายทุกครั้งที่ deploy เพราะดิสก์ Render เป็นแบบ ephemeral |
-   | `OPENROUTER_API_KEY` | จำเป็น — ใช้ทั้ง LLM/agent, router และ OCR (จาก https://openrouter.ai/keys) |
-   | `GOOGLE_API_KEY` | จำเป็นเฉพาะ RAG embeddings (`RAG_EMBEDDING_PROVIDER=google`) |
+   | `GOOGLE_API_KEY` | จำเป็น — ใช้ทั้ง LLM/agent, router, กูรู และ RAG embeddings (Gemini, จาก https://aistudio.google.com/apikey) |
+   | `OCR_API_KEY` | จำเป็น — ใส่ค่าเดียวกับ `GOOGLE_API_KEY` (ใช้อ่านสลิป/ใบเสร็จ) |
    | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | จาก LINE Developers Console — ต้องมีเพื่อเปิด `/line/webhook` |
 4. ตรวจสอบการติดตั้ง:
 
@@ -192,16 +193,16 @@ the Neon URL).
    (write contention). Render injects `$PORT`.
 3. Set environment variables in the Render dashboard (values mirror local
    `.env`; never commit them): all non-secrets (`APP_ENV`, `DEBUG`,
-   `LOG_LEVEL`, `LLM_PROVIDER=openrouter`, `LLM_MAX_TOKENS`,
-   `OPENROUTER_MODEL`, `OCR_PROVIDER`, `OCR_MODEL`,
-   `RAG_KNOWLEDGE_BASE_DIRECTORY`) already live in `render.yaml` — enter
+   `LOG_LEVEL`, `LLM_PROVIDER=google`, `GOOGLE_MODEL`, `LLM_MAX_TOKENS`,
+   `OCR_PROVIDER`, `OCR_MODEL`, `RAG_EMBEDDING_PROVIDER`,
+   `RAG_EMBEDDING_MODEL`, `RAG_KNOWLEDGE_BASE_DIRECTORY`) already live in `render.yaml` — enter
    these secrets yourself in the Environment tab:
 
    | Secret | Value |
    |---|---|
    | `DB_URL` | the **Neon Postgres** connection string (use the pooled one from the Neon dashboard / `DATABASE_URL` in `.env`) — **most important**; without it, every deploy wipes the data because Render's disk is ephemeral |
-   | `OPENROUTER_API_KEY` | required — powers the LLM/agent, router, and OCR (from https://openrouter.ai/keys) |
-   | `GOOGLE_API_KEY` | required only for RAG embeddings (`RAG_EMBEDDING_PROVIDER=google`) |
+   | `GOOGLE_API_KEY` | required — powers the LLM/agents, router, gurus and RAG embeddings (Gemini, from https://aistudio.google.com/apikey) |
+   | `OCR_API_KEY` | required — the same value as `GOOGLE_API_KEY` (slip/receipt reading) |
    | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | from the LINE Developers Console — required for `/line/webhook` |
 4. Verify the deploy:
 
