@@ -1,5 +1,7 @@
 """Tests for RAG vector store."""
 
+# pylint: disable=redefined-outer-name,unused-argument,protected-access
+
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -275,3 +277,43 @@ class TestGuruMetadata:
 
         assert results[0].guru_id == "buffett"
         assert results[0].source_url == "https://example.com/2008.pdf"
+
+
+def _chunks(count: int) -> list[DocumentChunk]:
+    """Create simple chunks for batching tests."""
+    metadata = DocumentMetadata(source_file="a.md", domain="tax", title="t")
+    return [
+        DocumentChunk(chunk_id=f"c{i}", content=f"text {i}", metadata=metadata, chunk_index=i)
+        for i in range(count)
+    ]
+
+
+class TestRateLimitedIndexing:
+    """add_chunks batches requests and retries provider rate limits."""
+
+    @patch("finance_ai.rag.vector_store.Chroma")
+    def test_adds_in_batches(self, mock_chroma: MagicMock, mock_embeddings: MagicMock) -> None:
+        """Five chunks with batch size 2 make three add_texts calls."""
+        store = FinanceVectorStore(embeddings=mock_embeddings, embed_batch_size=2)
+
+        assert store.add_chunks(_chunks(5)) == 5
+
+        batch_sizes = [
+            len(c.kwargs["ids"]) for c in mock_chroma.return_value.add_texts.call_args_list
+        ]
+        assert batch_sizes == [2, 2, 1]
+
+    @patch("finance_ai.rag.vector_store.Chroma")
+    def test_retries_rate_limited_batch(
+        self, mock_chroma: MagicMock, mock_embeddings: MagicMock
+    ) -> None:
+        """A 429 on one batch waits and retries instead of failing the rebuild."""
+        mock_chroma.return_value.add_texts.side_effect = [
+            RuntimeError("429 RESOURCE_EXHAUSTED. Please retry in 3s."),
+            None,
+        ]
+        sleeps: list[float] = []
+        store = FinanceVectorStore(embeddings=mock_embeddings, sleep=sleeps.append)
+
+        assert store.add_chunks(_chunks(1)) == 1
+        assert sleeps == [4.0]
