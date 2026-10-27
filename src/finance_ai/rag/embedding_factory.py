@@ -12,6 +12,8 @@ from langchain_google_genai import GoogleGenerativeAIEmbeddings
 
 from finance_ai.core.config import Settings, get_settings
 from finance_ai.core.logging import get_logger
+from finance_ai.database.session import create_database_engine, create_session_factory
+from finance_ai.rag.cached_embeddings import CachedEmbeddings
 
 logger = get_logger(__name__)
 
@@ -145,13 +147,14 @@ def create_openrouter_embeddings(settings: Settings) -> Embeddings:
 
 
 def create_embeddings(settings: Settings | None = None) -> Embeddings:
-    """Create an embedding model based on the configured provider.
+    """Create an embedding model, wrapped in the DB cache when enabled.
 
     Args:
         settings: Optional settings override. Uses get_settings() if None.
 
     Returns:
-        A LangChain Embeddings instance (Google or sentence-transformers).
+        A LangChain Embeddings instance (CachedEmbeddings around the provider
+        when rag_embedding_cache_enabled is True).
 
     Raises:
         ValueError: If the provider is unsupported or config is missing.
@@ -161,6 +164,28 @@ def create_embeddings(settings: Settings | None = None) -> Embeddings:
     """
     if settings is None:
         settings = get_settings()
+    provider_embeddings = _create_provider_embeddings(settings)
+    if not settings.rag_embedding_cache_enabled:
+        return provider_embeddings
+    return CachedEmbeddings(
+        provider_embeddings,
+        create_session_factory(create_database_engine()),
+        namespace=f"{settings.rag_embedding_provider}:{settings.rag_embedding_model}",
+    )
+
+
+def _create_provider_embeddings(settings: Settings) -> Embeddings:
+    """Create the configured provider's embeddings (no cache).
+
+    Args:
+        settings: Application settings.
+
+    Returns:
+        Provider Embeddings instance.
+
+    Raises:
+        ValueError: If the provider is unsupported or config is missing.
+    """
     if settings.rag_embedding_provider == "google":
         return create_google_embeddings(settings)
     if settings.rag_embedding_provider == "sentence_transformers":

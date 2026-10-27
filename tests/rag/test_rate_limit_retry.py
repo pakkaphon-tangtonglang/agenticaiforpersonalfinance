@@ -5,6 +5,7 @@ import pytest
 from finance_ai.rag.rate_limit_retry import (
     MAX_RETRY_DELAY_SECONDS,
     call_with_rate_limit_retry,
+    hint_seconds,
     is_rate_limit_error,
     retry_delay_seconds,
 )
@@ -84,3 +85,32 @@ class TestCallWithRateLimitRetry:
         with pytest.raises(RuntimeError, match="429"):
             call_with_rate_limit_retry(always_limited, sleep=sleeps.append, max_attempts=3)
         assert len(sleeps) == 2
+
+
+DAILY_QUOTA_429 = RuntimeError(
+    "429 RESOURCE_EXHAUSTED. Embed content requests per day limit exceeded on Free Tier. "
+    "Please retry in 20h21m45.375027428s."
+)
+
+
+class TestLongWaits:
+    """Daily quotas are not worth waiting for."""
+
+    def test_hint_with_hours_and_minutes_is_parsed(self) -> None:
+        """'20h21m45.4s' is read as the full duration."""
+        assert hint_seconds(DAILY_QUOTA_429) == pytest.approx(20 * 3600 + 21 * 60 + 45.375027428)
+
+    def test_hint_absent(self) -> None:
+        """No 'retry in' text means no hint."""
+        assert hint_seconds(RuntimeError("429")) is None
+
+    def test_daily_quota_fails_immediately(self) -> None:
+        """A wait longer than the cap is raised at once instead of retried."""
+        sleeps: list[float] = []
+
+        def daily_limited() -> None:
+            raise DAILY_QUOTA_429
+
+        with pytest.raises(RuntimeError, match="per day"):
+            call_with_rate_limit_retry(daily_limited, sleep=sleeps.append)
+        assert not sleeps

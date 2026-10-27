@@ -15,6 +15,7 @@ from finance_ai.database.models.watched_asset import WatchedAsset
 from finance_ai.database.models.risk_assessment import RiskAssessment
 from finance_ai.database.models.line_user_mapping import LineUserMapping
 from finance_ai.database.models.guru_knowledge_gap import GuruKnowledgeGap
+from finance_ai.database.models.embedding_cache_entry import EmbeddingCacheEntry
 
 __all__ = [
     "User",
@@ -32,4 +33,5 @@ __all__ = [
     "RiskAssessment",
     "LineUserMapping",
     "GuruKnowledgeGap",
+    "EmbeddingCacheEntry",
 ]

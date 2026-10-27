@@ -56,6 +56,10 @@ services:
         value: google
       - key: RAG_EMBEDDING_MODEL
         value: models/gemini-embedding-001
+      # Store embeddings in Postgres: restarts/wake-ups reuse them instead of
+      # re-embedding everything (free tier: 1,000 embedding requests/day).
+      - key: RAG_EMBEDDING_CACHE_ENABLED
+        value: "true"
       # Secrets — prompted in the Render dashboard, copy from local .env.
       # OCR_API_KEY must be the same Google key as GOOGLE_API_KEY.
       - key: GOOGLE_API_KEY

@@ -171,6 +171,13 @@ class Settings(BaseSettings):
         default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         description="Sentence-transformers model name",
     )
+    rag_embedding_cache_enabled: bool = Field(
+        default=False,
+        description=(
+            "Store document embeddings in the database so restarts and deploys"
+            " reuse them instead of re-embedding (enable on Render)"
+        ),
+    )
     rag_chroma_persist_directory: str = Field(
         default="./data/chroma_db", description="ChromaDB persistence directory"
     )
