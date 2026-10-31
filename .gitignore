@@ -210,6 +210,11 @@ start-webapp.ps1
 handoff*.md
 handoff-summary*.md
 
+# Thesis drafts and LaTeX sources (local-only)
+doct.md
+thesis-latex/
+thesis-latex.zip
+
 # Personal / private documents (job applications, cover letters, resumes)
 cover_letter*.md
 *.cover_letter

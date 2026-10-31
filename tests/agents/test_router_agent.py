@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
+from finance_ai.agents.llm_error_messages import LLM_GENERIC_ERROR_MESSAGE, LLM_QUOTA_MESSAGE
 from finance_ai.agents.router_agent import (
     DEFAULT_ABLATION_CONFIG,
     ROUTER_CONFIDENCE_THRESHOLD,
@@ -810,3 +811,29 @@ class TestGeminiContentBlocks:
         mock_build.return_value = mock_graph
         result = execute_planning_agent("วางแผนออมเงิน", user_id="user-1")
         assert result["response"] == "สวัสดีครับ"
+
+
+class TestOrchestrateQueryErrors:
+    """orchestrate_query turns LLM failures into a friendly reply."""
+
+    @patch("finance_ai.agents.router_agent.classify_query")
+    def test_quota_error_during_classification(self, mock_classify: MagicMock) -> None:
+        """A quota error while classifying returns the quota message."""
+        mock_classify.side_effect = RuntimeError("429 RESOURCE_EXHAUSTED")
+
+        result = orchestrate_query("คำนวณภาษี")
+        assert result == {"intent": "error", "response": LLM_QUOTA_MESSAGE}
+
+    @patch("finance_ai.agents.router_agent.execute_tax_agent")
+    @patch("finance_ai.agents.router_agent.classify_query")
+    def test_error_during_agent_execution(
+        self,
+        mock_classify: MagicMock,
+        mock_execute: MagicMock,
+    ) -> None:
+        """A failure inside the agent returns the generic message."""
+        mock_classify.return_value = OrchestratorDecision(intent="tax", confidence=Decimal("0.95"))
+        mock_execute.side_effect = RuntimeError("LLM down")
+
+        result = orchestrate_query("คำนวณภาษี")
+        assert result == {"intent": "error", "response": LLM_GENERIC_ERROR_MESSAGE}

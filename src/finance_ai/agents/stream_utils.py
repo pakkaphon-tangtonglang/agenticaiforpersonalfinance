@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from finance_ai.agents.graph_cache import get_compiled_graph
+from finance_ai.agents.llm_error_messages import describe_llm_error
 from finance_ai.agents.router_agent import (
     _build_clarify_response,
     _build_messages,
@@ -79,14 +80,7 @@ def stream_agent_response(
                 yield event
     except Exception as exc:  # noqa: BLE001
         logger.error("Stream error: %s", exc, exc_info=True)
-        full_response = (
-            "ขออภัยครับ ระบบเกิดข้อผิดพลาด "
-            "กรุณาลองถามใหม่อีกครั้ง\n\n"
-            "ลองถามในรูปแบบอื่น เช่น:\n"
-            '- "ช่วยวางแผนออมเงินซื้อรถ'
-            'ราคา 800,000 บาท"\n'
-            '- "คำนวณภาษีเงินได้ 500,000 บาท"'
-        )
+        full_response = describe_llm_error(exc)
         yield StreamEvent(event_type="token", content=full_response)
 
     # FALLBACK: streaming produced no content → invoke graph with fresh state
@@ -284,7 +278,12 @@ def orchestrate_query_stream(
     Yields:
         StreamEvent objects.
     """
-    decision = classify_query(query, chat_model, chat_history)
+    try:
+        decision = classify_query(query, chat_model, chat_history)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Stream routing failed: %s", exc, exc_info=True)
+        yield from _stream_error_response(exc)
+        return
     logger.info("Stream routing to: %s", decision.intent)
     if _should_clarify(decision):
         yield from _stream_clarify_response()
@@ -301,6 +300,20 @@ def orchestrate_query_stream(
         "db_session_factory": db_session_factory,
     }
     yield from stream_agent_response(graph, input_state, decision.intent)
+
+
+def _stream_error_response(error: Exception) -> Generator[StreamEvent, None, None]:
+    """Yield a user-facing error reply so the SSE stream ends cleanly.
+
+    Args:
+        error: The exception that stopped the request.
+
+    Yields:
+        Token + complete events with intent='error'.
+    """
+    message = describe_llm_error(error)
+    yield StreamEvent(event_type="token", content=message)
+    yield StreamEvent(event_type="complete", content=message, intent="error")
 
 
 def _stream_clarify_response() -> Generator[StreamEvent, None, None]:
