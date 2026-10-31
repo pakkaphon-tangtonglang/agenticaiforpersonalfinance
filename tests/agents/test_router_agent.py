@@ -1,6 +1,7 @@
 """Tests for the Orchestrator Agent."""
 
 from decimal import Decimal
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -785,3 +786,27 @@ class TestClassifyQueryConfidenceThreshold:
         model = _mock_model_returning('{"intent": "unknown", "confidence": 0.2}')
         decision = classify_query("สอนทำผัดกระเพรา", chat_model=model, config=config)
         assert decision.intent == "unknown"
+
+
+GEMINI_BLOCK_CONTENT: list[str | dict[Any, Any]] = [
+    {"type": "text", "text": "สวัสดีครับ", "extras": {"signature": "abc"}},
+]
+
+
+class TestGeminiContentBlocks:
+    """Gemini 3 returns AIMessage.content as a list of blocks; replies must be text."""
+
+    def test_general_chat_returns_text_not_block_list(self, mock_chat_model: MagicMock) -> None:
+        """General chat joins the text parts instead of leaking the list."""
+        mock_chat_model.invoke.return_value = AIMessage(content=GEMINI_BLOCK_CONTENT)
+        result = execute_general_chat("สวัสดี", chat_model=mock_chat_model)
+        assert result["response"] == "สวัสดีครับ"
+
+    @patch("finance_ai.agents.graph_cache.get_compiled_graph")
+    def test_agent_reply_returns_text_not_block_list(self, mock_build: MagicMock) -> None:
+        """Specialist agents return the joined text of their last message."""
+        mock_graph = MagicMock()
+        mock_graph.invoke.return_value = {"messages": [AIMessage(content=GEMINI_BLOCK_CONTENT)]}
+        mock_build.return_value = mock_graph
+        result = execute_planning_agent("วางแผนออมเงิน", user_id="user-1")
+        assert result["response"] == "สวัสดีครับ"

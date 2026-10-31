@@ -387,7 +387,7 @@ def _invoke_intent(
         }
     )
     last_message = result["messages"][-1]
-    return {"intent": intent, "response": last_message.content}
+    return {"intent": intent, "response": last_message.text}
 
 
 def execute_tax_agent(
@@ -580,7 +580,7 @@ def execute_general_chat(
             messages.append(SystemMessage(content=content))
     messages.append(HumanMessage(content=query))
     response = chat_model.invoke(messages)
-    return {"intent": "general_chat", "response": response.content}
+    return {"intent": "general_chat", "response": response.text}
 
 
 def build_unsupported_response(decision: OrchestratorDecision) -> dict[str, Any]:
