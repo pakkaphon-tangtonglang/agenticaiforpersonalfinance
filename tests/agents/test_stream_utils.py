@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from finance_ai.agents.llm_error_messages import LLM_QUOTA_MESSAGE
 from finance_ai.agents.stream_utils import (
     StreamEvent,
     _extract_last_ai_from_messages,
@@ -508,3 +509,28 @@ class TestInvokeAndExtract:
         mock_graph = MagicMock()
         mock_graph.invoke.side_effect = RuntimeError("API error")
         assert _invoke_and_extract(mock_graph, {}) == ""
+
+
+class TestStreamErrorMessages:
+    """Streams end cleanly with a clear message when the LLM fails."""
+
+    def test_stream_quota_error_yields_quota_message(self) -> None:
+        """A quota error mid-stream yields the quota message, no fallback invoke."""
+        mock_graph = MagicMock()
+        mock_graph.stream.side_effect = RuntimeError("429 RESOURCE_EXHAUSTED")
+
+        events = list(stream_agent_response(mock_graph, {"messages": []}, "guru:buffett"))
+        tokens = [e.content for e in events if e.event_type == "token"]
+        assert tokens == [LLM_QUOTA_MESSAGE]
+        assert events[-1].event_type == "complete"
+        mock_graph.invoke.assert_not_called()
+
+    @patch("finance_ai.agents.stream_utils.classify_query")
+    def test_classification_error_ends_stream_cleanly(self, mock_classify: MagicMock) -> None:
+        """A classifier failure yields a token + complete instead of raising."""
+        mock_classify.side_effect = RuntimeError("429 RESOURCE_EXHAUSTED")
+
+        events = list(orchestrate_query_stream("คำนวณภาษี"))
+        assert [e.event_type for e in events] == ["token", "complete"]
+        assert events[-1].content == LLM_QUOTA_MESSAGE
+        assert events[-1].intent == "error"

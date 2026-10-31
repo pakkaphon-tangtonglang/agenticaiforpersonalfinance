@@ -15,6 +15,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 from sqlalchemy.orm import Session
 
+from finance_ai.agents.llm_error_messages import describe_llm_error
 from finance_ai.agents.prompts import (
     GENERAL_CHAT_SYSTEM_PROMPT,
     ORCHESTRATOR_HISTORY_INSTRUCTION,
@@ -649,6 +650,25 @@ def orchestrate_query(
 
     Example:
         >>> result = orchestrate_query("คำนวณภาษี เงินเดือน 1 ล้าน")
+    """
+    try:
+        return _route_query(query, chat_model, user_id, db_session_factory, chat_history)
+    except Exception as exc:  # noqa: BLE001
+        logger.error("Query orchestration failed: %s", exc, exc_info=True)
+        return {"intent": "error", "response": describe_llm_error(exc)}
+
+
+def _route_query(
+    query: str,
+    chat_model: BaseChatModel | None,
+    user_id: str,
+    db_session_factory: Callable[[], Session] | None,
+    chat_history: list[tuple[str, str]] | None,
+) -> dict[str, Any]:
+    """Classify a query and run the matching agent (errors propagate).
+
+    Returns:
+        Dict with 'intent' and 'response' from the target agent.
     """
     decision = classify_query(query, chat_model, chat_history)
     logger.info("Routed query to: %s (confidence: %s)", decision.intent, decision.confidence)
