@@ -38,6 +38,7 @@ class HoldingRecord(BaseModel):
 
     symbol: str
     name: str = ""
+    holding_id: str = ""  # database id, so a row can be edited or deleted
     asset_type: str
     quantity: Decimal
     average_cost_per_unit: Decimal
@@ -67,6 +68,7 @@ class HoldingSummary(BaseModel):
 
     symbol: str
     name: str = ""
+    holding_id: str = ""  # database id, so a row can be edited or deleted
     asset_type: str
     asset_type_label: str
     quantity: Decimal
@@ -456,6 +458,7 @@ def build_holding_summary(
     return HoldingSummary(
         symbol=holding.symbol,
         name=holding.name,
+        holding_id=holding.holding_id,
         asset_type=holding.asset_type,
         asset_type_label=label,
         quantity=holding.quantity,

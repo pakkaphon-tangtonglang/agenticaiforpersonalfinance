@@ -865,6 +865,28 @@ svg.i {
 .holding-gain { font-size: var(--text-body-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
 .holding-gain.gain { color: var(--positive); }
 .holding-gain.loss { color: var(--negative); }
+/* Edit / delete a portfolio row (app.js holdingActions). */
+.holding-actions { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+.holding-action {
+  width: 30px; height: 30px; display: grid; place-items: center;
+  border: 0; border-radius: var(--radius-sm); background: none; color: var(--muted); cursor: pointer;
+  transition: background-color var(--dur-fast), color var(--dur-fast);
+}
+.holding-action:hover { background: var(--surface-2); color: var(--ink); }
+.holding-action.is-danger:hover { background: var(--negative-tint); color: var(--negative); }
+.holding-confirm-text { font-size: var(--text-body-sm); color: var(--ink); margin-right: 4px; white-space: nowrap; }
+.holding-confirm {
+  padding: 2px var(--sp-3); border-radius: var(--radius-sm); cursor: pointer;
+  border: 1px solid var(--line-strong); background: none; color: var(--muted); font-size: var(--text-body-sm);
+}
+.holding-confirm.is-danger { border-color: var(--negative); background: var(--negative); color: #fff; }
+.holding-confirm:disabled { opacity: 0.6; cursor: default; }
+.holding-item.is-editing { animation: fade-in var(--dur) ease-out both; }
+.holding-edit { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--sp-3); width: 100%; }
+.holding-edit-field { display: flex; flex-direction: column; gap: 2px; font-size: var(--text-caption); color: var(--muted); }
+.holding-edit-field .field-input { width: 120px; }
+.holding-edit-buttons { display: flex; gap: var(--sp-1); margin-left: auto; }
+.holding-edit-error { flex-basis: 100%; margin: 0; font-size: var(--text-body-sm); color: var(--negative); }
 
 /* Asset search (free text) */
 .asset-search { display: flex; gap: var(--sp-3); align-items: flex-end; flex-wrap: wrap; }
@@ -1563,7 +1585,7 @@ a.cite-card-title:hover { text-decoration: underline; }
   .nav-item, .conv-new { height: 44px; }
   .rail-btn, .line-connect-btn, .user-avatar, .menu-toggle { width: 44px; height: 44px; }
   :root[data-sidebar="collapsed"] .nav-item, :root[data-sidebar="collapsed"] .conv-new { width: 44px; }
-  .conv-action, .history-action { min-width: 44px; min-height: 44px; }
+  .conv-action, .history-action, .holding-action { min-width: 44px; min-height: 44px; }
   .btn, .attach-btn, .composer-send, .composer-select, .health-chip { min-height: 44px; }
   .history-filter, .guru-mode-btn, .guru-chip, .watchlist-remove, .upload-tab,
   .asset-fetch-btn, .asset-track-btn, .asset-port-btn, .risk-skip-link { min-height: 44px; }

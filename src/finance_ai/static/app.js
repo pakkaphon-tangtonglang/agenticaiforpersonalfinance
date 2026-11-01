@@ -1871,7 +1871,9 @@
     const gainText = gain == null ? "ไม่มีราคาล่าสุด" : gainLabel(gain, row.gain_loss_percentage);
     const gainClass = gain == null ? "holding-gain" : `holding-gain ${gainClassName(gain)}`;
     const cost = row.average_cost_per_unit == null ? "" : ` · ทุน ${thb(row.average_cost_per_unit)}`;
-    return el("li", { class: "watchlist-item watchlist-item-clickable" },
+    const li = el("li", { class: "watchlist-item watchlist-item-clickable holding-item" });
+    const label = row.name || displaySymbol(row.symbol);
+    li.append(
       el("button", {
         type: "button", class: "watchlist-open",
         title: "ดึงราคาและข่าวล่าสุด",
@@ -1881,8 +1883,80 @@
         el("span", { class: "watchlist-name" }, `${row.name || ""} · ${row.quantity ?? "—"} หน่วย${cost}`),
         el("span", { class: "holding-value" }, row.current_value == null ? "" : thb(row.current_value)),
         el("span", { class: gainClass }, gainText)),
+      holdingActions(li, row, label),
     );
+    return li;
   }
+
+  // ✎ edits quantity/cost in place; 🗑 asks "ลบ …?" in the row before deleting.
+  function holdingActions(li, row, label) {
+    const actions = el("span", { class: "holding-actions" });
+    const showButtons = () => actions.replaceChildren(
+      el("button", { type: "button", class: "holding-action", title: "แก้ไข",
+        "aria-label": `แก้ไข ${label}`, onclick: () => li.replaceWith(holdingEditForm(row, label)) }, "✎"),
+      el("button", { type: "button", class: "holding-action is-danger", title: "ลบ",
+        "aria-label": `ลบ ${label} ออกจากพอร์ต`, onclick: () => askDelete() }, "🗑"));
+    const askDelete = () => {
+      const confirmBtn = el("button", { type: "button", class: "holding-confirm is-danger",
+        onclick: () => deleteHolding(row, label, confirmBtn) }, "ลบ");
+      actions.replaceChildren(
+        el("span", { class: "holding-confirm-text" }, `ลบ ${label}?`), confirmBtn,
+        el("button", { type: "button", class: "holding-confirm", onclick: showButtons }, "ยกเลิก"));
+      confirmBtn.focus();
+    };
+    showButtons();
+    return actions;
+  }
+
+  async function deleteHolding(row, label, button) {
+    button.disabled = true;
+    try {
+      await api("DELETE", `/assets/holdings/${encodeURIComponent(row.holding_id)}`,
+        { params: { user_id: state.userId } });
+      toast(`ลบ ${label} ออกจากพอร์ตแล้ว`);
+    } catch (e) {
+      toast("ลบรายการถือไม่สำเร็จ: " + e.message.replace(/^\d+:\s*/, ""), true);
+    }
+    loadHoldings();
+  }
+
+  function holdingEditForm(row, label) {
+    const qty = el("input", { class: "field-input", inputmode: "decimal", value: row.quantity ?? "",
+      "aria-label": `จำนวนหน่วยของ ${label}` });
+    const cost = el("input", { class: "field-input", inputmode: "decimal", value: row.average_cost_per_unit ?? "",
+      "aria-label": `ต้นทุนต่อหน่วยของ ${label}` });
+    const error = el("p", { class: "holding-edit-error", role: "alert", hidden: "" });
+    const save = el("button", { type: "submit", class: "btn" }, "บันทึก");
+    const form = el("form", { class: "holding-edit" },
+      el("span", { class: "watchlist-symbol" }, displaySymbol(row.symbol)),
+      el("label", { class: "holding-edit-field" }, el("span", {}, "จำนวน"), qty),
+      el("label", { class: "holding-edit-field" }, el("span", {}, "ทุน/หน่วย"), cost),
+      el("span", { class: "holding-edit-buttons" }, save,
+        el("button", { type: "button", class: "btn btn-ghost", onclick: () => loadHoldings() }, "ยกเลิก")),
+      error);
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      saveHoldingEdit(row, { quantity: qty.value, price_per_unit: cost.value }, save, error);
+    });
+    form.addEventListener("keydown", (e) => { if (e.key === "Escape") { e.stopPropagation(); loadHoldings(); } });
+    requestAnimationFrame(() => qty.focus());
+    return el("li", { class: "watchlist-item holding-item is-editing" }, form);
+  }
+
+  async function saveHoldingEdit(row, fields, save, error) {
+    save.disabled = true;
+    try {
+      await api("PATCH", `/assets/holdings/${encodeURIComponent(row.holding_id)}`,
+        { json: { user_id: state.userId, ...fields } });
+      toast("แก้ไขรายการถือแล้ว");
+      loadHoldings();
+    } catch (e) {
+      error.textContent = e.message.replace(/^\d+:\s*/, "");
+      error.hidden = false;
+      save.disabled = false;
+    }
+  }
+
 
   async function loadWatchlist() {
     try {

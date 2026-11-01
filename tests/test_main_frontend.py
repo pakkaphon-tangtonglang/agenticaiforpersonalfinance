@@ -774,3 +774,18 @@ class TestAnimationPass:
         assert 'id="insightCard"' in html and 'id="insightBody"' in html
         assert '"/dashboard/trends"' in self.client.get("/static/insights.js").text
         assert "window.InsightCards.load(year, month)" in self.client.get("/static/app.js").text
+
+
+class TestHoldingEditDelete:
+    """Each portfolio row can be edited in place or deleted after a confirm."""
+
+    client: TestClient = TestClient(app)
+
+    def test_rows_have_edit_and_delete_wired_to_the_api(self) -> None:
+        """✎ opens an inline form (PATCH); 🗑 asks first, then DELETE."""
+        js = self.client.get("/static/app.js").text
+        assert "function holdingActions(li, row, label)" in js
+        assert 'api("PATCH", `/assets/holdings/${encodeURIComponent(row.holding_id)}`' in js
+        assert 'api("DELETE", `/assets/holdings/${encodeURIComponent(row.holding_id)}`' in js
+        assert "`ลบ ${label}?`" in js
+        assert ".holding-action.is-danger:hover" in self.client.get("/static/styles.css").text

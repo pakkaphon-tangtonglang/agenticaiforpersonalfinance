@@ -19,6 +19,7 @@ from finance_ai.tools.investment_calculator import HoldingSummary
 from finance_ai.tools.investment_service import add_investment_holding, get_portfolio_summary
 from finance_ai.tools.investment_calculator import validate_mutual_fund_symbol
 from finance_ai.tools.investment_constants import STOCK_SYMBOL_SUFFIX
+from finance_ai.tools.symbol_search_service import clean_listing_name
 from finance_ai.tools.symbol_guard import (
     SymbolResolutionError,
     SymbolSearchUnavailableError,
@@ -209,8 +210,9 @@ def holding_to_dict(holding: HoldingSummary) -> dict[str, Any]:
         Dict of display-ready fields (None where no price is stored).
     """
     return {
+        "holding_id": holding.holding_id,
         "symbol": holding.symbol,
-        "name": holding.name,
+        "name": clean_listing_name(holding.symbol, holding.name),
         "asset_type": holding.asset_type_label,
         "quantity": _plain(holding.quantity),
         "average_cost_per_unit": _money(holding.average_cost_per_unit),

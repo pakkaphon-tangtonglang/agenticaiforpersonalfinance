@@ -149,6 +149,33 @@ def _parse_quotes(payload: dict[str, Any]) -> list[AssetSymbolMatch]:
     return [match for match in matches if match is not None][:_MAX_RESULTS]
 
 
+def clean_listing_name(symbol: str, name: str) -> str:
+    """Drop Yahoo's "TICKER_" prefix from a SET stock name.
+
+    Yahoo names Thai stocks like "PTT_PTT" or "PTTEP_PTT EXPLORATION AND";
+    people expect "PTT" and "PTT EXPLORATION AND". Other names are returned
+    unchanged.
+
+    Args:
+        symbol: Asset symbol, e.g. "PTT.BK".
+        name: Name as stored or returned by Yahoo.
+
+    Returns:
+        The name without the ticker prefix (the ticker when nothing is left).
+
+    Example:
+        >>> clean_listing_name("PTTEP.BK", "PTTEP_PTT EXPLORATION AND")
+        'PTT EXPLORATION AND'
+    """
+    if not symbol.upper().endswith(".BK"):
+        return name
+    ticker = symbol[: -len(".BK")]
+    prefix = f"{ticker}_"
+    if not name.upper().startswith(prefix.upper()):
+        return name
+    return name[len(prefix) :].strip() or name[: len(ticker)]
+
+
 def _quote_to_match(quote: dict[str, Any]) -> Optional[AssetSymbolMatch]:
     """Convert a single Yahoo quote entry to a match.
 
@@ -161,9 +188,10 @@ def _quote_to_match(quote: dict[str, Any]) -> Optional[AssetSymbolMatch]:
     name = str(quote.get("shortname") or quote.get("longname") or "").strip()
     if not name:
         return None
+    symbol = str(quote.get("symbol") or "")
     return AssetSymbolMatch(
-        symbol=str(quote.get("symbol") or ""),
-        name=name,
+        symbol=symbol,
+        name=clean_listing_name(symbol, name),
         exchange=str(quote.get("exchDisp") or quote.get("exchange") or ""),
         quote_type=str(quote.get("quoteType") or ""),
     )

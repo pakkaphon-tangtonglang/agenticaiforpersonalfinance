@@ -71,6 +71,12 @@ from finance_ai.tools.bank_statement_pdf import (
 )
 from finance_ai.tools.bank_statement_service import bulk_insert_transactions
 from finance_ai.tools.asset_search_service import search_all_assets
+from finance_ai.tools.holding_edit_service import (
+    HoldingEditForm,
+    HoldingNotFoundError,
+    delete_holding,
+    update_holding,
+)
 from finance_ai.tools.holding_entry_service import (
     HoldingEntry,
     HoldingEntryError,
@@ -116,6 +122,7 @@ from finance_ai.tools.conversation_title_service import (
 )
 from finance_ai.tools.market_data_models import AssetFetchResult
 from finance_ai.tools.report_service import generate_financial_report
+from finance_ai.tools.symbol_search_service import clean_listing_name
 from finance_ai.tools.trend_service import build_dashboard_trends
 from finance_ai.tools.background_scheduler import start_scheduler, stop_scheduler
 from finance_ai.tools.watchlist_alert_service import (
@@ -416,6 +423,7 @@ class WatchlistAlertRequest(BaseModel):
 class HoldingItemOut(BaseModel):
     """Portfolio row returned by GET /assets/holdings (owned, not just watched)."""
 
+    holding_id: str = Field(default="", description="Row id for PATCH/DELETE /assets/holdings/{id}")
     symbol: str = Field(..., description="Asset symbol (e.g. 'PTT.BK')")
     name: str = Field(default="", description="Display name")
     quantity: str | None = Field(default=None, description="Units held")
@@ -430,6 +438,15 @@ class HoldingAddRequest(HoldingForm):
     """Add a Thai stock or fund from the asset page (blank price = latest price/NAV)."""
 
     user_id: str = Field(..., description="User UUID")
+
+
+class HoldingEditRequest(HoldingEditForm):
+    """Corrected quantity and cost per unit for one portfolio row."""
+
+    user_id: str = Field(..., description="User UUID")
+
+
+_HOLDING_NOT_FOUND = "ไม่พบรายการถือนี้ (อาจถูกลบไปแล้ว)"
 
 
 class RiskAssessmentSubmitRequest(BaseModel):
@@ -1716,7 +1733,7 @@ def get_watchlist(user_id: str, session: Session = Depends(get_session)) -> list
         WatchlistItemOut(
             id=str(asset.id),
             symbol=asset.symbol,
-            name=asset.name,
+            name=clean_listing_name(asset.symbol, asset.name or ""),
             alert_time=alert_times.get(asset.symbol),
         )
         for asset in assets
@@ -1756,6 +1773,56 @@ def add_holding(req: HoldingAddRequest, session: Session = Depends(get_session))
         return add_holding_from_form(session, req.user_id, req)
     except HoldingEntryError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.patch("/assets/holdings/{holding_id}", status_code=204)
+def edit_holding(
+    holding_id: str, req: HoldingEditRequest, session: Session = Depends(get_session)
+) -> Response:
+    """Correct the quantity and average cost of one portfolio row.
+
+    Args:
+        holding_id: Holding to change.
+        req: Owner id, new quantity and cost per unit.
+        session: Database session.
+
+    Returns:
+        204 No Content.
+
+    Raises:
+        HTTPException: 404 when the row is missing or not the user's; 422 for bad numbers.
+    """
+    try:
+        update_holding(session, req.user_id, holding_id, req)
+    except HoldingNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=_HOLDING_NOT_FOUND) from exc
+    except HoldingEntryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return Response(status_code=204)
+
+
+@app.delete("/assets/holdings/{holding_id}", status_code=204)
+def remove_holding(
+    holding_id: str, user_id: str, session: Session = Depends(get_session)
+) -> Response:
+    """Delete one portfolio row and its buy record.
+
+    Args:
+        holding_id: Holding to delete.
+        user_id: Owner of the holding.
+        session: Database session.
+
+    Returns:
+        204 No Content.
+
+    Raises:
+        HTTPException: 404 when the row is missing or not the user's.
+    """
+    try:
+        delete_holding(session, user_id, holding_id)
+    except HoldingNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=_HOLDING_NOT_FOUND) from exc
+    return Response(status_code=204)
 
 
 @app.post("/assets/holdings/refresh", response_model=list[HoldingItemOut])
