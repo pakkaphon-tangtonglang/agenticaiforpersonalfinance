@@ -51,6 +51,7 @@ from finance_ai.tools.receipt_ocr import (
     extract_document_fields,
 )
 from finance_ai.tools.receipt_ocr_service import confirm_receipt_transactions
+from finance_ai.tools.user_provisioning_service import ensure_user_exists
 from finance_ai.tools.expense_constants import VALID_EXPENSE_CATEGORIES
 from finance_ai.tools.conversation_service import (
     create_conversation,
@@ -1373,6 +1374,8 @@ def add_watchlist_asset(
         canonical_symbol = resolve_and_validate_symbol(req.symbol)
     except SymbolResolutionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    # Postgres enforces the users FK: a web user may add a symbol before ever chatting.
+    ensure_user_exists(session, req.user_id)
     record = WatchedAssetCRUD().add(session, req.user_id, canonical_symbol, req.name)
     session.commit()
     status = "already_exists" if record is None else "added"
@@ -1522,9 +1525,6 @@ def _save_risk_assessment(
     )
     from finance_ai.database.models.risk_assessment import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
         RiskAssessment,
-    )
-    from finance_ai.tools.user_provisioning_service import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
-        ensure_user_exists,
     )
 
     ensure_user_exists(session, req.user_id)
