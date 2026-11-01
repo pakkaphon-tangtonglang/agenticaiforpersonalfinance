@@ -279,6 +279,72 @@ class TestGuruMetadata:
         assert results[0].source_url == "https://example.com/2008.pdf"
 
 
+class TestSourceAttributionMetadata:
+    """Title and source fields round-trip through Chroma metadata."""
+
+    @patch("finance_ai.rag.vector_store.Chroma")
+    def test_add_chunks_stores_source_fields(
+        self, mock_chroma: MagicMock, mock_embeddings: MagicMock
+    ) -> None:
+        """source_title, source_publisher and source_kind are written when set."""
+        metadata = DocumentMetadata(
+            source_file="tax_guide.md",
+            domain="tax",
+            title="คู่มือภาษี",
+            source_title="คู่มือภาษีเงินได้",
+            source_publisher="กรมสรรพากร",
+        )
+        chunk = DocumentChunk(chunk_id="k0", content="ภาษี", metadata=metadata, chunk_index=0)
+        store = FinanceVectorStore(embeddings=mock_embeddings)
+
+        store.add_chunks([chunk])
+
+        stored = mock_chroma.return_value.add_texts.call_args.kwargs["metadatas"][0]
+        assert stored["source_title"] == "คู่มือภาษีเงินได้"
+        assert stored["source_publisher"] == "กรมสรรพากร"
+        assert stored["source_kind"] == "compiled"
+
+    @patch("finance_ai.rag.vector_store.Chroma")
+    def test_search_results_carry_title_and_source(
+        self, mock_chroma: MagicMock, mock_embeddings: MagicMock
+    ) -> None:
+        """Results expose title, source_title, source_publisher and source_kind."""
+        document = MagicMock(
+            page_content="ภาษี",
+            metadata={
+                "source_file": "tax_guide.md",
+                "domain": "tax",
+                "title": "คู่มือภาษี",
+                "source_title": "คู่มือภาษีเงินได้",
+                "source_publisher": "กรมสรรพากร",
+                "source_kind": "compiled",
+            },
+        )
+        mock_chroma.return_value.similarity_search_with_score.return_value = [(document, 0.4)]
+        store = FinanceVectorStore(embeddings=mock_embeddings)
+
+        result = store.search("query")[0]
+
+        assert result.title == "คู่มือภาษี"
+        assert result.source_title == "คู่มือภาษีเงินได้"
+        assert result.source_publisher == "กรมสรรพากร"
+        assert result.source_kind == "compiled"
+
+    @patch("finance_ai.rag.vector_store.Chroma")
+    def test_old_index_without_title_falls_back(
+        self, mock_chroma: MagicMock, mock_embeddings: MagicMock
+    ) -> None:
+        """Chunks indexed before these fields existed still load."""
+        document = MagicMock(page_content="x", metadata={"source_file": "a.md", "domain": "tax"})
+        mock_chroma.return_value.similarity_search_with_score.return_value = [(document, 0.4)]
+        store = FinanceVectorStore(embeddings=mock_embeddings)
+
+        result = store.search("query")[0]
+
+        assert result.title == ""
+        assert result.source_kind == "compiled"
+
+
 def _chunks(count: int) -> list[DocumentChunk]:
     """Create simple chunks for batching tests."""
     metadata = DocumentMetadata(source_file="a.md", domain="tax", title="t")

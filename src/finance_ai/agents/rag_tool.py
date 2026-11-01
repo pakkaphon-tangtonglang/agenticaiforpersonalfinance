@@ -5,10 +5,16 @@ the Thai personal finance knowledge base.
 """
 
 import threading
-from typing import Any
+from typing import Annotated, Any
 
 from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
 
+from finance_ai.agents.citation_sources import (
+    build_citations,
+    collect_turn_citations,
+    format_citations_as_context,
+)
 from finance_ai.core.logging import get_logger
 from finance_ai.rag.retriever import FinanceRetriever
 
@@ -74,24 +80,25 @@ def reset_retriever() -> None:
 def search_finance_knowledge(
     query: str,
     domain: str = "",
+    messages: Annotated[list[Any] | None, InjectedState("messages")] = None,
 ) -> dict[str, Any]:
     """Search the Thai personal finance knowledge base.
 
     Use this tool when you need reference information about Thai tax laws,
     investment rules, expense guidelines, or general financial planning advice.
+    Cite what you use with the [number] shown before each passage.
 
     Args:
         query: Natural language search query (Thai or English).
         domain: Optional domain filter ("tax", "expense", "investment", or "" for all).
+        messages: Conversation so far (injected from graph state) for citation numbering.
 
     Returns:
-        Dict with 'results' list and 'context' formatted string.
+        Dict with numbered 'citations' and the 'context' passages.
     """
-    retriever = get_retriever()
-    domain_filter = domain if domain else None
-    results = retriever.retrieve(query, domain=domain_filter)
-    context = retriever.retrieve_as_context(query, domain=domain_filter)
+    results = get_retriever().retrieve(query, domain=domain or None)
+    citations = build_citations(results, collect_turn_citations(messages or []))
     return {
-        "results": [r.model_dump() for r in results],
-        "context": context,
+        "citations": [citation.model_dump() for citation in citations],
+        "context": format_citations_as_context(results, citations),
     }

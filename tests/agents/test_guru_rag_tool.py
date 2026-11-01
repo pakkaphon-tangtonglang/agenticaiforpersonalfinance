@@ -82,8 +82,11 @@ class TestSearchGuruKnowledge:
         mock_get_retriever.return_value.retrieve_by_metadata.assert_called_once_with(
             "ตลาดตก", {"guru_id": "buffett"}
         )
-        assert result["results"][0]["guru_id"] == "buffett"
-        assert "https://example.com/2008.pdf" in str(result["context"])
+        citation = result["citations"][0]
+        assert citation["url"] == "https://example.com/2008.pdf"
+        assert citation["domain"] == "example.com"
+        assert str(result["context"]).startswith("[1] ")
+        assert "letter_2008" not in str(result)
 
     @patch("finance_ai.agents.guru_rag_tool.get_guru_retriever")
     def test_no_results_returns_not_found_message(self, mock_get_retriever: MagicMock) -> None:
@@ -92,7 +95,7 @@ class TestSearchGuruKnowledge:
 
         result = _invoke_tool("คริปโต", "buffett")
 
-        assert result["results"] == []
+        assert result["citations"] == []
         assert "ไม่พบในแหล่งข้อมูลของกูรู" in str(result["context"])
 
     def test_missing_guru_id_returns_error(self) -> None:

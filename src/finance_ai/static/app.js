@@ -71,6 +71,7 @@
     streaming: false,
     charts: {},
     mode: "hero", // "hero" | "thread"
+    view: "chat", // active sidebar tab; the history list follows it
     riskProfile: null, // latest risk assessment {risk_category, risk_level, total_score}
     recommendationDisclaimerShown: false, // show the disclaimer once per session
     conversations: [], // sidebar list [{id, title}] from the last loadConversations
@@ -231,7 +232,7 @@
   // Render model output as markdown → Excel-style HTML tables, sanitized.
   // Falls back to escaped text + <br> if the libs are not yet loaded.
   function renderMarkdown(text) {
-    const str = normalizeForChat(text);
+    const str = normalizeForChat(window.Citations ? window.Citations.stripLegacyLabels(text) : text);
     if (typeof marked === "undefined" || typeof DOMPurify === "undefined") {
       return esc(str).replace(/\n/g, "<br>");
     }
@@ -240,9 +241,33 @@
     marked.setOptions({ gfm: true, breaks: false });
     const html = marked.parse(str);
     // Wrap tables so they can scroll on small screens and pick up grid styling.
-    return DOMPurify.sanitize(
+    const safe = DOMPurify.sanitize(
       html.replace(/<table/g, '<div class="table-wrap"><table').replace(/<\/table>/g, "</table></div>")
     );
+    return safe.includes("<table") ? markNumericCells(safe) : safe;
+  }
+
+  // Numbers, money and percentages: "60,000", "-1.5%", "฿1,200", "12,000 บาท".
+  const NUMERIC_CELL = /^[-−+]?[฿$]?\s?[\d,]+(\.\d+)?\s*(%|บาท|฿|THB|เท่า)?$/;
+
+  // Tag numeric cells (and all-numeric column headers) so only they are right-aligned.
+  function markNumericCells(html) {
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    for (const table of template.content.querySelectorAll("table")) {
+      const numericColumns = new Map();
+      for (const row of table.querySelectorAll("tbody tr")) {
+        [...row.cells].forEach((cell, i) => {
+          const numeric = NUMERIC_CELL.test(cell.textContent.trim());
+          if (numeric) cell.classList.add("num");
+          numericColumns.set(i, (numericColumns.get(i) ?? true) && numeric);
+        });
+      }
+      table.querySelectorAll("thead th").forEach((th, i) => {
+        if (numericColumns.get(i)) th.classList.add("num");
+      });
+    }
+    return template.innerHTML;
   }
 
   // ─── API ───
@@ -270,6 +295,8 @@
     upload: "เพิ่มรายการจากไฟล์", assets: "สินทรัพย์", guru: "กูรู",
   };
   function switchView(name) {
+    const historyChanged = (name === "guru") !== (state.view === "guru");
+    state.view = name;
     document.querySelectorAll(".view").forEach((v) => v.classList.remove("is-active"));
     $("view-" + name).classList.add("is-active");
     document.querySelectorAll(".nav-item").forEach((n) =>
@@ -278,6 +305,8 @@
     if (name === "assets") { loadNotifications(); loadWatchlist(); }
     if (name === "dashboard") loadDashboard();
     if (name === "guru" && window.GuruView) window.GuruView.open();
+    $("convHeading").textContent = name === "guru" ? "ประวัติแชทกูรู" : "ประวัติแชท";
+    if (historyChanged) loadConversations();
     if (window.innerWidth <= 760) $("sidebar").classList.remove("open");
   }
 
@@ -305,35 +334,69 @@
   // ─── Conversations ───
   const DEFAULT_CONV_TITLE = "แชทใหม่";
 
+  // The sidebar history follows the active tab: guru chats on the Guru tab,
+  // normal chats everywhere else.
+  const historyIsGuru = () => state.view === "guru" && Boolean(window.GuruView);
+
   async function loadConversations() {
+    if (historyIsGuru()) return window.GuruView.loadHistory();
     try {
       const convs = await api("GET", "/conversations", { params: { user_id: state.userId } });
       state.conversations = convs;
-      const list = $("convList");
-      list.innerHTML = "";
-      if (!convs.length) {
-        list.append(el("li", { class: "notif-empty" }, "ยังไม่มีบทสนทนา"));
-        return;
-      }
-      for (const c of convs) list.append(conversationItem(c));
+      renderConversationList(convs, chatHistoryOptions());
     } catch (e) { /* silent — sidebar not critical */ }
   }
 
-  function conversationItem(conv) {
+  function chatHistoryOptions() {
+    return {
+      activeId: state.conversationId,
+      emptyText: "ยังไม่มีบทสนทนา",
+      onOpen: (conv) => selectConversation(conv.id, conv.title),
+      onDeleted: (conv) => {
+        if (conv.id !== state.conversationId) return;
+        state.conversationId = "";
+        localStorage.removeItem("pfai_conv");
+        clearChat();
+      },
+    };
+  }
+
+  // options: { activeId, emptyText, onOpen(conv), onDeleted(conv), leading(conv), subtitle(conv) }
+  function renderConversationList(convs, options) {
+    const list = $("convList");
+    list.innerHTML = "";
+    if (!convs.length) {
+      list.append(el("li", { class: "notif-empty" }, options.emptyText));
+      return;
+    }
+    for (const conv of convs) list.append(conversationItem(conv, options));
+  }
+
+  function conversationText(conv, options, rename) {
+    const subtitle = options.subtitle ? options.subtitle(conv) : "";
+    return el("span", { class: "conv-text" },
+      el("span", { class: "conv-title", ondblclick: rename }, conv.title || DEFAULT_CONV_TITLE),
+      subtitle ? el("span", { class: "conv-sub" }, subtitle) : null);
+  }
+
+  function conversationItem(conv, options) {
     const withoutOpening = (fn) => (e) => { e.stopPropagation(); fn(); };
     const rename = withoutOpening(() => startRename(li, conv));
+    const open = () => {
+      options.onOpen(conv);
+      if (window.innerWidth <= 760) $("sidebar").classList.remove("open");
+    };
     const li = el("li", {
-      class: conv.id === state.conversationId ? "is-active" : "",
-      dataset: { id: conv.id },
-      onclick: () => selectConversation(conv.id, conv.title),
-      title: conv.title,
+      class: conv.id === options.activeId ? "is-active" : "",
+      dataset: { id: conv.id }, title: conv.title, onclick: open,
     },
-      el("span", { class: "conv-title", ondblclick: rename }, conv.title || DEFAULT_CONV_TITLE),
+      options.leading ? options.leading(conv) : null,
+      conversationText(conv, options, rename),
       el("span", { class: "conv-actions" },
         el("button", { class: "conv-action", type: "button", "aria-label": "เปลี่ยนชื่อแชท",
           title: "เปลี่ยนชื่อ", onclick: rename }, "✎"),
         el("button", { class: "conv-action is-danger", type: "button", "aria-label": "ลบแชท",
-          title: "ลบแชท", onclick: withoutOpening(() => deleteConversation(conv)) }, "🗑"),
+          title: "ลบแชท", onclick: withoutOpening(() => deleteConversation(conv, options.onDeleted)) }, "🗑"),
       ),
     );
     return li;
@@ -367,16 +430,12 @@
     } catch (e) { toast("เปลี่ยนชื่อแชทไม่สำเร็จ", true); }
   }
 
-  async function deleteConversation(conv) {
+  async function deleteConversation(conv, onDeleted) {
     if (!confirm(`ลบแชท "${conv.title}" ใช่ไหม? ข้อความทั้งหมดในแชทนี้จะหายไป`)) return;
     try {
       await api("DELETE", `/conversations/${conv.id}`, { params: { user_id: state.userId } });
     } catch (e) { toast("ลบแชทไม่สำเร็จ", true); return; }
-    if (conv.id === state.conversationId) {
-      state.conversationId = "";
-      localStorage.removeItem("pfai_conv");
-      clearChat();
-    }
+    if (onDeleted) onDeleted(conv);
     toast("ลบแชทแล้ว");
     loadConversations();
   }
@@ -415,7 +474,7 @@
       const msgs = await api("GET", `/conversations/${id}/messages`);
       if (msgs.length) {
         enterThreadMode();
-        for (const m of msgs) appendMessage(m.role, m.content, m.intent);
+        for (const m of msgs) appendMessage(m.role, m.content, m.intent, m.sources);
       }
     } catch (e) { toast("โหลดข้อความไม่สำเร็จ", true); }
     loadConversations();
@@ -440,7 +499,15 @@
   }
 
   // ─── Chat ───
-  function appendMessage(role, content, intent) {
+  // Show numbered citation pills + source chips for an assistant answer.
+  // Answers saved before structured sources fall back to URLs in the text.
+  function attachSources(bubble, content, sources, host) {
+    if (!window.Citations) return;
+    const list = sources && sources.length ? sources : window.Citations.legacySources(content);
+    window.Citations.decorate(bubble, list, host);
+  }
+
+  function appendMessage(role, content, intent, sources) {
     const thread = $("chatThread");
     const cfg = intent ? INTENT_CONFIG[intent] || INTENT_CONFIG.unknown : null;
     const bubble = el("div", { class: "msg-bubble" });
@@ -449,6 +516,7 @@
       el("span", { class: "msg-role" }, role === "user" ? "คุณ" : "ผู้ช่วยการเงิน"),
       bubble,
     );
+    if (role === "assistant" && content) attachSources(bubble, content, sources);
     if (cfg && role === "assistant") {
       appendIntentExtras(msg, intent);
     }
@@ -491,6 +559,7 @@
 
     let full = "";
     let intent = "unknown";
+    let sources = [];
     try {
       const params = new URLSearchParams({ query: text, user_id: state.userId });
       if (state.conversationId) params.set("conversation_id", state.conversationId);
@@ -502,6 +571,9 @@
           assistantBubble.innerHTML = renderMarkdown(full);
           $("chatThread").scrollTop = $("chatThread").scrollHeight;
         });
+        source.addEventListener("sources", (ev) => {
+          try { sources = JSON.parse(ev.data) || []; } catch (_) { /* noop */ }
+        });
         source.addEventListener("complete", (ev) => {
           try { intent = JSON.parse(ev.data) || "unknown"; } catch (_) { /* noop */ }
           source.close();
@@ -511,6 +583,7 @@
       });
 
       assistantBubble.classList.remove("msg-cursor");
+      attachSources(assistantBubble, full, sources);
       appendIntentExtras(assistantBubble.closest(".msg"), intent);
       maybeAutoTitle();
     } catch (e) {
@@ -524,6 +597,7 @@
           },
         });
         assistantBubble.innerHTML = renderMarkdown(res.response);
+        attachSources(assistantBubble, res.response, []);
         appendIntentExtras(assistantBubble.closest(".msg"), res.intent);
         maybeAutoTitle();
       } catch (e2) {
@@ -1714,7 +1788,7 @@
   function setupSidebar() {
     document.querySelectorAll(".nav-item").forEach((n) =>
       n.addEventListener("click", () => switchView(n.dataset.view)));
-    $("newChatBtn").addEventListener("click", newConversation);
+    $("newChatBtn").addEventListener("click", () => (historyIsGuru() ? window.GuruView.newChat() : newConversation()));
     $("resetUserBtn").addEventListener("click", resetUser);
     $("connectLineBtn").addEventListener("click", openLineModal);
     $("closeLineModalBtn").addEventListener("click", closeLineModal);
@@ -1748,6 +1822,8 @@
     api,
     el,
     renderMarkdown,
+    attachSources,
+    renderConversationList,
     toast,
     getUserId: () => state.userId,
   };

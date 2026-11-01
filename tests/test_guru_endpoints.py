@@ -13,12 +13,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from finance_ai.agents.citation_sources import CitationSource
 from finance_ai.agents.guru_panel import GuruStance, PanelEvent, PanelSynthesis
 from finance_ai.agents.stream_utils import StreamEvent
 from finance_ai.database.base import Base
 from finance_ai.database.models.conversation import Conversation
 from finance_ai.database.models.conversation_message import ConversationMessage
 from finance_ai.main import app
+
+PANEL_SOURCE = CitationSource(
+    index=1, document_key="k1", title="Berkshire Letter", url="https://www.berkshirehathaway.com"
+)
 
 
 @pytest.fixture
@@ -43,6 +48,7 @@ def stream_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
     def _fake_stream(**kwargs: Any) -> Iterator[StreamEvent]:
         calls.append(kwargs)
         yield StreamEvent(event_type="token", content="มุมมองแบบ Buffett")
+        yield StreamEvent(event_type="sources", sources=[PANEL_SOURCE])
         yield StreamEvent(event_type="complete", intent=f"guru:{kwargs['guru_id']}")
 
     monkeypatch.setattr("finance_ai.main.get_chat_model", lambda: None)
@@ -138,7 +144,12 @@ def panel_calls(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, Any]]:
 
     def _fake_panel(**kwargs: Any) -> Iterator[PanelEvent]:
         calls.append(kwargs)
-        yield PanelEvent(event_type="guru_answer", guru_id="buffett", content="จุดยืน: ซื้อเพิ่ม")
+        yield PanelEvent(
+            event_type="guru_answer",
+            guru_id="buffett",
+            content="จุดยืน: ซื้อเพิ่ม [1]",
+            sources=[PANEL_SOURCE],
+        )
         yield PanelEvent(event_type="guru_error", guru_id="dalio", content="quota")
         yield PanelEvent(
             event_type="synthesis",
@@ -172,6 +183,7 @@ class TestGuruPanelStream:
         assert response.status_code == 200
         assert "event: guru_answer\n" in response.text
         assert '"guru_id": "buffett"' in response.text
+        assert '"title": "Berkshire Letter"' in response.text
         assert "event: guru_error\n" in response.text
         assert "event: synthesis\n" in response.text
         assert 'event: complete\ndata: "guru:panel"' in response.text
@@ -194,6 +206,8 @@ class TestGuruPanelStream:
             ("assistant", "guru:synthesis"),
         ]
         assert "| buffett |" in messages[2].content
+        assert messages[1].sources[0]["title"] == "Berkshire Letter"
+        assert messages[2].sources is None
         assert panel_calls[0]["guru_ids"] == ["buffett", "dalio"]
 
     def test_unknown_guru_in_list_returns_422(

@@ -3,8 +3,11 @@
 from pathlib import Path
 
 import pytest
+import yaml
 
+from finance_ai.rag.document_models import DocumentMetadata
 from finance_ai.rag.document_loader import (
+    apply_source_registry,
     discover_documents,
     infer_domain_from_filename,
     load_document,
@@ -47,6 +50,12 @@ class TestInferDomainFromFilename:
     def test_expense_prefix(self) -> None:
         """Test that filenames starting with expense_ are classified."""
         assert infer_domain_from_filename("expense_budgeting.md") == "expense"
+
+    def test_prefix_is_case_insensitive(self) -> None:
+        """Title_Case_Snake filenames keep their domain."""
+        assert infer_domain_from_filename("Tax_Deductions_Guide.md") == "tax"
+        assert infer_domain_from_filename("Investment_ETF_Bonds.md") == "investment"
+        assert infer_domain_from_filename("EXPENSE_Budgeting.md") == "expense"
 
     def test_unknown_prefix_defaults_to_general(self) -> None:
         """Test that unknown prefixes default to general."""
@@ -311,3 +320,138 @@ class TestShippedGuruKnowledge:
             assert metadata.domain == "guru"
             assert metadata.guru_id == path.relative_to(root).parts[0]
             assert metadata.source_url
+
+
+KNOWLEDGE_MARKDOWN = """---
+source_title: คู่มือภาษีเงินได้บุคคลธรรมดา
+source_url: https://www.rd.go.th/546.html
+source_publisher: กรมสรรพากร
+---
+# คู่มือค่าลดหย่อนภาษี
+
+เนื้อหา
+"""
+
+
+class TestSourceAttribution:
+    """Knowledge docs carry a human-readable source instead of a filename."""
+
+    def test_knowledge_doc_reads_source_front_matter(self, tmp_path: Path) -> None:
+        """Title stays the Thai heading; the source line comes from front-matter."""
+        file_path = tmp_path / "tax_deductions_guide.md"
+        file_path.write_text(KNOWLEDGE_MARKDOWN, encoding="utf-8")
+
+        content, metadata = load_markdown_file(file_path)
+
+        assert metadata.domain == "tax"
+        assert metadata.title == "คู่มือค่าลดหย่อนภาษี"
+        assert metadata.source_title == "คู่มือภาษีเงินได้บุคคลธรรมดา"
+        assert metadata.source_url == "https://www.rd.go.th/546.html"
+        assert metadata.source_publisher == "กรมสรรพากร"
+        assert metadata.source_kind == "compiled"
+        assert "source_url" not in content
+
+    def test_plain_knowledge_doc_has_no_source(self, sample_markdown_file: Path) -> None:
+        """A doc without front-matter has no source fields but is still compiled."""
+        _, metadata = load_markdown_file(sample_markdown_file)
+
+        assert metadata.source_url is None
+        assert metadata.source_publisher is None
+        assert metadata.source_kind == "compiled"
+
+    def test_auto_fetched_guru_doc_is_original(self, tmp_path: Path) -> None:
+        """Pages fetched verbatim from the public source are marked original."""
+        file_path = tmp_path / "ownman.md"
+        file_path.write_text(
+            "---\nguru_id: buffett\nsource_title: Owner's Manual\n"
+            "source_url: https://example.com/ownman.pdf\nauto_fetched: true\n---\nBody\n",
+            encoding="utf-8",
+        )
+
+        _, metadata = load_markdown_file(file_path)
+
+        assert metadata.source_kind == "original"
+        assert metadata.source_title == "Owner's Manual"
+
+    def test_curated_guru_summary_is_compiled(self, tmp_path: Path) -> None:
+        """Hand-written guru summaries are compiled from their source."""
+        file_path = tmp_path / "letter_2008.md"
+        file_path.write_text(GURU_MARKDOWN, encoding="utf-8")
+
+        _, metadata = load_markdown_file(file_path)
+
+        assert metadata.source_kind == "compiled"
+
+
+REGISTRY_YAML = """sources:
+  investment_guide.pdf:
+    title: The Lifelong Investing Guide
+    source_title: The Lifelong Investing Guide
+    source_publisher: Example Press
+    source_url: https://example.com/guide
+    source_kind: original
+"""
+
+
+class TestSourceRegistry:
+    """A sources.yaml next to the files attributes docs without front-matter (e.g. PDFs)."""
+
+    def test_registry_fills_source_and_title(self, tmp_path: Path) -> None:
+        """Registry entries set the display title and the source fields."""
+        (tmp_path / "sources.yaml").write_text(REGISTRY_YAML, encoding="utf-8")
+        metadata = DocumentMetadata(
+            source_file="investment_guide.pdf", domain="investment", title="investment_guide"
+        )
+
+        updated = apply_source_registry(metadata, tmp_path / "investment_guide.pdf")
+
+        assert updated.title == "The Lifelong Investing Guide"
+        assert updated.source_publisher == "Example Press"
+        assert updated.source_url == "https://example.com/guide"
+        assert updated.source_kind == "original"
+
+    def test_missing_registry_leaves_metadata_unchanged(self, sample_markdown_file: Path) -> None:
+        """Without sources.yaml the loader output is untouched."""
+        content, metadata = load_document(sample_markdown_file)
+
+        assert metadata.title == "คู่มือภาษีเงินได้"
+        assert metadata.source_publisher is None
+        assert "ภาษี" in content
+
+    def test_registry_without_entry_leaves_metadata_unchanged(self, tmp_path: Path) -> None:
+        """Files not listed in the registry keep their own metadata."""
+        (tmp_path / "sources.yaml").write_text(REGISTRY_YAML, encoding="utf-8")
+        file_path = tmp_path / "tax_other.md"
+        file_path.write_text("# อื่น ๆ\n", encoding="utf-8")
+
+        _, metadata = load_document(file_path)
+
+        assert metadata.title == "อื่น ๆ"
+        assert metadata.source_title is None
+
+    def test_registry_must_be_a_mapping(self, tmp_path: Path) -> None:
+        """A malformed registry is reported with the file path."""
+        (tmp_path / "sources.yaml").write_text("sources: [a, b]\n", encoding="utf-8")
+        file_path = tmp_path / "tax_other.md"
+        file_path.write_text("# อื่น ๆ\n", encoding="utf-8")
+
+        with pytest.raises(ValueError, match="sources.yaml"):
+            load_document(file_path)
+
+
+class TestShippedKnowledgeBaseSources:
+    """Every committed knowledge-base doc names its source in readable form."""
+
+    def test_all_knowledge_docs_have_source_attribution(self) -> None:
+        """Each doc has a readable title and names its publisher or author."""
+        for path in discover_documents(Path("docs/knowledge_base")):
+            _, metadata = load_document(path)
+            assert metadata.title != path.stem, path.name
+            assert metadata.source_publisher, path.name
+
+    def test_registry_lists_only_existing_files(self) -> None:
+        """A renamed or deleted document must not leave a stale registry entry."""
+        root = Path("docs/knowledge_base")
+        registry = yaml.safe_load((root / "sources.yaml").read_text(encoding="utf-8"))["sources"]
+        existing = {path.name for path in discover_documents(root)}
+        assert set(registry) == existing

@@ -92,6 +92,7 @@ def save_assistant_message(
     conversation_id: str,
     content: str,
     intent: Optional[str] = None,
+    sources: Optional[list[dict[str, Any]]] = None,
 ) -> ConversationMessage:
     """Save an assistant message to a conversation.
 
@@ -100,6 +101,7 @@ def save_assistant_message(
         conversation_id: UUID of the conversation.
         content: Message text.
         intent: Optional intent label (e.g., "tax", "expense").
+        sources: Citation source cards for the answer; empty is stored as None.
 
     Returns:
         Created ConversationMessage instance.
@@ -113,6 +115,7 @@ def save_assistant_message(
         role="assistant",
         content=content,
         intent=intent,
+        sources=sources or None,
     )
     session.commit()
     session.refresh(message)
@@ -174,7 +177,7 @@ def _message_to_dict(message: ConversationMessage) -> dict[str, Any]:
         message: ConversationMessage instance.
 
     Returns:
-        Dict with role, content, and optional intent.
+        Dict with role, content, and optional intent and sources.
     """
     result: dict[str, Any] = {
         "role": message.role,
@@ -182,6 +185,8 @@ def _message_to_dict(message: ConversationMessage) -> dict[str, Any]:
     }
     if message.intent:
         result["intent"] = message.intent
+    if message.sources:
+        result["sources"] = message.sources
     return result
 
 

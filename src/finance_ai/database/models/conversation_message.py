@@ -1,8 +1,8 @@
 """Conversation message database model for Personal Finance AI."""
 
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
-from sqlalchemy import ForeignKey, String, Text
+from sqlalchemy import JSON, ForeignKey, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from finance_ai.database.base import Base, TimestampMixin, UUIDPrimaryKeyMixin
@@ -22,5 +22,7 @@ class ConversationMessage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     intent: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    # Citation source cards shown under an assistant answer (None when uncited).
+    sources: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")

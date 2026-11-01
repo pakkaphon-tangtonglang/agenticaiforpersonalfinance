@@ -43,10 +43,11 @@ class TestSearchFinanceKnowledge:
 
         mock_get_retriever.return_value = mock_retriever
         result = search_finance_knowledge.invoke({"query": "ค่าลดหย่อน", "domain": "tax"})
-        assert "results" in result
-        assert "context" in result
-        assert len(result["results"]) == 1
+        assert len(result["citations"]) == 1
+        assert result["citations"][0]["index"] == 1
+        assert "[1]" in result["context"]
         assert "ค่าลดหย่อนส่วนตัว" in result["context"]
+        assert "tax_deductions_guide" not in str(result)
 
     @patch("finance_ai.agents.rag_tool.get_retriever")
     def test_passes_domain_filter(
@@ -81,7 +82,7 @@ class TestSearchFinanceKnowledge:
         mock_get_retriever.return_value = mock_ret
 
         result = search_finance_knowledge.invoke({"query": "nonexistent", "domain": ""})
-        assert result["results"] == []
+        assert result["citations"] == []
         assert result["context"] == ""
 
     @patch("finance_ai.agents.rag_tool.get_retriever")
@@ -94,3 +95,24 @@ class TestSearchFinanceKnowledge:
         mock_get_retriever.return_value = mock_retriever
         search_finance_knowledge.invoke({"query": "test"})
         mock_retriever.retrieve.assert_called_once_with("test", domain=None)
+
+    @patch("finance_ai.agents.rag_tool.get_retriever")
+    def test_numbers_continue_after_earlier_search_in_turn(
+        self, mock_get_retriever: MagicMock, mock_retriever: MagicMock
+    ) -> None:
+        """A second search in the same turn gets the next citation number."""
+        from langchain_core.messages import HumanMessage
+
+        from finance_ai.agents.citation_sources import build_citations
+        from finance_ai.agents.rag_tool import search_finance_knowledge
+        from tests.agents.test_citation_sources import _result, _tool_message
+
+        mock_get_retriever.return_value = mock_retriever
+        earlier = build_citations([_result("other.md")], [])
+        messages = [HumanMessage(content="q"), _tool_message(earlier, "search_finance_knowledge")]
+
+        result = search_finance_knowledge.func(  # type: ignore[attr-defined]
+            query="ภาษี", messages=messages
+        )
+
+        assert result["citations"][0]["index"] == 2

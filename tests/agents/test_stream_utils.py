@@ -534,3 +534,61 @@ class TestStreamErrorMessages:
         assert [e.event_type for e in events] == ["token", "complete"]
         assert events[-1].content == LLM_QUOTA_MESSAGE
         assert events[-1].intent == "error"
+
+
+class TestStreamSources:
+    """Citations from search tools are streamed once, before 'complete'."""
+
+    @staticmethod
+    def _search_message() -> object:
+        """A search ToolMessage carrying one citation."""
+        from finance_ai.agents.citation_sources import build_citations
+        from tests.agents.test_citation_sources import _result, _tool_message
+
+        return _tool_message(build_citations([_result("a.md", title="คู่มือภาษี")], []))
+
+    def test_sources_event_precedes_complete(self) -> None:
+        """A search during the run produces one sources event."""
+        from langchain_core.messages import AIMessageChunk
+
+        mock_graph = MagicMock()
+        mock_graph.stream.return_value = iter(
+            [(self._search_message(), {}), (AIMessageChunk(content="ตอบ [1]"), {})]
+        )
+
+        events = list(stream_agent_response(mock_graph, {}, "tax"))
+
+        types = [event.event_type for event in events]
+        assert types[-2:] == ["sources", "complete"]
+        assert events[-2].sources[0].title == "คู่มือภาษี"
+
+    def test_no_sources_event_without_search(self) -> None:
+        """Answers without a knowledge search get no sources event."""
+        from langchain_core.messages import AIMessageChunk
+
+        mock_graph = MagicMock()
+        mock_graph.stream.return_value = iter([(AIMessageChunk(content="สวัสดี"), {})])
+
+        events = list(stream_agent_response(mock_graph, {}, "general"))
+
+        assert "sources" not in [event.event_type for event in events]
+
+    def test_fallback_collects_sources_from_final_state(self) -> None:
+        """When streaming is empty, sources come from the invoked graph's messages."""
+        from langchain_core.messages import AIMessage, HumanMessage
+
+        mock_graph = MagicMock()
+        mock_graph.stream.return_value = iter([])
+        mock_graph.invoke.return_value = {
+            "messages": [
+                HumanMessage(content="q"),
+                self._search_message(),
+                AIMessage(content="ตอบ"),
+            ]
+        }
+
+        events = list(stream_agent_response(mock_graph, {"messages": []}, "tax"))
+
+        sources = [event for event in events if event.event_type == "sources"]
+        assert len(sources) == 1
+        assert events[-1].content == "ตอบ"

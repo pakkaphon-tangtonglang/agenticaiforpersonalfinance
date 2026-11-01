@@ -10,6 +10,16 @@ from finance_ai.line.markdown_to_text import markdown_to_line_text
 class TestMarkdownToLineText:
     """Tests for markdown_to_line_text."""
 
+    def test_strips_citation_markers(self) -> None:
+        """LINE has no source cards, so [1] / [1, 2] markers are dropped."""
+        text = "ลดหย่อนส่วนตัว 60,000 บาท [1] และประกันสังคม [2][3] ตามจริง [1, 2]."
+
+        assert markdown_to_line_text(text) == "ลดหย่อนส่วนตัว 60,000 บาท และประกันสังคม ตามจริง."
+
+    def test_keeps_markdown_link_text(self) -> None:
+        """Bracketed words that are not citation numbers are untouched."""
+        assert markdown_to_line_text("ดู [คู่มือ] นี้") == "ดู [คู่มือ] นี้"
+
     def test_strips_heading_markers(self) -> None:
         """# / ## markers are removed, heading text kept."""
         assert markdown_to_line_text("# ราคาหุ้น PTT") == "ราคาหุ้น PTT"
