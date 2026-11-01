@@ -2,8 +2,8 @@
 
 Prepares the environment before the API starts:
 1. Applies database migrations (``alembic upgrade head``).
-2. Indexes the RAG knowledge base when the vector store is empty.
-3. Indexes the guru knowledge collection when it is empty.
+2. Indexes the RAG knowledge base when it is empty or its files changed.
+3. Does the same for the guru knowledge collection.
 
 Idempotent by design: safe to run on every boot, whether the disk is
 fresh (Render free tier wipes it) or already populated.
@@ -21,7 +21,13 @@ from alembic.config import Config
 
 from finance_ai.core.config import get_settings
 from finance_ai.core.logging import get_logger
-from finance_ai.rag.knowledge_base import create_knowledge_base_manager
+from finance_ai.rag.index_fingerprint import (
+    compute_fingerprint,
+    fingerprint_path,
+    read_fingerprint,
+    write_fingerprint,
+)
+from finance_ai.rag.knowledge_base import KnowledgeBaseManager, create_knowledge_base_manager
 from finance_ai.tools.guru_source_fetcher import USER_AGENT, load_source_entries
 from finance_ai.tools.guru_source_sync import sync_guru_sources
 
@@ -49,45 +55,70 @@ def run_migrations(alembic_config_path: Path = _DEFAULT_ALEMBIC_CONFIG) -> None:
     logger.info("Database migrations applied (head)")
 
 
-def index_knowledge_base_if_empty() -> int:
-    """Index the knowledge base when the vector store is empty.
+def _sync_collection(
+    manager: KnowledgeBaseManager, directory: Path, recursive: bool, fingerprint_file: Path
+) -> int:
+    """Index an empty collection, rebuild a stale one, skip a current one.
+
+    Args:
+        manager: Manager bound to the target collection.
+        directory: Knowledge folder that feeds the collection.
+        recursive: Read subfolders (the per-guru layout).
+        fingerprint_file: Where the collection's content fingerprint is stored.
 
     Returns:
-        Number of chunks indexed (0 when the store is already populated).
-
-    Example:
-        >>> count = index_knowledge_base_if_empty()
+        Number of chunks (re)indexed; 0 when the collection was already current.
     """
-    settings = get_settings()
-    manager = create_knowledge_base_manager(settings)
-    if manager.get_document_count() > 0:
-        logger.info("Vector store already indexed, skipping")
+    current = compute_fingerprint(directory, recursive=recursive)
+    populated = manager.get_document_count() > 0
+    if populated and read_fingerprint(fingerprint_file) == current:
+        logger.info("Collection %s is current, skipping", fingerprint_file.stem)
         return 0
-    directory = Path(settings.rag_knowledge_base_directory)
-    count = manager.index_directory(directory)
-    logger.info("Indexed knowledge base: %d chunks", count)
+    if populated:
+        logger.info("Knowledge files changed, rebuilding %s", fingerprint_file.stem)
+        count = manager.rebuild_index(directory, recursive=recursive)
+    else:
+        count = manager.index_directory(directory, recursive=recursive)
+    write_fingerprint(fingerprint_file, current)
     return count
 
 
-def index_guru_knowledge_if_empty() -> int:
-    """Index the guru collection (one subfolder per guru) when it is empty.
+def index_knowledge_base_if_stale() -> int:
+    """Index the knowledge base when it is empty or its files changed.
 
     Returns:
-        Number of chunks indexed (0 when the collection is already populated).
+        Number of chunks indexed (0 when the index is already current).
 
     Example:
-        >>> count = index_guru_knowledge_if_empty()
+        >>> count = index_knowledge_base_if_stale()
     """
     settings = get_settings()
-    manager = create_knowledge_base_manager(
-        settings, collection_name=settings.rag_guru_collection_name
+    manager = create_knowledge_base_manager(settings)
+    directory = Path(settings.rag_knowledge_base_directory)
+    fingerprint_file = fingerprint_path(
+        settings.rag_chroma_persist_directory, settings.rag_chroma_collection_name
     )
-    if manager.get_document_count() > 0:
-        logger.info("Guru collection already indexed, skipping")
-        return 0
+    count = _sync_collection(manager, directory, False, fingerprint_file)
+    logger.info("Knowledge base index: %d chunks (re)indexed", count)
+    return count
+
+
+def index_guru_knowledge_if_stale() -> int:
+    """Index the guru collection (one subfolder per guru) when empty or changed.
+
+    Returns:
+        Number of chunks indexed (0 when the collection is already current).
+
+    Example:
+        >>> count = index_guru_knowledge_if_stale()
+    """
+    settings = get_settings()
+    collection = settings.rag_guru_collection_name
+    manager = create_knowledge_base_manager(settings, collection_name=collection)
     directory = Path(settings.rag_guru_knowledge_directory)
-    count = manager.index_directory(directory, recursive=True)
-    logger.info("Indexed guru knowledge: %d chunks", count)
+    fingerprint_file = fingerprint_path(settings.rag_chroma_persist_directory, collection)
+    count = _sync_collection(manager, directory, True, fingerprint_file)
+    logger.info("Guru knowledge index: %d chunks (re)indexed", count)
     return count
 
 
@@ -134,12 +165,12 @@ def _index_knowledge_base_safely() -> None:
         >>> _index_knowledge_base_safely()  # never raises
     """
     try:
-        index_knowledge_base_if_empty()
+        index_knowledge_base_if_stale()
     except Exception as exc:  # pylint: disable=broad-exception-caught
         # Broad by design: API startup must never be blocked by RAG.
         logger.error("RAG indexing failed (agents run without knowledge base): %s", exc)
     try:
-        index_guru_knowledge_if_empty()
+        index_guru_knowledge_if_stale()
     except Exception as exc:  # pylint: disable=broad-exception-caught
         logger.error("Guru indexing failed (gurus answer from profiles only): %s", exc)
 

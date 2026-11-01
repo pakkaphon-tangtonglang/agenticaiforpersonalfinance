@@ -66,10 +66,9 @@ services:
         sync: false
       - key: OCR_API_KEY
         sync: false
-      # Public API protection: clients must send this value in X-API-Key
-      # (exempt: /health and /line/webhook, which verifies its own signature)
-      - key: API_KEY
-        sync: false
+      # Public API protection: per-IP rate limit. No API_KEY: the web UI is
+      # served from this same host, and a key shipped in public JavaScript
+      # would not be secret. (Setting API_KEY would block the web UI.)
       - key: RATE_LIMIT_PER_MINUTE
         value: "30"
       # Optional (add later via dashboard Environment tab):

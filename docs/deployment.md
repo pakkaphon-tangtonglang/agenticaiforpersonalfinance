@@ -1,22 +1,16 @@
 # Deployment Guide / คู่มือการติดตั้ง
 
-The app deploys as two separate hosts:
-
-- **Frontend** — static files on iHost KMITL (`https://www.it.kmitl.ac.th/~<username>/`)
-- **Backend** — FastAPI on Render free tier (`https://<app>.onrender.com`)
-
-iHost only runs PHP, so the FastAPI backend cannot live there. The frontend
-is static HTML/JS and calls the backend over HTTPS via `config.js`.
+The whole app runs on **one host**: FastAPI on Render free tier
+(`https://<app>.onrender.com`) serves both the API and the web UI
+(`src/finance_ai/static/`). The browser calls the API on the same origin,
+so no CORS setup and no frontend config are needed.
 
 ```
 Browser                                    LINE app
   │                                           │
   ▼                                           ▼
-https://www.it.kmitl.ac.th/~<username>   POST /line/webhook
-  │   fetch() / EventSource ผ่าน window.FINANCE_API_BASE
-  ▼                                           ▼
-https://<app>.onrender.com                ← Render free tier (FastAPI, 1 worker)
-  │
+https://<app>.onrender.com  (web UI + API) ◀── POST /line/webhook
+  │                                        ← Render free tier (FastAPI, 1 worker)
   ▼
 Neon Postgres (free tier)                ← persistent database (`DB_URL` secret)
 ```
@@ -34,13 +28,11 @@ Neon solves this (set up with the Neon CLI; migrations run via
 
 ### สถาปัตยกรรม
 
-- **Frontend** — ไฟล์ static บน iHost KMITL (`https://www.it.kmitl.ac.th/~<username>/`)
-- **Backend** — FastAPI บน Render แผนฟรี (`https://<app>.onrender.com`)
+แอปทั้งหมดอยู่บน **Render ที่เดียว** — FastAPI ให้บริการทั้ง API และหน้าเว็บ
+(`src/finance_ai/static/`) ที่ `https://<app>.onrender.com` หน้าเว็บเรียก API
+จาก origin เดียวกัน จึงไม่ต้องตั้ง CORS หรือไฟล์ config ฝั่ง frontend
 
-iHost รันได้เฉพาะ PHP จึงใส่ FastAPI ลงไปไม่ได้ frontend เป็น HTML/JS ล้วน
-แล้วเรียก backend ผ่าน HTTPS ด้วย `config.js`
-
-### ติดตั้ง Backend (Render)
+### ติดตั้งบน Render
 
 1. Push repository ขึ้น GitHub
 2. สร้าง **Web Service** บน Render (แผน free) เชื่อมกับ repo — สามารถใช้
@@ -61,7 +53,7 @@ iHost รันได้เฉพาะ PHP จึงใส่ FastAPI ลงไ
    ห้าม commit): ตัวที่ไม่ใช่ความลับ (`APP_ENV`, `DEBUG`, `LOG_LEVEL`,
    `LLM_PROVIDER=google`, `GOOGLE_MODEL`, `LLM_MAX_TOKENS`,
    `OCR_PROVIDER`, `OCR_MODEL`, `RAG_EMBEDDING_PROVIDER`, `RAG_EMBEDDING_MODEL`,
-   `RAG_KNOWLEDGE_BASE_DIRECTORY`)
+   `RAG_KNOWLEDGE_BASE_DIRECTORY`, `RATE_LIMIT_PER_MINUTE`)
    อยู่ใน `render.yaml` อยู่แล้ว — ต้องกรอกเองในหน้า Environment:
 
    | Secret | ค่า |
@@ -70,12 +62,17 @@ iHost รันได้เฉพาะ PHP จึงใส่ FastAPI ลงไ
    | `GOOGLE_API_KEY` | จำเป็น — ใช้ทั้ง LLM/agent, router, กูรู และ RAG embeddings (Gemini, จาก https://aistudio.google.com/apikey) |
    | `OCR_API_KEY` | จำเป็น — ใส่ค่าเดียวกับ `GOOGLE_API_KEY` (ใช้อ่านสลิป/ใบเสร็จ) |
    | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | จาก LINE Developers Console — ต้องมีเพื่อเปิด `/line/webhook` |
+
+   **อย่าตั้ง `API_KEY`** — หน้าเว็บไม่ได้ส่ง header `X-API-Key` ถ้าตั้งค่าไว้
+   หน้าเว็บจะใช้งานไม่ได้ (ดูหัวข้อความปลอดภัย)
 4. ตรวจสอบการติดตั้ง:
 
    ```bash
    curl https://<app>.onrender.com/health
    # {"status":"healthy","service":"personal-finance-ai"}
    ```
+
+   แล้วเปิด `https://<app>.onrender.com/` ในเบราว์เซอร์ — health chip ต้องเป็นสีเขียว
 
 **Bootstrap ทำอะไร** — `scripts/bootstrap_runtime.py` (logic อยู่ใน
 `finance_ai.core.bootstrap`) รันได้ซ้ำได้ (idempotent) ทุกครั้งที่ service เริ่มทำงาน:
@@ -96,28 +93,10 @@ layout หรือดาวน์โหลดไม่ได้ แหล่ง
 แต่ละ chunk จึง embed แค่ครั้งแรกครั้งเดียว ครั้งต่อไปอ่านจากฐานข้อมูล (ไม่เรียก API)
 ถ้าเปลี่ยนโมเดล embedding เวกเตอร์ชุดเก่าจะไม่ถูกใช้ (key แยกตาม provider:model)
 
-### ติดตั้ง Frontend (iHost)
-
-1. คัดลอกไฟล์ทั้งหมดใน `src/finance_ai/static/` (`index.html`, `styles.css`,
-   `app.js`, `config.js`) ขึ้น web root ของ iHost ผ่าน FTP
-   (ลักษณะโฟลเดอร์มักเป็น `domains/<site>/public_html`)
-2. แก้ `config.js` **บนเซิร์ฟเวอร์** ให้ชี้ไปที่ backend:
-
-   ```js
-   window.FINANCE_API_BASE = "https://<app>.onrender.com";
-   ```
-
-   เว้นเป็น `null` เฉพาะตอน dev ในเครื่อง (same-origin)
-3. ตรวจว่าเปิดได้ที่ `https://www.it.kmitl.ac.th/~<username>/` และ health chip
-   เป็นสีเขียว (backend ตอบสนอง)
-
-Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `app.js`)
-จึงทำงานได้ใน sub-path `/~<username>/`
-
 ### ข้อจำกัดของแผนฟรี
 
 - บริการ **หลับหลังไม่มีการใช้งาน 15 นาที** — request แรกหลังตื่นช้า ~50 วินาที
-  (cold start) แก้ได้ด้วย uptime pinger (เช่น cron-job.org ping `/health`)
+  (cold start) แก้ได้ด้วย uptime pinger ที่ ping `/health` เป็นระยะ
 - **ดิสก์เป็นแบบ ephemeral** — มีผลกับไฟล์บน Render เท่านั้น ข้อมูลผู้ใช้อยู่บน
   Neon Postgres ผ่าน `DB_URL` จึง **ไม่หาย** แต่ **index ของ ChromaDB (RAG) ยังหาย**
   ทุกครั้งที่ deploy/ตื่นจากหลับ — bootstrap สร้างใหม่อัตโนมัติตอน start
@@ -126,17 +105,15 @@ Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `a
 
 ### ความปลอดภัย
 
-- **CORS** ล็อกเฉพาะ `https://www.it.kmitl.ac.th` กับ `http://localhost:8080`
-  และปิด `allow_credentials` (ไม่ใช้ cookies; `user_id` ส่งใน request body)
-  ดู `src/finance_ai/main.py`
-- **Secrets อยู่บนเซิร์ฟเวอร์เท่านั้น** — `OPENROUTER_API_KEY`
-  (LLM/agent, router, OCR ใช้ key เดียวกัน) และ `GOOGLE_API_KEY`
-  (เฉพาะ RAG embeddings)
-  มีเฉพาะใน environment variables ของ Render ห้ามใส่ใน repo หรือไฟล์ frontend
-- **API key + Rate limiting** — ทุก endpoint ยกเว้น `/health` และ
-  `/line/webhook` ต้องส่ง header `X-API-Key` (ตั้ง `API_KEY` ใน Render
-  Environment) และจำกัด 30 requests/นาที/IP ผ่าน `RATE_LIMIT_PER_MINUTE`
-  ดู `src/finance_ai/core/api_security.py` — frontend ต้องส่ง key เดียวกัน
+- **ไม่มี CORS** — หน้าเว็บกับ API อยู่ origin เดียวกัน เบราว์เซอร์จึงบล็อก
+  การเรียก API จากเว็บไซต์อื่นทั้งหมดโดยอัตโนมัติ (`src/finance_ai/main.py`)
+- **Secrets อยู่บนเซิร์ฟเวอร์เท่านั้น** — `GOOGLE_API_KEY` / `OCR_API_KEY` (Gemini),
+  `DB_URL` และ LINE secrets มีเฉพาะใน environment variables ของ Render
+  ห้ามใส่ใน repo หรือไฟล์หน้าเว็บ
+- **Rate limiting** — จำกัด 30 requests/นาที/IP ผ่าน `RATE_LIMIT_PER_MINUTE`
+  (`src/finance_ai/core/api_security.py`) ส่วน `API_KEY` (header `X-API-Key`)
+  ปล่อยว่างไว้: key ที่ใส่ในหน้าเว็บสาธารณะไม่เป็นความลับ และถ้าตั้งไว้หน้าเว็บจะใช้ไม่ได้
+  ใช้เฉพาะเมื่อเปิด API ให้สคริปต์หรือระบบอื่นที่ไม่ผ่านหน้าเว็บ
 - **ไม่มีระบบ login** — `user_id` เป็น UUID ที่ browser สร้างเอง (เก็บใน localStorage)
   ใครได้ UUID นั้นไปอ่าน/แก้ข้อมูลของ user คนนั้นได้ รับได้สำหรับ demo เพราะ
   UUID เดายาก แต่ **อย่าเก็บข้อมูลการเงินจริงที่ละเอียดอ่อน** ในระบบที่ deploy ไว้
@@ -145,20 +122,20 @@ Asset paths ใน `index.html` เป็นแบบ relative (`styles.css`, `a
 
 | อาการ | สาเหตุ / วิธีแก้ |
 |---|---|
-| CORS error ใน console | `allow_origins` ไม่ครอบ origin ที่เรียก — เทียบกับ `src/finance_ai/main.py` |
+| หน้าเว็บขึ้น 401/403 ทุกคำขอ | ตั้ง `API_KEY` ไว้ใน Render — ลบออก (หน้าเว็บไม่ส่ง `X-API-Key`) |
 | 503 / timeout ทั้งที่ deploy สำเร็จ | Cold start (~50 s) — รอแล้วลองใหม่ หรือใช้ uptime pinger |
 | OCR คืน 503 | `OCR_*` env vars ใน Render dashboard ยังไม่ครบ/ผิด |
-| Mixed content (API calls ถูก block) | `FINANCE_API_BASE` ต้องเป็น HTTPS เสมอ |
+| แชทตอบว่าโควตา AI หมด | key ของ Gemini ใช้ครบโควตาแผนฟรี — รอรีเซ็ตหรือเปลี่ยนเป็น key แบบเสียเงิน (ทั้ง `GOOGLE_API_KEY` และ `OCR_API_KEY`) |
 | RAG ไม่มีข้อมูลหลังตื่นจากหลับ | ดิสก์ ephemeral — bootstrap รันตอน start ทุกครั้ง จะสร้าง index ให้ใหม่ถ้าหาย |
 | Migration error ตอน deploy | ดู release log ตรวจ `DB_URL` ใน env vars |
 | ข้อมูลหายหลัง deploy | `DB_URL` ไม่ได้ตั้ง (ยังใช้ SQLite บนดิสก์ ephemeral) — ใส่ connection string ของ Neon |
 | เชื่อมต่อ Neon ไม่ได้ / connection timeout | ใช้ connection string ตัว **pooled** (`...-pooler...`) ไม่ใช่ตัว unpooled |
 | ส่ง/บันทึกข้อมูลไม่ได้ (500 เฉพาะ endpoint ที่เขียน, อ่านได้ปกติ) | บน Postgres FK ถูกบังคับจริง (ต่างจาก SQLite) — ระบบจะ auto-create user ให้เองตั้งแต่ `4ac76c0`; ถ้ายังพังดู release log ว่า deploy ล่าสุดรวมโค้ดนี้แล้ว |
-| `/chat` ตอบ 500 ทันที (อ่าน DB ได้ปกติ) | LLM call พัง — เช็ค `OPENROUTER_API_KEY` ใน Render dashboard (key หาย/หมดอายุ), ทดสอบ key เดียวกันจากเครื่อง local ก่อน |
+| `/chat` ตอบ 500 ทันที (อ่าน DB ได้ปกติ) | LLM call พัง — เช็ค `GOOGLE_API_KEY` ใน Render dashboard (key หาย/หมดอายุ), ทดสอบ key เดียวกันจากเครื่อง local ก่อน |
 
 ### การพัฒนาต่อในอนาคต
 
-Authentication จริง, persistent disk (สำหรับ RAG index), rate limiting, custom domain
+Authentication จริง, persistent disk (สำหรับ RAG index), custom domain
 (ย้ายไป Postgres เสร็จแล้ว — ดูส่วน Database ด้านบน)
 
 ---
@@ -167,11 +144,10 @@ Authentication จริง, persistent disk (สำหรับ RAG index), rat
 
 ### Architecture
 
-- **Frontend** — static files on iHost KMITL (`https://www.it.kmitl.ac.th/~<username>/`)
-- **Backend** — FastAPI on Render free tier (`https://<app>.onrender.com`)
-
-iHost only runs PHP, so the FastAPI backend cannot live there. The frontend
-is static HTML/JS and calls the backend over HTTPS via `config.js`.
+Everything runs on **one Render host**: FastAPI serves both the API and the
+web UI (`src/finance_ai/static/`) at `https://<app>.onrender.com`. The page
+calls the API on its own origin, so there is no CORS setup and no frontend
+config file.
 
 **Database** — production data lives on **Neon Postgres** (free tier, no expiry,
 no idle pause) via the `DB_URL` environment variable. SQLite is used only for
@@ -180,7 +156,7 @@ would lose all user data on every deploy/restart/spin-down — Neon solves this
 (set up with the Neon CLI; migrations run via `alembic upgrade head` against
 the Neon URL).
 
-### Backend deployment (Render)
+### Deploying on Render
 
 1. Push the repository to GitHub.
 2. Create a **Web Service** on Render (free plan) connected to the repo —
@@ -201,7 +177,8 @@ the Neon URL).
    `.env`; never commit them): all non-secrets (`APP_ENV`, `DEBUG`,
    `LOG_LEVEL`, `LLM_PROVIDER=google`, `GOOGLE_MODEL`, `LLM_MAX_TOKENS`,
    `OCR_PROVIDER`, `OCR_MODEL`, `RAG_EMBEDDING_PROVIDER`,
-   `RAG_EMBEDDING_MODEL`, `RAG_KNOWLEDGE_BASE_DIRECTORY`) already live in `render.yaml` — enter
+   `RAG_EMBEDDING_MODEL`, `RAG_KNOWLEDGE_BASE_DIRECTORY`,
+   `RATE_LIMIT_PER_MINUTE`) already live in `render.yaml` — enter
    these secrets yourself in the Environment tab:
 
    | Secret | Value |
@@ -210,6 +187,9 @@ the Neon URL).
    | `GOOGLE_API_KEY` | required — powers the LLM/agents, router, gurus and RAG embeddings (Gemini, from https://aistudio.google.com/apikey) |
    | `OCR_API_KEY` | required — the same value as `GOOGLE_API_KEY` (slip/receipt reading) |
    | `LINE_CHANNEL_SECRET`, `LINE_CHANNEL_ACCESS_TOKEN` | from the LINE Developers Console — required for `/line/webhook` |
+
+   **Do not set `API_KEY`** — the web UI does not send an `X-API-Key`
+   header, so setting it blocks the site (see Security notes).
 4. Verify the deploy:
 
    ```bash
@@ -217,34 +197,19 @@ the Neon URL).
    # {"status":"healthy","service":"personal-finance-ai"}
    ```
 
+   Then open `https://<app>.onrender.com/` in a browser; the health chip
+   should turn green.
+
 **What the start-command bootstrap does** — `scripts/bootstrap_runtime.py` (logic in
 `finance_ai.core.bootstrap`) is idempotent and safe on every service start:
 (1) `alembic upgrade head`, then (2) index the RAG knowledge base — skipped
 automatically when the vector store is already populated.
 
-### Frontend deployment (iHost)
-
-1. Copy everything in `src/finance_ai/static/` (`index.html`, `styles.css`,
-   `app.js`, `config.js`) to the iHost web root via FTP (typically
-   `domains/<site>/public_html`).
-2. Edit `config.js` **on the server** and set the backend URL:
-
-   ```js
-   window.FINANCE_API_BASE = "https://<app>.onrender.com";
-   ```
-
-   Leave it `null` only for same-origin local development.
-3. Verify the site loads at `https://www.it.kmitl.ac.th/~<username>/` and the
-   health chip turns green (the backend responds).
-
-Asset paths in `index.html` are relative (`styles.css`, `app.js`) so the site
-works under the `/~<username>/` sub-path.
-
 ### Free-tier limitations
 
 - The service **sleeps after 15 minutes of inactivity**; the first request
   after waking takes ~50 s (cold start). Mitigate with an uptime pinger
-  (e.g., cron-job.org hitting `/health`).
+  hitting `/health`.
 - **Disk is ephemeral** — this only affects files on Render. User data lives
   on Neon Postgres via `DB_URL`, so it **survives** deploys and spin-downs.
   The **ChromaDB (RAG) index is still ephemeral** and is rebuilt automatically
@@ -255,19 +220,17 @@ works under the `/~<username>/` sub-path.
 
 ### Security notes
 
-- **CORS** is locked to `https://www.it.kmitl.ac.th` and
-  `http://localhost:8080`, with `allow_credentials=False` (no cookies;
-  `user_id` travels in request bodies). See `src/finance_ai/main.py`.
-- **Secrets stay server-side.** `OPENROUTER_API_KEY` (one key for the
-  LLM/agent, router, and OCR) and `GOOGLE_API_KEY` (RAG embeddings only)
-  exist
-  only as Render environment variables — never in the repository or the
-  frontend files served from iHost.
-- **API key + rate limiting** — every endpoint except `/health` and
-  `/line/webhook` requires an `X-API-Key` header (set `API_KEY` in the
-  Render Environment) and is capped at 30 requests/minute/IP via
-  `RATE_LIMIT_PER_MINUTE`. See `src/finance_ai/core/api_security.py` —
-  the frontend must send the same key.
+- **No CORS.** The web UI and the API share one origin, so browsers block
+  calls to the API from any other website by default
+  (`src/finance_ai/main.py`).
+- **Secrets stay server-side.** `GOOGLE_API_KEY` / `OCR_API_KEY` (Gemini),
+  `DB_URL` and the LINE secrets exist only as Render environment
+  variables — never in the repository or the web UI files.
+- **Rate limiting** caps each IP at 30 requests/minute via
+  `RATE_LIMIT_PER_MINUTE` (`src/finance_ai/core/api_security.py`).
+  `API_KEY` (`X-API-Key` header) stays unset: a key embedded in a public web
+  page is not secret, and setting it would block the web UI. Use it only if
+  the API is opened to scripts or other systems that bypass the web UI.
 - **There is no authentication.** `user_id` is a client-generated UUID kept
   in the browser's `localStorage`; anyone who obtains a UUID can read and
   modify that user's data. Acceptable for a public demo because UUIDs are
@@ -278,20 +241,18 @@ works under the `/~<username>/` sub-path.
 
 | Symptom | Cause / fix |
 |---|---|
-| CORS error in console | `allow_origins` does not cover the calling origin — check `src/finance_ai/main.py` |
+| Every request from the web UI gets 401/403 | `API_KEY` is set on Render — remove it (the web UI does not send `X-API-Key`) |
 | 503 / timeout despite successful deploy | Cold start (~50 s) — retry, or add an uptime pinger |
 | OCR returns 503 | `OCR_*` env vars in the Render dashboard are missing/wrong |
-| Mixed content (API calls blocked) | `FINANCE_API_BASE` must always be HTTPS |
+| Chat replies that the AI quota is used up | The Gemini key hit its free-tier quota — wait for the reset or switch to a billed key (both `GOOGLE_API_KEY` and `OCR_API_KEY`) |
 | RAG empty after wake from sleep | Ephemeral disk — the start-command bootstrap re-indexes automatically on next start |
 | Migration error during deploy | Check the release log and the `DB_URL` env var |
 | Data lost after deploy | `DB_URL` is not set (still on ephemeral-disk SQLite) — set the Neon connection string |
 | Neon connection fails / times out | Use the **pooled** connection string (`...-pooler...`), not the unpooled one |
 | Writes fail with 500 (reads work fine) | Postgres enforces foreign keys (SQLite did not) — `ensure_user_exists` auto-creates missing users since `4ac76c0`; if it still fails, check the release log includes that commit |
-| `/chat` returns 500 instantly (DB reads fine) | The LLM call is failing — check `OPENROUTER_API_KEY` in the Render dashboard (missing/expired key); test the same key locally first |
+| `/chat` returns 500 instantly (DB reads fine) | The LLM call is failing — check `GOOGLE_API_KEY` in the Render dashboard (missing/expired key); test the same key locally first |
 
 ### Future improvements
 
-Real authentication, persistent disk (for the RAG index), rate limiting,
-custom domain,
-"Future improvements". (The Postgres migration is done — see the Database
-section above.)
+Real authentication, persistent disk (for the RAG index), custom domain.
+(The Postgres migration is done — see the Database section above.)

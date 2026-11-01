@@ -5,8 +5,8 @@
 (function () {
   "use strict";
 
-  // Backend API base: configurable via config.js (iHost deploy), same-origin by default.
-  const API_BASE = window.FINANCE_API_BASE ?? location.origin;
+  // The API is served from the same origin as this page (Render or local uvicorn).
+  const API_BASE = location.origin;
 
   // ─── Intent config (mirrors ui/app_constants.py INTENT_CONFIG) ───
   // One accent (#134611) for the primary intent; others muted neutrals.

@@ -78,25 +78,25 @@ sources:
     source_url: https://www.rd.go.th
 
   # ── Published documents (PDF) ──
-  tax_pit90_guide_2568.pdf:
+  Tax_PIT90_Guide_2568.pdf:
     title: วิธีกรอกแบบ ภ.ง.ด.90 ปีภาษี 2568
     source_title: วิธีกรอกแบบแสดงรายการภาษีเงินได้บุคคลธรรมดา ภ.ง.ด.90 ปีภาษี 2568
     source_publisher: กรมสรรพากร
     source_url: https://www.rd.go.th
     source_kind: original
-  tax_personal_income_guide.pdf:
+  Tax_Personal_Income_Guide.pdf:
     title: คู่มือภาษีเงินได้บุคคลธรรมดา สำหรับผู้ประกอบการ SME
     source_title: คู่มือภาษีเงินได้บุคคลธรรมดา สำหรับผู้ประกอบการ SME ที่เข้าร่วมโครงการคนละครึ่ง
     source_publisher: กรมสรรพากร
     source_url: https://www.rd.go.th
     source_kind: original
-  finance_behavioral_finance_ritter.pdf:
+  Finance_Behavioral_Finance_Ritter.pdf:
     title: Behavioral Finance
     source_title: Behavioral Finance (Pacific-Basin Finance Journal, 2003)
     source_publisher: Jay R. Ritter
     source_url: https://ideas.repec.org/a/eee/pacfin/v11y2003i4p429-437.html
     source_kind: original
-  finance_behavioral_reasoning_chains.pdf:
+  Finance_Behavioral_Reasoning_Chains.pdf:
     title: Synthesizing Behaviorally-Grounded Reasoning Chains for Personal Finance LLMs
     source_title: Synthesizing Behaviorally-Grounded Reasoning Chains (FinNLP 2025)
     source_publisher: Akhil Theerthala
