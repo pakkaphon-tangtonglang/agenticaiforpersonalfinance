@@ -10,13 +10,13 @@ from decimal import ROUND_HALF_UP, Decimal
 from typing import Any
 
 from finance_ai.tools.health_score_constants import (
+    DIVERSIFIED_ASSET_TYPES,
     HEALTH_PILLARS,
     HEALTH_STATUS_INSUFFICIENT,
     HEALTH_STATUS_SCORED,
     INVEST_CONCENTRATED_FLOOR,
     INVEST_CONCENTRATION_BEST,
     INVEST_CONCENTRATION_WORST,
-    INVEST_LOSS_PENALTY,
     MISSING_MONTHLY_EXPENSE,
     MISSING_MONTHLY_INCOME,
     SAVINGS_RATE_BEST,
@@ -128,10 +128,33 @@ def score_save_pillar(monthly_income: Decimal, monthly_expense: Decimal) -> int 
     return linear_score(savings_rate, SAVINGS_RATE_BEST, SAVINGS_RATE_WORST)
 
 
+def _largest_single_stock_share(holdings: list[dict[str, Any]], total_value: Decimal) -> Decimal:
+    """Share of the portfolio held in the largest individual stock.
+
+    Pooled funds already spread risk across many securities, so they never
+    count as a concentrated position; holdings without a type are treated
+    conservatively as stocks.
+
+    Args:
+        holdings: Holding dicts with asset_type and current_value.
+        total_value: Total portfolio value (funds included).
+
+    Returns:
+        Largest single-stock value / total value (0 when only funds are held).
+    """
+    stock_values = [
+        Decimal(str(h.get("current_value", "0")))
+        for h in holdings
+        if h.get("asset_type", "stock") not in DIVERSIFIED_ASSET_TYPES
+    ]
+    return max(stock_values, default=Decimal("0")) / total_value
+
+
 def score_invest_pillar(portfolio_data: dict[str, Any]) -> int | None:
-    """Score investing by diversification, minus a penalty for net loss.
+    """Score investing by diversification across individual stocks.
 
     Users without holdings get None (not penalised: investing is optional).
+    Paper losses are not penalised: a market dip is not poor financial health.
 
     Args:
         portfolio_data: Portfolio summary from cross-agent service.
@@ -147,15 +170,13 @@ def score_invest_pillar(portfolio_data: dict[str, Any]) -> int | None:
     holdings = portfolio_data.get("holdings", [])
     if not holdings or total_value <= 0:
         return None
-    largest = max(Decimal(str(h.get("current_value", "0"))) for h in holdings)
     diversification = linear_score(
-        largest / total_value, INVEST_CONCENTRATION_BEST, INVEST_CONCENTRATION_WORST
+        _largest_single_stock_share(holdings, total_value),
+        INVEST_CONCENTRATION_BEST,
+        INVEST_CONCENTRATION_WORST,
     )
     floor_range = Decimal(SCORE_MAX - INVEST_CONCENTRATED_FLOOR) / Decimal(SCORE_MAX)
-    scaled = Decimal(INVEST_CONCENTRATED_FLOOR) + Decimal(diversification) * floor_range
-    if Decimal(str(portfolio_data.get("total_gain_loss", "0"))) < 0:
-        scaled -= INVEST_LOSS_PENALTY
-    return _round_score(scaled)
+    return _round_score(Decimal(INVEST_CONCENTRATED_FLOOR) + Decimal(diversification) * floor_range)
 
 
 def _goal_percentage(goal: dict[str, Any]) -> int:

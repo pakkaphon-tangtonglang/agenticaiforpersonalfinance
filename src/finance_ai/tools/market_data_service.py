@@ -4,10 +4,11 @@ No database dependency. Uses free, no-API-key sources only: yfinance for
 stock dashboards and FX rates, Google News RSS for financial news.
 """
 
-from datetime import timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from email.utils import parsedate_to_datetime
 from typing import Any, Optional
+from urllib.parse import urlparse
 from xml.etree import ElementTree
 
 import httpx
@@ -15,7 +16,11 @@ import httpx
 from finance_ai.core.logging import get_logger
 from finance_ai.tools.market_data_constants import (
     CURRENCY_CODE_LENGTH,
+    NEWS_MAX_AGE_DAYS,
+    NEWS_MAX_ARTICLES,
     NEWS_NOT_FOUND_MESSAGE,
+    NEWS_SOURCE_DOMAINS,
+    NEWS_SOURCE_NAMES,
 )
 from finance_ai.tools.market_data_models import (
     CurrencyConversionResult,
@@ -284,8 +289,9 @@ def fetch_finance_news(symbol: str) -> FinanceNewsResult:
         symbol: Ticker symbol (e.g., "AAPL", "PTT.BK", "BTC-USD").
 
     Returns:
-        FinanceNewsResult with news content and availability flag.
-        Never raises — failures degrade to the Thai not-found message.
+        FinanceNewsResult with news content, the filtered articles and an
+        availability flag. Only recent articles from allowlisted publishers
+        are kept (see fetch_news_items). Never raises — failures degrade to the Thai not-found message.
 
     Example:
         >>> result = fetch_finance_news("AAPL")
@@ -293,16 +299,11 @@ def fetch_finance_news(symbol: str) -> FinanceNewsResult:
         True
     """
     not_found_message = NEWS_NOT_FOUND_MESSAGE.format(symbol=symbol)
-    try:
-        xml_text = _fetch_news_rss(symbol)
-        items = _parse_rss_items(xml_text)
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("News fetch failed for %s: %s", symbol, exc)
-        return FinanceNewsResult(symbol=symbol, news_content=not_found_message, has_news=False)
-    content = _format_news_items(items, symbol)
+    articles = fetch_news_items(symbol)
+    content = _format_news_items(articles, symbol)
     if not content:
         return FinanceNewsResult(symbol=symbol, news_content=not_found_message, has_news=False)
-    return FinanceNewsResult(symbol=symbol, news_content=content, has_news=True)
+    return FinanceNewsResult(symbol=symbol, news_content=content, has_news=True, articles=articles)
 
 
 def _fetch_news_rss(symbol: str) -> str:
@@ -331,7 +332,7 @@ def _parse_rss_items(xml_text: str) -> list[dict[str, str]]:
         xml_text: Raw RSS/XML response body.
 
     Returns:
-        List of dicts with title, source, link, and pubDate keys.
+        List of dicts with title, source, source_url, link, and pubDate keys.
 
     Raises:
         ElementTree.ParseError: If the body is not valid XML.
@@ -343,6 +344,7 @@ def _parse_rss_items(xml_text: str) -> list[dict[str, str]]:
         {
             "title": (item.findtext("title") or "").strip(),
             "source": (item.findtext("source") or "").strip(),
+            "source_url": _source_url(item),
             "link": (item.findtext("link") or "").strip(),
             "pubDate": (item.findtext("pubDate") or "").strip(),
         }
@@ -350,37 +352,38 @@ def _parse_rss_items(xml_text: str) -> list[dict[str, str]]:
     ]
 
 
-def _format_news_items(items: list[dict[str, str]], symbol: str) -> str:
-    """Format parsed RSS items into a Thai news digest.
+def _format_news_items(articles: list[NewsItem], symbol: str) -> str:
+    """Format filtered articles into a Thai news digest without URLs.
+
+    Links are shown to the user as citation cards, so the model never sees
+    (or retypes) them.
 
     Args:
-        items: Parsed RSS item dicts (title/source/link/pubDate).
+        articles: Filtered news articles.
         symbol: The ticker symbol queried.
 
     Returns:
-        Formatted news string, or "" when there are no items.
+        Formatted news string, or "" when there are no articles.
     """
-    articles = []
-    for item in items[:5]:
-        parts = [f"**{item.get('title', '')}**"]
-        if item.get("source"):
-            parts.append(f"แหล่งที่มา: {item['source']}")
-        if item.get("link"):
-            parts.append(item["link"])
-        if item.get("pubDate"):
-            parts.append(item["pubDate"])
-        articles.append("\n".join(parts))
-    if not articles:
+    blocks = []
+    for article in articles:
+        parts = [f"**{article.title}**"]
+        if article.source:
+            parts.append(f"แหล่งที่มา: {article.source}")
+        if article.published_at:
+            parts.append(f"เผยแพร่: {article.published_at[:10]}")
+        blocks.append("\n".join(parts))
+    if not blocks:
         return ""
-    return f"ข่าวล่าสุดสำหรับ {symbol}:\n\n" + "\n\n---\n\n".join(articles)
+    return f"ข่าวล่าสุดสำหรับ {symbol}:\n\n" + "\n\n---\n\n".join(blocks)
 
 
 def fetch_news_items(symbol: str) -> list[NewsItem]:
     """Fetch parsed news items for a symbol via Google News RSS (free).
 
-    Structured counterpart of fetch_finance_news: returns validated article
-    models instead of a markdown string. Never raises — failures degrade
-    to an empty list.
+    Keeps only articles from allowlisted publishers (NEWS_SOURCE_DOMAINS)
+    published within NEWS_MAX_AGE_DAYS, in feed order. Never raises —
+    failures degrade to an empty list.
 
     Args:
         symbol: Ticker symbol (e.g., "AAPL", "PTT.BK").
@@ -399,7 +402,8 @@ def fetch_news_items(symbol: str) -> list[NewsItem]:
     except Exception as exc:  # noqa: BLE001
         logger.warning("News items fetch failed for %s: %s", symbol, exc)
         return []
-    return [_raw_item_to_news_item(item) for item in raw_items[:5]]
+    items = [_raw_item_to_news_item(item) for item in raw_items]
+    return [item for item in items if _is_reputable(item) and _is_recent(item)][:NEWS_MAX_ARTICLES]
 
 
 def _raw_item_to_news_item(raw_item: dict[str, str]) -> NewsItem:
@@ -414,6 +418,7 @@ def _raw_item_to_news_item(raw_item: dict[str, str]) -> NewsItem:
     return NewsItem(
         title=raw_item.get("title", ""),
         source=raw_item.get("source", ""),
+        source_url=raw_item.get("source_url") or None,
         link=raw_item.get("link") or None,
         published_at=_parse_pub_date(raw_item.get("pubDate", "")),
     )
@@ -442,3 +447,35 @@ def _parse_pub_date(raw_date: str) -> Optional[str]:
     if parsed_date.tzinfo is None:
         parsed_date = parsed_date.replace(tzinfo=timezone.utc)
     return parsed_date.isoformat()
+
+
+def _utc_now() -> datetime:
+    """Current UTC time (a seam so tests can pin the recency window)."""
+    return datetime.now(timezone.utc)
+
+
+def _source_url(item: ElementTree.Element) -> str:
+    """Publisher site from an RSS item's <source url="...">, or ""."""
+    source = item.find("source")
+    return (source.get("url") or "").strip() if source is not None else ""
+
+
+def _site_matches(host: str) -> bool:
+    """True when a host is an allowlisted domain or one of its subdomains."""
+    host = host.lower().removeprefix("www.")
+    return any(host == domain or host.endswith(f".{domain}") for domain in NEWS_SOURCE_DOMAINS)
+
+
+def _is_reputable(item: NewsItem) -> bool:
+    """True for articles from allowlisted publishers (by site, else by name)."""
+    if item.source_url:
+        return _site_matches(urlparse(item.source_url).hostname or "")
+    return item.source.strip().lower() in NEWS_SOURCE_NAMES
+
+
+def _is_recent(item: NewsItem) -> bool:
+    """True for articles published within NEWS_MAX_AGE_DAYS (undated fail)."""
+    if not item.published_at:
+        return False
+    age = _utc_now() - datetime.fromisoformat(item.published_at)
+    return age <= timedelta(days=NEWS_MAX_AGE_DAYS)

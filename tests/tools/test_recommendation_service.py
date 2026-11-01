@@ -440,6 +440,90 @@ class TestAnalyzeSavingsRate:
 # -- TestGenerateRecommendations (integration with DB) --
 
 
+def _month(**amounts: str) -> dict[str, Any]:
+    """Build one month's expense summary from category=amount pairs."""
+    breakdown = [
+        {"category": category, "label": f"หมวด-{category}", "amount": amount}
+        for category, amount in amounts.items()
+    ]
+    total = sum(Decimal(amount) for amount in amounts.values())
+    return {"total_amount": str(total), "category_breakdown": breakdown}
+
+
+class TestAnalyzeSpendingTrends:
+    """Alerts compare each category with the user's own recent average."""
+
+    def test_flags_category_well_above_own_average(self) -> None:
+        """Food 6,000 vs a 4,000 average (+50%, +2,000 THB) is flagged."""
+        from finance_ai.tools.recommendation_service import analyze_spending_trends
+
+        history = [_month(food="4000"), _month(food="3800"), _month(food="4200")]
+
+        recs = analyze_spending_trends(_month(food="6000"), history)
+
+        assert len(recs) == 1
+        assert "หมวด-food" in recs[0].title
+        assert "50%" in recs[0].description
+        assert "4,000" in recs[0].description
+
+    def test_ignores_small_or_stable_changes(self) -> None:
+        """+20% (below 30%) and +40% of a tiny amount (< 500 THB) are not flagged."""
+        from finance_ai.tools.recommendation_service import analyze_spending_trends
+
+        history = [_month(food="5000", fun="300"), _month(food="5000", fun="300")]
+
+        recs = analyze_spending_trends(_month(food="6000", fun="420"), history)
+
+        assert recs == []
+
+    def test_needs_two_months_of_history(self) -> None:
+        """One past month is not a reliable personal baseline."""
+        from finance_ai.tools.recommendation_service import analyze_spending_trends
+
+        recs = analyze_spending_trends(_month(food="9000"), [_month(food="3000")])
+
+        assert recs == []
+
+    def test_months_without_spending_in_category_count_as_zero(self) -> None:
+        """A new category with no history average is not compared."""
+        from finance_ai.tools.recommendation_service import analyze_spending_trends
+
+        history = [_month(food="4000"), _month(food="4000")]
+
+        recs = analyze_spending_trends(_month(food="4000", travel="8000"), history)
+
+        assert recs == []
+
+    def test_empty_history_months_are_skipped(self) -> None:
+        """Months with no recorded spending do not drag the average down."""
+        from finance_ai.tools.recommendation_service import analyze_spending_trends
+
+        history = [_month(food="4000"), _month(), _month(food="4000")]
+
+        recs = analyze_spending_trends(_month(food="4400"), history)
+
+        assert recs == []
+
+
+class TestSpendingHistoryGathering:
+    """The previous months are gathered so trends can be computed."""
+
+    def test_previous_months_cross_year_boundary(self) -> None:
+        """February looks back to January, then December and November of last year."""
+        from finance_ai.tools.recommendation_service import previous_months
+
+        assert previous_months(2026, 2, 3) == [(2026, 1), (2025, 12), (2025, 11)]
+
+    def test_gather_includes_expense_history(self, test_session: Any, sample_user: Any) -> None:
+        """gather_all_financial_data returns one summary per look-back month."""
+        from finance_ai.tools.recommendation_service import gather_all_financial_data
+
+        data = gather_all_financial_data(test_session, sample_user.id, 2026, 3)
+
+        assert len(data["expense_history"]["months"]) == 3
+        assert data["expense_history"]["months"][0]["start_date"] == "2026-02-01"
+
+
 class TestGenerateRecommendations:
     """Integration tests for generate_recommendations."""
 

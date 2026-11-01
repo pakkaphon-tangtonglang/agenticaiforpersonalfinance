@@ -5,6 +5,7 @@ and persist records via the planning service layer. InjectedState
 provides user_id and db_session_factory from the agent graph state.
 """
 
+from decimal import Decimal
 from typing import Annotated, Any
 
 from langchain_core.tools import tool
@@ -107,7 +108,6 @@ def _persist_goal(  # pylint: disable=too-many-arguments,too-many-positional-arg
     Returns:
         Created FinancialGoal instance.
     """
-    from decimal import Decimal  # noqa: PLC0415
 
     from finance_ai.tools.planning_service import create_goal  # noqa: PLC0415
 
@@ -244,23 +244,57 @@ def _update_goal(
         return service_update(session, goal_id, new_amount)
 
 
+def _add_inflation_adjusted_plan(
+    result: dict[str, Any],
+    target: Decimal,
+    current: Decimal,
+    months: int,
+    annual_inflation_percent: str,
+) -> None:
+    """Add the inflation-adjusted target and monthly saving to a plan result."""
+    from finance_ai.tools.planning_calculator import (  # noqa: PLC0415
+        calculate_monthly_saving_needed,
+        inflate_target,
+    )
+    from finance_ai.tools.planning_constants import (  # noqa: PLC0415
+        DEFAULT_ANNUAL_INFLATION,
+    )
+
+    inflation = (
+        parse_decimal_value(annual_inflation_percent, "annual_inflation_percent") / Decimal("100")
+        if annual_inflation_percent
+        else DEFAULT_ANNUAL_INFLATION
+    )
+    future_target = inflate_target(target, months, inflation)
+    result["annual_inflation_rate"] = format(inflation.normalize(), "f")
+    result["target_amount_inflation_adjusted"] = str(future_target)
+    result["monthly_saving_needed_inflation_adjusted"] = str(
+        calculate_monthly_saving_needed(future_target, current, months)
+    )
+
+
 @tool
 def calculate_saving_plan(
     target_amount: str,
     current_amount: str = "0",
     months: str = "",
     monthly_saving: str = "",
+    annual_inflation_percent: str = "",
 ) -> dict[str, Any]:
     """Calculate a saving plan for a financial goal.
 
     Use this tool when the user asks how much to save monthly,
-    or how long it takes to reach a goal.
+    or how long it takes to reach a goal. With a deadline (months), the
+    result also shows the target and monthly saving adjusted for inflation,
+    because the goal will cost more by then. Present both figures.
 
     Args:
-        target_amount: Target goal amount in THB (e.g., "500000").
+        target_amount: Target goal amount in today's THB (e.g., "500000").
         current_amount: Amount already saved (default "0").
         months: Number of months to reach the goal (for monthly calculation).
         monthly_saving: Monthly saving amount (for time calculation).
+        annual_inflation_percent: Yearly inflation in percent (default 2,
+            the midpoint of the Bank of Thailand's 1-3% target).
 
     Returns:
         Dict with saving plan calculations.
@@ -284,6 +318,9 @@ def calculate_saving_plan(
         monthly = calculate_monthly_saving_needed(parsed_target, parsed_current, parsed_months)
         result["months"] = parsed_months
         result["monthly_saving_needed"] = str(monthly)
+        _add_inflation_adjusted_plan(
+            result, parsed_target, parsed_current, parsed_months, annual_inflation_percent
+        )
 
     if monthly_saving:
         parsed_monthly = parse_decimal_value(monthly_saving, "monthly_saving")
@@ -292,3 +329,46 @@ def calculate_saving_plan(
         result["months_needed"] = time_needed
 
     return result
+
+
+@tool
+def plan_pay_yourself_first(
+    monthly_income: str,
+    savings_rate_percent: str = "",
+) -> dict[str, Any]:
+    """Split monthly income into "save first" and "free to spend".
+
+    Use this tool when the user asks how to start saving, how much to save
+    each month, or for a simple budget. Saving a fixed share on payday works
+    better than saving what is left at month end (pay yourself first).
+
+    Args:
+        monthly_income: Monthly income in THB (e.g., "30000").
+        savings_rate_percent: Share to save first in percent (default 20).
+
+    Returns:
+        Dict with save_first and spendable amounts, or an 'error' message.
+    """
+    from finance_ai.tools.planning_calculator import (  # noqa: PLC0415
+        calculate_pay_yourself_first,
+    )
+    from finance_ai.tools.planning_constants import (  # noqa: PLC0415
+        DEFAULT_PAY_YOURSELF_FIRST_RATE,
+    )
+
+    try:
+        income = parse_decimal_value(monthly_income, "monthly_income")
+        rate = (
+            parse_decimal_value(savings_rate_percent, "savings_rate_percent") / Decimal("100")
+            if savings_rate_percent
+            else DEFAULT_PAY_YOURSELF_FIRST_RATE
+        )
+        plan = calculate_pay_yourself_first(income, rate)
+    except ValueError as error:
+        return {"error": str(error)}
+    return {
+        "monthly_income": str(plan.monthly_income),
+        "savings_rate_percent": format((plan.savings_rate * 100).normalize(), "f"),
+        "save_first": str(plan.save_first),
+        "spendable": str(plan.spendable),
+    }

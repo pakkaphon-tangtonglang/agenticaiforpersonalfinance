@@ -17,6 +17,7 @@ from finance_ai.agents.graph_utils import should_continue
 from finance_ai.agents.planning_tools import (
     calculate_saving_plan,
     create_financial_goal,
+    plan_pay_yourself_first,
     update_goal_progress,
     view_financial_goals,
 )
@@ -33,6 +34,7 @@ PLANNING_TOOLS = [
     view_financial_goals,
     update_goal_progress,
     calculate_saving_plan,
+    plan_pay_yourself_first,
     search_finance_knowledge,
     detect_psychological_cues,
 ] + PLANNING_CROSS_TOOLS

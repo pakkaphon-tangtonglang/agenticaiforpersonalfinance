@@ -17,13 +17,16 @@ from langchain_core.messages import HumanMessage, ToolMessage
 from pydantic import BaseModel, ValidationError
 
 from finance_ai.rag.document_models import RetrievalResult, SourceKind
+from finance_ai.tools.market_data_models import NewsItem
 
 SNIPPET_MAX_CHARS = 240
 SNIPPET_MIN_CHARS = 40  # shorter than this after trimming → keep the doc's note instead
 # Heading marks, emphasis, code ticks, quotes, table pipes and separator rows.
 MARKDOWN_SYNTAX = re.compile(r"(?m)^\s*(?:#{1,6}|>|[-*+]\s)|\*+|__|`|\||:?-{3,}:?")
 GENERIC_SOURCE_TITLE = "เอกสารอ้างอิง"
-SEARCH_TOOL_NAMES = frozenset({"search_finance_knowledge", "search_guru_knowledge"})
+SEARCH_TOOL_NAMES = frozenset(
+    {"search_finance_knowledge", "search_guru_knowledge", "search_finance_news"}
+)
 
 
 class CitationSource(BaseModel):
@@ -209,3 +212,49 @@ def collect_turn_citations(messages: Iterable[Any]) -> list[CitationSource]:
         for citation in _citations_in_tool_message(message):
             by_number.setdefault(citation.index, citation)
     return [by_number[number] for number in sorted(by_number)]
+
+
+def _news_date(published_at: str | None) -> str:
+    """Format an ISO timestamp as dd/mm/yyyy, or "" when missing."""
+    if not published_at:
+        return ""
+    year, month, day = published_at[:10].split("-")
+    return f"{day}/{month}/{year}"
+
+
+def build_news_citations(
+    articles: list[NewsItem], existing: list[CitationSource]
+) -> list[CitationSource]:
+    """Number news articles as citations, continuing earlier numbers in the turn.
+
+    The card shows the headline, publisher, publisher site and date taken
+    from the feed, so the model cannot invent or alter a news citation.
+
+    Args:
+        articles: Filtered news articles from the news service.
+        existing: Citations already given out earlier in the same turn.
+
+    Returns:
+        One citation per article, in article order.
+
+    Example:
+        >>> build_news_citations([article], [])[0].kind
+        'original'
+    """
+    next_number = max((citation.index for citation in existing), default=0) + 1
+    citations = []
+    for offset, article in enumerate(articles):
+        date = _news_date(article.published_at)
+        citations.append(
+            CitationSource(
+                index=next_number + offset,
+                document_key=_document_key(article.link or article.title),
+                title=article.title,
+                url=article.link,
+                domain=_url_domain(article.source_url),
+                publisher=article.source or None,
+                snippet=f"เผยแพร่ {date}" if date else "",
+                kind="original",
+            )
+        )
+    return citations

@@ -260,3 +260,88 @@ def summarize_goals(
         overall_percentage=overall_pct,
         goals=progress_list,
     )
+
+
+MONTHS_PER_YEAR = Decimal("12")
+CENT = Decimal("0.01")
+
+
+def inflate_target(target_amount: Decimal, months: int, annual_inflation: Decimal) -> Decimal:
+    """Grow a goal amount by yearly inflation over the saving period.
+
+    A goal priced in today's baht costs more when it is reached:
+    future = today × (1 + inflation) ^ (months / 12).
+
+    Args:
+        target_amount: Goal amount in today's THB.
+        months: Months until the goal date (0 or more).
+        annual_inflation: Yearly inflation as a fraction (0.02 = 2%).
+
+    Returns:
+        Inflation-adjusted amount (2 decimal places).
+
+    Raises:
+        ValueError: If months or inflation is negative.
+
+    Example:
+        >>> inflate_target(Decimal("100000"), 24, Decimal("0.02"))
+        Decimal('104040.00')
+    """
+    if months < 0:
+        raise ValueError(f"Months must not be negative. Received: {months}")
+    if annual_inflation < 0:
+        raise ValueError(f"Inflation must not be negative. Received: {annual_inflation}")
+    growth = (Decimal("1") + annual_inflation) ** (Decimal(months) / MONTHS_PER_YEAR)
+    return (target_amount * growth).quantize(CENT)
+
+
+class PayYourselfFirstPlan(BaseModel):
+    """A monthly pay-yourself-first split.
+
+    Attributes:
+        monthly_income: Income the split is based on (THB).
+        savings_rate: Share saved first (0-1).
+        save_first: Amount to move to savings on payday (THB).
+        spendable: Amount left to spend freely (THB).
+    """
+
+    monthly_income: Decimal
+    savings_rate: Decimal
+    save_first: Decimal
+    spendable: Decimal
+
+
+def calculate_pay_yourself_first(
+    monthly_income: Decimal, savings_rate: Decimal
+) -> PayYourselfFirstPlan:
+    """Split income into "save first" and "free to spend".
+
+    Saving a fixed share as soon as income arrives, instead of saving what is
+    left at month end, follows Thaler & Benartzi (2004), "Save More
+    Tomorrow", Journal of Political Economy 112(S1).
+
+    Args:
+        monthly_income: Monthly income in THB (must be positive).
+        savings_rate: Share to save first, as a fraction from 0 to 1.
+
+    Returns:
+        PayYourselfFirstPlan with both amounts (2 decimal places).
+
+    Raises:
+        ValueError: If income is not positive or the rate is outside 0-1.
+
+    Example:
+        >>> calculate_pay_yourself_first(Decimal("30000"), Decimal("0.20")).save_first
+        Decimal('6000.00')
+    """
+    if monthly_income <= 0:
+        raise ValueError(f"Income must be positive. Received: {monthly_income} THB")
+    if not Decimal("0") <= savings_rate <= Decimal("1"):
+        raise ValueError(f"Savings rate must be between 0 and 1. Received: {savings_rate}")
+    save_first = (monthly_income * savings_rate).quantize(CENT)
+    return PayYourselfFirstPlan(
+        monthly_income=monthly_income,
+        savings_rate=savings_rate,
+        save_first=save_first,
+        spendable=(monthly_income - save_first).quantize(CENT),
+    )

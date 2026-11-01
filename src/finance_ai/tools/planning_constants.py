@@ -39,6 +39,16 @@ MIN_GOAL_AMOUNT: Decimal = Decimal("1.00")
 # Maximum goal amount (sanity check)
 MAX_GOAL_AMOUNT: Decimal = Decimal("999999999999.99")
 
+# Default yearly inflation for saving plans.
+# Source: the Bank of Thailand's headline inflation target range is 1-3% a
+# year; 2% is its midpoint. Users can override it per plan.
+DEFAULT_ANNUAL_INFLATION: Decimal = Decimal("0.02")
+
+# Default pay-yourself-first savings rate.
+# Source: the 50/30/20 rule (Warren & Tyagi, 2005) sets saving at 20% of
+# income; the same 20% threshold drives the health score's save pillar.
+DEFAULT_PAY_YOURSELF_FIRST_RATE: Decimal = Decimal("0.20")
+
 
 def validate_goal_type(goal_type: str) -> str:
     """Validate and normalize a goal type key.

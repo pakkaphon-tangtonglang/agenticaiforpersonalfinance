@@ -5,9 +5,16 @@ free public sources (Yahoo Finance search, yfinance, Google News RSS).
 """
 
 from decimal import Decimal
-from typing import Any
+from typing import Annotated, Any
 
 from langchain_core.tools import tool
+from langgraph.prebuilt import InjectedState
+
+from finance_ai.agents.citation_sources import (
+    CitationSource,
+    build_news_citations,
+    collect_turn_citations,
+)
 
 
 @tool
@@ -42,17 +49,29 @@ def get_stock_price(symbol: str) -> dict[str, Any]:
     return output
 
 
+def _numbered_news_digest(symbol: str, citations: list[CitationSource]) -> str:
+    """List news headlines with their citation numbers (no URLs)."""
+    lines = [f"[{c.index}] {c.title} — {c.publisher or ''} {c.snippet}".rstrip() for c in citations]
+    return f"ข่าวล่าสุดสำหรับ {symbol} (อ้างอิงด้วยเลขในวงเล็บ):\n" + "\n".join(lines)
+
+
 @tool
-def search_finance_news(symbol: str) -> dict[str, Any]:
+def search_finance_news(
+    symbol: str,
+    messages: Annotated[list[Any] | None, InjectedState("messages")] = None,
+) -> dict[str, Any]:
     """ค้นหาข่าวสารล่าสุดเกี่ยวกับสินทรัพย์ทางการเงิน.
 
     รองรับหุ้น, คริปโต, ดัชนี เช่น 'AAPL', 'BTC-USD', 'PTT.BK', 'GC=F'
+    ข่าวแต่ละข่าวมีเลขกำกับ [n] ให้อ้างอิงด้วยเลขนั้น ห้ามพิมพ์ลิงก์เอง
+    (ระบบแสดงลิงก์ ชื่อสำนักข่าว และวันที่ให้ผู้ใช้เอง)
 
     Args:
         symbol: ตัวย่อสินทรัพย์ที่ต้องการหาข่าว
+        messages: Conversation so far (injected from graph state) for citation numbering.
 
     Returns:
-        Dict with news content and availability flag.
+        Dict with numbered news content, citations and availability flag.
 
     Example:
         >>> search_finance_news("PTT.BK")
@@ -62,11 +81,15 @@ def search_finance_news(symbol: str) -> dict[str, Any]:
     )
 
     result = fetch_finance_news(symbol)
+    citations = build_news_citations(result.articles, collect_turn_citations(messages or []))
     return {
         "action": "finance_news",
         "symbol": result.symbol,
-        "news_content": result.news_content,
+        "news_content": (
+            _numbered_news_digest(result.symbol, citations) if citations else result.news_content
+        ),
         "has_news": result.has_news,
+        "citations": [citation.model_dump() for citation in citations],
     }
 
 

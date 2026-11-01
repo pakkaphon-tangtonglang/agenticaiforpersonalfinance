@@ -23,6 +23,10 @@ from finance_ai.tools.recommendation_constants import (
     LOW_RISK_LEVEL_THRESHOLD,
     OVERSPENDING_THRESHOLD,
     SAVINGS_RATE_WARNING_THRESHOLD,
+    SPENDING_TREND_HISTORY_MONTHS,
+    SPENDING_TREND_MIN_AMOUNT,
+    SPENDING_TREND_MIN_HISTORY_MONTHS,
+    SPENDING_TREND_MIN_INCREASE,
 )
 
 logger = get_logger(__name__)
@@ -81,6 +85,25 @@ class RecommendationReport(BaseModel):
     recommendations: list[Recommendation] = Field(default_factory=list)
 
 
+def previous_months(year: int, month: int, count: int) -> list[tuple[int, int]]:
+    """List the (year, month) pairs before a month, most recent first.
+
+    Args:
+        year: Reference year.
+        month: Reference month (1-12).
+        count: How many earlier months to list.
+
+    Returns:
+        Earlier months, newest first.
+
+    Example:
+        >>> previous_months(2026, 2, 3)
+        [(2026, 1), (2025, 12), (2025, 11)]
+    """
+    index = year * 12 + (month - 1)
+    return [((index - step) // 12, (index - step) % 12 + 1) for step in range(1, count + 1)]
+
+
 def gather_all_financial_data(
     session: Session,
     user_id: str,
@@ -112,6 +135,14 @@ def gather_all_financial_data(
 
     return {
         "expense": get_expense_summary(session, user_id, year, month),
+        "expense_history": {
+            "months": [
+                get_expense_summary(session, user_id, past_year, past_month)
+                for past_year, past_month in previous_months(
+                    year, month, SPENDING_TREND_HISTORY_MONTHS
+                )
+            ]
+        },
         "portfolio": get_portfolio_summary(session, user_id),
         "goals": get_goals_summary(session, user_id),
         "income": get_income_summary(session, user_id, year),
@@ -213,6 +244,67 @@ def _check_expense_concentration(
                     action_items=[f"หาทางลดค่า{label}"],
                     estimated_impact=f"ลดค่า{label}ได้ ~{amount - total_expense * EXPENSE_CONCENTRATION_THRESHOLD:.0f} บาท/เดือน",
                 )
+            )
+    return recommendations
+
+
+def _category_amounts(month: dict[str, Any]) -> dict[str, Decimal]:
+    """Map category key to amount for one month's expense summary."""
+    return {
+        cat.get("category", ""): Decimal(str(cat.get("amount", "0")))
+        for cat in month.get("category_breakdown", [])
+    }
+
+
+def _trend_recommendation(
+    label: str, current: Decimal, average: Decimal, months: int
+) -> Recommendation:
+    """Build the alert for a category spending well above its own average."""
+    pct = int((current - average) / average * 100)
+    return Recommendation(
+        category="expense_optimization",
+        priority=3,
+        title=f"ค่าใช้จ่ายหมวด{label}สูงกว่าปกติของคุณ",
+        description=f"หมวด{label}เดือนนี้ {current:,.0f} บาท สูงกว่าค่าเฉลี่ย {months} เดือนก่อน"
+        f"ของคุณ ({average:,.0f} บาท) {pct}%",
+        action_items=[f"ทบทวนรายการหมวด{label}เดือนนี้ว่ามีรายจ่ายพิเศษอะไร"],
+        estimated_impact=f"กลับสู่ระดับปกติได้ ~{current - average:,.0f} บาท/เดือน",
+    )
+
+
+def analyze_spending_trends(
+    current_month: dict[str, Any], history: list[dict[str, Any]]
+) -> list[Recommendation]:
+    """Flag categories well above the user's own recent average.
+
+    Args:
+        current_month: This month's expense summary (category_breakdown).
+        history: Expense summaries of previous months (empty months are skipped).
+
+    Returns:
+        One recommendation per category over both trend thresholds.
+
+    Example:
+        >>> analyze_spending_trends(this_month, [m1, m2, m3])
+    """
+    past = [_category_amounts(m) for m in history if Decimal(str(m.get("total_amount", "0"))) > 0]
+    if len(past) < SPENDING_TREND_MIN_HISTORY_MONTHS:
+        return []
+    labels = {
+        c.get("category", ""): c.get("label", "")
+        for c in current_month.get("category_breakdown", [])
+    }
+    recommendations: list[Recommendation] = []
+    for category, current in _category_amounts(current_month).items():
+        average = sum((m.get(category, Decimal("0")) for m in past), Decimal("0")) / len(past)
+        increase = current - average
+        if (
+            average > 0
+            and increase >= SPENDING_TREND_MIN_AMOUNT
+            and increase / average > SPENDING_TREND_MIN_INCREASE
+        ):
+            recommendations.append(
+                _trend_recommendation(labels[category], current, average, len(past))
             )
     return recommendations
 
@@ -650,6 +742,9 @@ def _run_all_analyses(
     """
     recommendations: list[Recommendation] = []
     recommendations.extend(analyze_expense_patterns(data["expense"], data["income_monthly"]))
+    recommendations.extend(
+        analyze_spending_trends(data["expense"], data.get("expense_history", {}).get("months", []))
+    )
     recommendations.extend(analyze_tax_optimization(data["tax"], data["income"]))
     recommendations.extend(analyze_investment_risk(data["portfolio"], risk_level))
     recommendations.extend(analyze_risk_profile_alignment(data["portfolio"], risk_level))

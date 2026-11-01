@@ -4,6 +4,7 @@ The price client's module-level cache and retry sleep are neutralized
 around every test so no real network calls or waits slip in.
 """
 
+from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Iterator
 from unittest.mock import MagicMock, patch
@@ -32,6 +33,7 @@ from finance_ai.tools.market_data_service import (
 from finance_ai.tools.price_client import _PRICE_CACHE
 
 SERVICE_PATH = "finance_ai.tools.market_data_service"
+FIXTURE_NOW = datetime(2026, 9, 13, tzinfo=timezone.utc)
 
 
 @pytest.fixture(autouse=True)
@@ -47,7 +49,7 @@ RSS_FEED_TWO_ITEMS = """<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel>
 <item>
     <title>PTT reports strong Q4 earnings</title>
-    <source url="https://example.com">Bangkok Post</source>
+    <source url="https://www.bangkokpost.com">Bangkok Post</source>
     <link>https://example.com/ptt-q4</link>
     <pubDate>Mon, 12 Sep 2026 09:00:00 GMT</pubDate>
 </item>
@@ -339,6 +341,14 @@ class TestParseRssItems:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture
+def news_now() -> Iterator[None]:
+    """Pin the news recency clock to the day after the RSS fixtures."""
+    with patch(f"{SERVICE_PATH}._utc_now", return_value=FIXTURE_NOW):
+        yield
+
+
+@pytest.mark.usefixtures("news_now")
 class TestFetchFinanceNews:
     """Tests for fetch_finance_news function."""
 
@@ -354,15 +364,15 @@ class TestFetchFinanceNews:
         assert result.news_content.startswith("ข่าวล่าสุดสำหรับ PTT.BK:")
         assert "**PTT reports strong Q4 earnings**" in result.news_content
         assert "แหล่งที่มา: Bangkok Post" in result.news_content
-        assert "https://example.com/ptt-q4" in result.news_content
-        assert "Mon, 12 Sep 2026 09:00:00 GMT" in result.news_content
+        assert "https://example.com/ptt-q4" not in result.news_content
+        assert [a.source for a in result.articles] == ["Bangkok Post", "Reuters"]
         assert "\n\n---\n\n" in result.news_content
 
     @patch(f"{SERVICE_PATH}._fetch_news_rss")
     def test_limits_to_five_articles(self, mock_rss: MagicMock) -> None:
         """Should include at most 5 articles."""
         items = "".join(
-            f"<item><title>Article {i}</title><source>S</source>"
+            f"<item><title>Article {i}</title><source>Reuters</source>"
             f"<link>https://example.com/{i}</link>"
             f"<pubDate>Mon, 12 Sep 2026 0{i}:00:00 GMT</pubDate></item>"
             for i in range(7)
@@ -409,6 +419,7 @@ class TestFetchFinanceNews:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.usefixtures("news_now")
 class TestFetchNewsItems:
     """Tests for the structured news item retrieval."""
 
@@ -435,20 +446,16 @@ class TestFetchNewsItems:
         assert fetch_news_items("AAPL") == []
 
     @patch(f"{SERVICE_PATH}._fetch_news_rss")
-    def test_unparsable_pub_date_keeps_title(self, mock_rss: MagicMock) -> None:
-        """A bad pubDate yields published_at=None but keeps the article."""
+    def test_unparsable_pub_date_is_dropped(self, mock_rss: MagicMock) -> None:
+        """An article whose date cannot be read fails the recency check."""
         mock_rss.return_value = (
             '<?xml version="1.0"?><rss version="2.0"><channel><item>'
-            "<title>Weird date article</title><source>S</source>"
+            "<title>Weird date article</title><source>Reuters</source>"
             "<link>https://example.com/x</link>"
             "<pubDate>not-a-date</pubDate></item></channel></rss>"
         )
 
-        items = fetch_news_items("AAPL")
-
-        assert len(items) == 1
-        assert items[0].title == "Weird date article"
-        assert items[0].published_at is None
+        assert fetch_news_items("AAPL") == []
 
     @patch(f"{SERVICE_PATH}._fetch_news_rss")
     def test_empty_feed_returns_empty(self, mock_rss: MagicMock) -> None:
@@ -472,3 +479,68 @@ class TestParsePubDate:
     def test_empty_date_returns_none(self) -> None:
         """An empty pubDate returns None."""
         assert _parse_pub_date("") is None
+
+
+def _rss_item(source: str, source_url: str, pub_date: str, title: str = "Headline") -> str:
+    """One RSS <item> with a given publisher and date."""
+    url_attr = f' url="{source_url}"' if source_url else ""
+    return (
+        f"<item><title>{title}</title><source{url_attr}>{source}</source>"
+        f"<link>https://news.google.com/rss/articles/{title}</link>"
+        f"<pubDate>{pub_date}</pubDate></item>"
+    )
+
+
+RECENT = "Sat, 12 Sep 2026 08:00:00 GMT"
+
+
+@pytest.mark.usefixtures("news_now")
+class TestReputableRecentNews:
+    """Only recent news from allowlisted publishers reaches users and the AI."""
+
+    @patch(f"{SERVICE_PATH}._fetch_news_rss")
+    def test_drops_social_media_and_unknown_sites(self, mock_rss: MagicMock) -> None:
+        """Facebook posts and unknown blogs are filtered out."""
+        items = (
+            _rss_item("bangkokbiznews", "https://www.bangkokbiznews.com", RECENT, "A")
+            + _rss_item("Facebook", "https://www.facebook.com", RECENT, "B")
+            + _rss_item("Share2Trade", "https://www.share2trade.com", RECENT, "C")
+        )
+        mock_rss.return_value = f"<rss><channel>{items}</channel></rss>"
+
+        titles = [item.title for item in fetch_news_items("PTT.BK")]
+
+        assert titles == ["A"]
+
+    @patch(f"{SERVICE_PATH}._fetch_news_rss")
+    def test_drops_news_older_than_the_window(self, mock_rss: MagicMock) -> None:
+        """Articles older than the recency window are filtered out."""
+        items = _rss_item(
+            "Reuters", "https://www.reuters.com", "Thu, 10 Sep 2026 08:00:00 GMT", "new"
+        ) + _rss_item("Reuters", "https://www.reuters.com", "Mon, 03 Aug 2026 08:00:00 GMT", "old")
+        mock_rss.return_value = f"<rss><channel>{items}</channel></rss>"
+
+        titles = [item.title for item in fetch_news_items("AAPL")]
+
+        assert titles == ["new"]
+
+    @patch(f"{SERVICE_PATH}._fetch_news_rss")
+    def test_keeps_publisher_domain_for_citation_icons(self, mock_rss: MagicMock) -> None:
+        """The publisher's own site is kept (feed links point to Google)."""
+        item = _rss_item("SET", "https://www.set.or.th", RECENT)
+        mock_rss.return_value = f"<rss><channel>{item}</channel></rss>"
+
+        result = fetch_finance_news("PTT.BK")
+
+        assert result.articles[0].source_url == "https://www.set.or.th"
+
+    @patch(f"{SERVICE_PATH}._fetch_news_rss")
+    def test_everything_filtered_means_no_news(self, mock_rss: MagicMock) -> None:
+        """If no article passes, the AI is told there is no news."""
+        item = _rss_item("Facebook", "https://www.facebook.com", RECENT)
+        mock_rss.return_value = f"<rss><channel>{item}</channel></rss>"
+
+        result = fetch_finance_news("PTT.BK")
+
+        assert result.has_news is False
+        assert result.articles == []
