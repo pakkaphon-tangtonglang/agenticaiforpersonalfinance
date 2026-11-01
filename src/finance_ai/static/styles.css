@@ -325,6 +325,7 @@ svg.i {
 .health-dot.good { background: var(--positive); }
 .health-dot.warn { background: var(--warning); }
 .health-dot.bad { background: var(--negative); }
+.health-label { color: var(--muted); }
 .health-value { font-weight: var(--fw-medium); }
 .head-new { gap: 6px; }
 
@@ -1344,6 +1345,7 @@ a.cite-card-title:hover { text-decoration: underline; }
   .head-logo { display: block; width: 32px; height: 32px; border-radius: 50%; }
   .head-new { width: 36px; padding: 0; }
   .head-new-label { display: none; }
+  .health-label { display: none; }
   .view.is-active { padding: var(--sp-4); }
   .view-chat.is-active { padding: 0; }
   .home { padding: 24px var(--sp-4) var(--sp-2); }
