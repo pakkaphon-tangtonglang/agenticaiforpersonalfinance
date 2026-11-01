@@ -3,7 +3,8 @@
 NAV rows (GET /v2/fund/daily-info/nav) carry a `fund_class_name`. Multi-class
 funds name each class ("K-VALUE-A(A)"); single-class funds use "main", so
 their NAV can only be found through the fund project (`proj_id`). Lookups ask
-for the last two weeks and keep the newest row per class.
+for the last two weeks and keep the newest row per class. `fetch_nav_series`
+returns a class's daily NAV over a longer window for the dashboard charts.
 """
 
 from datetime import date, timedelta
@@ -13,10 +14,12 @@ from typing import Any
 from pydantic import BaseModel
 
 from finance_ai.tools import sec_fund_api
+from finance_ai.tools.price_series_client import PricePoint
 
 NAV_LOOKBACK_DAYS = 14  # covers long Thai holidays (e.g. Songkran)
 SINGLE_CLASS_NAME = "MAIN"  # SEC's class name for single-class funds
 NAV_TTL_SECONDS = 600.0  # NAV changes once a day
+NAV_SERIES_TTL_SECONDS = 21600.0  # charts tolerate a few hours of staleness
 _MAX_NAV_PAGES = 3
 
 
@@ -74,17 +77,55 @@ def fetch_latest_nav(symbol: str) -> Decimal | None:
     return _single_class_nav(wanted)
 
 
+def fetch_nav_series(symbol: str, days: int = 30) -> list[PricePoint]:
+    """Daily NAV of a fund class over the last `days` days, oldest first.
+
+    Looks up the class name first ("K-USA-A(A)"), then a single-class fund
+    code ("K-VALUERMF") through its project. NAV is published a day late,
+    so the newest point is usually yesterday.
+
+    Args:
+        symbol: Stored fund symbol (class code or single-class fund code).
+        days: Calendar days to look back.
+
+    Returns:
+        One point per NAV date, or [] without a key or any data.
+
+    Example:
+        >>> fetch_nav_series("K-USA-A(A)", days=30)  # doctest: +SKIP
+        [PricePoint(day=datetime.date(2026, 10, 2), value=Decimal('15.0213')), ...]
+    """
+    wanted = symbol.strip().upper()
+    if not wanted:
+        return []
+    rows = _recent_nav_rows({"fund_class_name": wanted}, days, NAV_SERIES_TTL_SECONDS)
+    series = _class_series(rows, wanted)
+    return series or _single_class_series(wanted, days)
+
+
+def _single_class_series(fund_code: str, days: int) -> list[PricePoint]:
+    """NAV series of a fund whose only class is "main", found via its project."""
+    for proj_id in _single_class_proj_ids(fund_code):
+        rows = _recent_nav_rows({"proj_id": proj_id}, days, NAV_SERIES_TTL_SECONDS)
+        series = _class_series(rows, SINGLE_CLASS_NAME) or _class_series(rows, fund_code)
+        if series:
+            return series
+    return []
+
+
+def _class_series(rows: list[dict[str, Any]], class_name: str) -> list[PricePoint]:
+    """One point per NAV date for one class, oldest first."""
+    by_day: dict[date, Decimal] = {}
+    for row in rows:
+        quote = _to_quote(row)
+        if quote is not None and quote.class_name == class_name:
+            by_day[quote.nav_date] = quote.nav
+    return [PricePoint(day=day, value=nav) for day, nav in sorted(by_day.items())]
+
+
 def _single_class_nav(fund_code: str) -> Decimal | None:
     """NAV of a fund whose code is `fund_code` and whose NAV class is "main"."""
-    profiles = sec_fund_api.fetch_items(
-        sec_fund_api.PROFILES_PATH, {"project_info": fund_code}, ttl_seconds=86400.0
-    )
-    proj_ids = {
-        str(row.get("proj_id"))
-        for row in profiles
-        if str(row.get("proj_abbr_name", "")).strip().upper() == fund_code
-    }
-    for proj_id in sorted(proj_ids):
+    for proj_id in _single_class_proj_ids(fund_code):
         quotes = latest_navs_for_project(proj_id)
         quote = quotes.get(SINGLE_CLASS_NAME) or quotes.get(fund_code)
         if quote is not None:
@@ -92,14 +133,32 @@ def _single_class_nav(fund_code: str) -> Decimal | None:
     return None
 
 
-def _recent_nav_rows(filters: dict[str, str]) -> list[dict[str, Any]]:
-    """NAV rows from the last NAV_LOOKBACK_DAYS for the given filters."""
-    start = (date.today() - timedelta(days=NAV_LOOKBACK_DAYS)).isoformat()
+def _single_class_proj_ids(fund_code: str) -> list[str]:
+    """Project ids whose abbreviated name is exactly `fund_code`."""
+    profiles = sec_fund_api.fetch_items(
+        sec_fund_api.PROFILES_PATH, {"project_info": fund_code}, ttl_seconds=86400.0
+    )
+    return sorted(
+        {
+            str(row.get("proj_id"))
+            for row in profiles
+            if str(row.get("proj_abbr_name", "")).strip().upper() == fund_code
+        }
+    )
+
+
+def _recent_nav_rows(
+    filters: dict[str, str],
+    days: int = NAV_LOOKBACK_DAYS,
+    ttl_seconds: float = NAV_TTL_SECONDS,
+) -> list[dict[str, Any]]:
+    """NAV rows from the last `days` days for the given filters."""
+    start = (date.today() - timedelta(days=days)).isoformat()
     return sec_fund_api.fetch_items(
         sec_fund_api.NAV_PATH,
         {**filters, "start_nav_date": start},
         max_pages=_MAX_NAV_PAGES,
-        ttl_seconds=NAV_TTL_SECONDS,
+        ttl_seconds=ttl_seconds,
     )
 
 

@@ -1,5 +1,6 @@
 """Tests for the guru persona registry."""
 
+import re
 from datetime import date
 from pathlib import Path
 
@@ -131,3 +132,13 @@ class TestShippedProfiles:
         personas = load_guru_personas(Path("docs/gurus"))
 
         assert set(personas) == {"buffett", "dalio", "niwes", "coach_noom"}
+
+    def test_every_guru_is_searchable_in_thai_and_english(self) -> None:
+        """Aliases add the other-language name, so search works in both."""
+        personas = load_guru_personas(Path("docs/gurus"))
+
+        thai = re.compile(r"[฀-๿]")
+        for persona in personas.values():
+            names = [persona.display_name, *persona.aliases]
+            assert any(thai.search(name) for name in names), persona.guru_id
+            assert any(re.search(r"[A-Za-z]", name) for name in names), persona.guru_id

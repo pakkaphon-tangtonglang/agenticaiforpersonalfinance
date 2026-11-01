@@ -1,6 +1,7 @@
 """Tests for sec_fund_api and fund_nav_client (SEC Fund API V2)."""
 
 from collections.abc import Callable
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 from unittest.mock import patch
@@ -10,6 +11,7 @@ import httpx
 from finance_ai.tools import sec_fund_api
 from finance_ai.tools.fund_nav_client import (
     fetch_latest_nav,
+    fetch_nav_series,
     is_fund_data_available,
     latest_navs_for_project,
 )
@@ -118,3 +120,58 @@ class TestLatestNav:
         fake_sec_api(lambda request: httpx.Response(204))
         assert fetch_latest_nav("NOPE") is None
         assert fetch_latest_nav("  ") is None
+
+
+class TestNavSeries:
+    """fund_nav_client.fetch_nav_series: daily NAV of one class, oldest first."""
+
+    def test_class_series_oldest_first(self, fake_sec_api: FakeSec) -> None:
+        """Rows of other classes and bad rows are dropped; dates ascend."""
+        calls = fake_sec_api(
+            lambda request: page(
+                [
+                    nav_row("K-USA-A(A)", "2026-10-30", 15.2),
+                    nav_row("K-USA-A(A)", "2026-10-28", 15.0),
+                    nav_row("K-USA-A(D)", "2026-10-29", 9.9),
+                    nav_row("K-USA-A(A)", "2026-10-29", 0),
+                ]
+            )
+        )
+        series = fetch_nav_series("k-usa-a(a)", days=30)
+        assert [(point.day, point.value) for point in series] == [
+            (date(2026, 10, 28), Decimal("15.0")),
+            (date(2026, 10, 30), Decimal("15.2")),
+        ]
+        expected_start = (date.today() - timedelta(days=30)).isoformat()
+        assert calls[0].url.params["start_nav_date"] == expected_start
+
+    def test_single_class_fund_series(self, fake_sec_api: FakeSec) -> None:
+        """A 'main'-class fund is followed through its profile's proj_id."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path == sec_fund_api.PROFILES_PATH:
+                return page([{"proj_id": "M0405_2549", "proj_abbr_name": "K-VALUERMF"}])
+            if request.url.params.get("proj_id") == "M0405_2549":
+                return page(
+                    [
+                        nav_row("main", "2026-10-29", 34.1, "M0405_2549"),
+                        nav_row("main", "2026-10-30", 34.443, "M0405_2549"),
+                    ]
+                )
+            return httpx.Response(204)
+
+        fake_sec_api(handler)
+        assert [point.value for point in fetch_nav_series("K-VALUERMF")] == [
+            Decimal("34.1"),
+            Decimal("34.443"),
+        ]
+
+    def test_unknown_or_blank_fund_is_empty(self, fake_sec_api: FakeSec) -> None:
+        """Nothing anywhere → [] (the chart hides the line)."""
+        fake_sec_api(lambda request: httpx.Response(204))
+        assert not fetch_nav_series("NOPE")
+        assert not fetch_nav_series("  ")
+
+    def test_no_key_is_empty(self) -> None:
+        """Without an SEC key (local dev) there is no series."""
+        assert not fetch_nav_series("K-USA-A(A)")

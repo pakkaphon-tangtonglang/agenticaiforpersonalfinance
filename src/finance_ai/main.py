@@ -116,6 +116,7 @@ from finance_ai.tools.conversation_title_service import (
 )
 from finance_ai.tools.market_data_models import AssetFetchResult
 from finance_ai.tools.report_service import generate_financial_report
+from finance_ai.tools.trend_service import build_dashboard_trends
 from finance_ai.tools.background_scheduler import start_scheduler, stop_scheduler
 from finance_ai.tools.watchlist_alert_service import (
     AlertTimeError,
@@ -312,6 +313,7 @@ class GuruSummary(BaseModel):
 
     guru_id: str
     display_name: str
+    aliases: list[str]
     region: str
     tagline: str
     focus_areas: list[str]
@@ -1534,6 +1536,34 @@ def get_dashboard(
         month=month if month is not None else today.month,
     )
     return report.model_dump(mode="json")
+
+
+@app.get("/dashboard/trends")
+def get_dashboard_trends(
+    user_id: str,
+    year: int | None = Query(None, ge=2000, le=2100),
+    month: int | None = Query(None, ge=1, le=12),
+    session: Session = Depends(get_session),
+) -> dict[str, Any]:
+    """Insight-card data: spending over 6 months and 30-day price/NAV lines.
+
+    Args:
+        user_id: User UUID.
+        year: Optional year (defaults to this year).
+        month: Optional month (defaults to this month).
+        session: Database session.
+
+    Returns:
+        DashboardTrends as JSON (money and percentages as strings).
+    """
+    today = date.today()
+    trends = build_dashboard_trends(
+        session,
+        user_id,
+        year if year is not None else today.year,
+        month if month is not None else today.month,
+    )
+    return trends.model_dump(mode="json")
 
 
 # ──────────────────────── Assets ─────────────────────────────────

@@ -24,10 +24,8 @@ from finance_ai.tools.recommendation_constants import (
     OVERSPENDING_THRESHOLD,
     SAVINGS_RATE_WARNING_THRESHOLD,
     SPENDING_TREND_HISTORY_MONTHS,
-    SPENDING_TREND_MIN_AMOUNT,
-    SPENDING_TREND_MIN_HISTORY_MONTHS,
-    SPENDING_TREND_MIN_INCREASE,
 )
+from finance_ai.tools.spending_trend_calculator import find_category_spikes
 
 logger = get_logger(__name__)
 
@@ -248,14 +246,6 @@ def _check_expense_concentration(
     return recommendations
 
 
-def _category_amounts(month: dict[str, Any]) -> dict[str, Decimal]:
-    """Map category key to amount for one month's expense summary."""
-    return {
-        cat.get("category", ""): Decimal(str(cat.get("amount", "0")))
-        for cat in month.get("category_breakdown", [])
-    }
-
-
 def _trend_recommendation(
     label: str, current: Decimal, average: Decimal, months: int
 ) -> Recommendation:
@@ -287,26 +277,10 @@ def analyze_spending_trends(
     Example:
         >>> analyze_spending_trends(this_month, [m1, m2, m3])
     """
-    past = [_category_amounts(m) for m in history if Decimal(str(m.get("total_amount", "0"))) > 0]
-    if len(past) < SPENDING_TREND_MIN_HISTORY_MONTHS:
-        return []
-    labels = {
-        c.get("category", ""): c.get("label", "")
-        for c in current_month.get("category_breakdown", [])
-    }
-    recommendations: list[Recommendation] = []
-    for category, current in _category_amounts(current_month).items():
-        average = sum((m.get(category, Decimal("0")) for m in past), Decimal("0")) / len(past)
-        increase = current - average
-        if (
-            average > 0
-            and increase >= SPENDING_TREND_MIN_AMOUNT
-            and increase / average > SPENDING_TREND_MIN_INCREASE
-        ):
-            recommendations.append(
-                _trend_recommendation(labels[category], current, average, len(past))
-            )
-    return recommendations
+    return [
+        _trend_recommendation(spike.label, spike.current, spike.average, spike.months_compared)
+        for spike in find_category_spikes(current_month, history)
+    ]
 
 
 def analyze_tax_optimization(
@@ -715,9 +689,9 @@ def _get_user_risk_level(session: Session, user_id: str) -> int | None:
     Returns:
         Risk level (1-5) or None when unavailable.
     """
-    from finance_ai.database.crud.risk_assessment_crud import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+    from finance_ai.database.crud.risk_assessment_crud import (
         RiskAssessmentCRUD,
-    )
+    )  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
 
     try:
         assessment = RiskAssessmentCRUD().get_latest_by_user(session, user_id)

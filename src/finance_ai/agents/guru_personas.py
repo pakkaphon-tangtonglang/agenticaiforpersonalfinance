@@ -33,6 +33,7 @@ class GuruPersona(BaseModel):
 
     guru_id: str = Field(min_length=1, pattern=r"^[a-z0-9_]+$")
     display_name: str = Field(min_length=1)
+    aliases: list[str] = Field(default_factory=list)  # other-language names for search
     region: Literal["US", "TH"]
     language: Literal["en", "th"]
     tagline: str = Field(min_length=1)
