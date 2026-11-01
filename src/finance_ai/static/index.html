@@ -11,6 +11,7 @@
     var theme = "light";
     try { if (localStorage.getItem("pfai_theme") === "dark") theme = "dark"; } catch (_) { /* storage blocked */ }
     document.documentElement.dataset.theme = theme;
+    try { if (localStorage.getItem("pfai_sidebar") === "collapsed") document.documentElement.dataset.sidebar = "collapsed"; } catch (_) { /* storage blocked */ }
   })();
 </script>
 <title>การเงินส่วนบุคคล — Personal Finance AI</title>
@@ -18,14 +19,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css?v=18" />
+<link rel="stylesheet" href="styles.css?v=20" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
-<script src="citations.js?v=18" defer></script>
-<script src="app.js?v=18" defer></script>
-<script src="guru.js?v=18" defer></script>
-<script src="history.js?v=18" defer></script>
+<script src="citations.js?v=20" defer></script>
+<script src="app.js?v=20" defer></script>
+<script src="guru.js?v=20" defer></script>
+<script src="history.js?v=20" defer></script>
 </head>
 <body>
 <a href="#main" class="skip-link">ข้ามไปยังเนื้อหาหลัก</a>
@@ -52,6 +53,7 @@
   <symbol id="i-user" viewBox="0 0 24 24"><path d="M18 20a6 6 0 0 0-12 0" /> <circle cx="12" cy="10" r="4" /> <circle cx="12" cy="12" r="10" /></symbol>
   <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2" ry="2" /> <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" /></symbol>
   <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5" /></symbol>
+  <symbol id="i-panel" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M9 3v18" /></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /> <path d="m21 21-4.3-4.3" /></symbol>
 </svg>
 
@@ -59,34 +61,44 @@
 <div class="app" id="app">
   <!-- Rail + chat panel (desktop columns; one slide-in drawer on mobile) -->
   <div class="sidebar" id="sidebar">
-    <nav class="rail" aria-label="เมนูหลัก">
-      <img class="rail-logo" src="emblem.png" alt="Agentic AI Personal Finance" width="48" height="48" />
+    <div class="sidebar-head">
+      <img class="rail-logo" src="emblem.png" alt="Agentic AI Personal Finance" width="40" height="40" />
+      <span class="sidebar-brand">Agentic AI</span>
+      <button class="rail-btn sidebar-collapse" id="sidebarCollapse" type="button"
+        aria-label="พับแถบด้านข้าง" aria-expanded="true" data-label="พับ/ขยายแถบด้านข้าง">
+        <svg class="i" aria-hidden="true"><use href="#i-panel"/></svg>
+      </button>
+    </div>
+
+    <nav class="nav" aria-label="เมนูหลัก">
       <button class="nav-item is-active" data-view="chat" data-label="แชท" type="button">
-        <svg class="i" aria-hidden="true"><use href="#i-chat"/></svg><span class="sr-only">แชท</span>
+        <svg class="i" aria-hidden="true"><use href="#i-chat"/></svg><span class="nav-label">แชท</span>
       </button>
       <button class="nav-item" data-view="dashboard" data-label="แดชบอร์ด" type="button">
-        <svg class="i" aria-hidden="true"><use href="#i-dash"/></svg><span class="sr-only">แดชบอร์ด</span>
+        <svg class="i" aria-hidden="true"><use href="#i-dash"/></svg><span class="nav-label">แดชบอร์ด</span>
       </button>
       <button class="nav-item" data-view="upload" data-label="เพิ่มรายการจากไฟล์" type="button">
-        <svg class="i" aria-hidden="true"><use href="#i-file"/></svg><span class="sr-only">เพิ่มรายการจากไฟล์</span>
+        <svg class="i" aria-hidden="true"><use href="#i-file"/></svg><span class="nav-label">เพิ่มรายการจากไฟล์</span>
       </button>
       <button class="nav-item" data-view="assets" data-label="สินทรัพย์" type="button">
-        <svg class="i" aria-hidden="true"><use href="#i-trend"/></svg><span class="sr-only">สินทรัพย์</span>
+        <svg class="i" aria-hidden="true"><use href="#i-trend"/></svg><span class="nav-label">สินทรัพย์</span>
       </button>
       <button class="nav-item" data-view="guru" data-label="กูรู" type="button">
-        <svg class="i" aria-hidden="true"><use href="#i-guru"/></svg><span class="sr-only">กูรู</span>
+        <svg class="i" aria-hidden="true"><use href="#i-guru"/></svg><span class="nav-label">กูรู</span>
       </button>
-      <span class="rail-grow"></span>
-      <button class="rail-btn theme-toggle" id="themeToggle" data-label="สลับโหมดมืด" type="button" aria-pressed="false">
-        <svg class="i theme-sun" aria-hidden="true"><use href="#i-sun"/></svg>
-        <svg class="i theme-moon" aria-hidden="true"><use href="#i-moon"/></svg>
-        <span class="sr-only">โหมดมืด</span>
+    </nav>
+
+    <section class="chat-panel" aria-labelledby="convHeading">
+      <button class="conv-new" id="newChatBtn" type="button" data-label="แชทใหม่">
+        <svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span class="nav-label">แชทใหม่</span>
       </button>
-      <button class="line-connect-btn" id="connectLineBtn" data-label="เชื่อมต่อ LINE" type="button">
-        <span class="line-connect-icon" aria-hidden="true">LINE</span><span class="sr-only">เชื่อมต่อ LINE</span>
-      </button>
+      <h2 class="conv-heading" id="convHeading">ประวัติแชท</h2>
+      <ul class="conv-list" id="convList" aria-label="รายการบทสนทนา"></ul>
+    </section>
+
+    <div class="sidebar-foot">
       <details class="user-menu">
-        <summary class="user-avatar" aria-label="บัญชีของฉัน">
+        <summary class="user-avatar" aria-label="บัญชีของฉัน" data-label="บัญชีของฉัน">
           <svg class="i" aria-hidden="true"><use href="#i-user"/></svg>
         </summary>
         <div class="user-box">
@@ -95,15 +107,16 @@
           <button class="btn btn-secondary user-reset" id="resetUserBtn" type="button">สร้างไอดีใหม่</button>
         </div>
       </details>
-    </nav>
-
-    <aside class="chat-panel" aria-label="ประวัติแชท">
-      <h2 class="conv-heading" id="convHeading">ประวัติแชท</h2>
-      <button class="btn btn-primary conv-new" id="newChatBtn" type="button">
-        <svg class="i" aria-hidden="true"><use href="#i-plus"/></svg>แชทใหม่
+      <span class="foot-grow"></span>
+      <button class="rail-btn theme-toggle" id="themeToggle" data-label="สลับโหมดมืด" type="button" aria-pressed="false">
+        <svg class="i theme-sun" aria-hidden="true"><use href="#i-sun"/></svg>
+        <svg class="i theme-moon" aria-hidden="true"><use href="#i-moon"/></svg>
+        <span class="sr-only">โหมดมืด</span>
       </button>
-      <ul class="conv-list" id="convList" aria-label="รายการบทสนทนา"></ul>
-    </aside>
+      <button class="line-connect-btn" id="connectLineBtn" data-label="เชื่อมต่อ LINE" type="button">
+        <span class="line-connect-icon" aria-hidden="true">LINE</span><span class="sr-only">เชื่อมต่อ LINE</span>
+      </button>
+    </div>
   </div>
 
   <!-- Main canvas -->
