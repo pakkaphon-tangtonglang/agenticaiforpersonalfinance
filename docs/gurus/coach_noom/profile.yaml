@@ -1,5 +1,9 @@
 guru_id: coach_noom
 display_name: โค้ชหนุ่ม จักรพงษ์ เมษพันธุ์
+aliases:
+  - Coach Noom
+  - Noom
+  - โค้ชหนุ่ม
 region: TH
 language: th
 tagline: Money Coach วางแผนการเงินทีละขั้น ออมก่อนใช้ สู่ความมั่งคั่งที่ยั่งยืน

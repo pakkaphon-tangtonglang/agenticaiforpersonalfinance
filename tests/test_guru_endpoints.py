@@ -74,6 +74,7 @@ class TestListGurus:
         assert set(gurus) == {"buffett", "dalio", "niwes", "coach_noom"}
         assert gurus["buffett"]["display_name"] == "Warren Buffett"
         assert gurus["coach_noom"]["typical_questions"]
+        assert "บัฟเฟตต์" in gurus["buffett"]["aliases"]
 
 
 class TestGuruChatStream:
