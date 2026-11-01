@@ -59,3 +59,17 @@ class TestProductionPromptRegression:
         examples = _boundary_examples_from_prompts_module()
         for example in examples:
             assert example in ORCHESTRATOR_SYSTEM_PROMPT
+
+
+class TestVagueMessageRule:
+    """Plan 3.1: one-word messages like 'เงิน' must score low so the router asks back."""
+
+    def test_rule_in_head_survives_no_example_ablation(self) -> None:
+        """The low-confidence rule is a classification rule, not only an example."""
+        prompt = build_orchestrator_system_prompt(False)
+        assert "กว้างเกินไป" in prompt
+        assert "0.5" in prompt
+
+    def test_production_prompt_has_vague_example(self) -> None:
+        """The shipped prompt shows a vague one-word message with low confidence."""
+        assert '"เงิน" → {"intent": "general", "confidence": 0.4}' in ORCHESTRATOR_SYSTEM_PROMPT
