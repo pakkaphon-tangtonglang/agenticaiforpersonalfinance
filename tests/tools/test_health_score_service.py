@@ -137,11 +137,64 @@ class TestInvestPillar:
         holdings = [{"current_value": "100"}]
         assert score_invest_pillar(_build_data(holdings=holdings)["portfolio"]) == 30
 
-    def test_loss_reduces_score(self) -> None:
-        """Loss reduces score."""
+    def test_loss_does_not_reduce_score(self) -> None:
+        """A paper loss (e.g. a market dip) is not poor financial health."""
         holdings = [{"current_value": "100"} for _ in range(4)]
         data = _build_data(holdings=holdings, gain_loss="-50")
-        assert score_invest_pillar(data["portfolio"]) == 80
+        assert score_invest_pillar(data["portfolio"]) == 100
+
+    def test_single_mutual_fund_is_diversified(self) -> None:
+        """One index fund already spreads risk, so it scores full marks."""
+        holdings = [{"asset_type": "mutual_fund", "current_value": "100000"}]
+        assert score_invest_pillar(_build_data(holdings=holdings)["portfolio"]) == 100
+
+    def test_concentration_counts_only_stocks(self) -> None:
+        """A stock at 30% of a fund-heavy portfolio is within the best threshold."""
+        holdings = [
+            {"asset_type": "stock", "current_value": "30"},
+            {"asset_type": "mutual_fund", "current_value": "70"},
+        ]
+        assert score_invest_pillar(_build_data(holdings=holdings)["portfolio"]) == 100
+
+    def test_large_single_stock_beside_fund_is_penalised(self) -> None:
+        """A stock at 80% of the portfolio is concentrated even beside a fund."""
+        holdings = [
+            {"asset_type": "stock", "current_value": "80"},
+            {"asset_type": "mutual_fund", "current_value": "20"},
+        ]
+        score = score_invest_pillar(_build_data(holdings=holdings)["portfolio"])
+        assert score is not None and 30 < score < 60
+
+    def test_unknown_asset_type_treated_as_stock(self) -> None:
+        """Holdings without a type are judged conservatively, like a stock."""
+        holdings = [{"current_value": "100"}]
+        assert score_invest_pillar(_build_data(holdings=holdings)["portfolio"]) == 30
+
+
+class TestHealthScoreConstantsDocumented:
+    """Every scoring threshold states its source or why it is project-defined."""
+
+    def test_each_threshold_has_a_source_comment(self) -> None:
+        """Each numeric constant sits under a 'Source:' or 'Project-defined:' comment."""
+        from pathlib import Path
+
+        import finance_ai.tools.health_score_constants as constants
+
+        lines = Path(constants.__file__).read_text(encoding="utf-8").splitlines()
+        thresholds = [
+            "SPEND_RATIO_BEST",
+            "SPEND_RATIO_WORST",
+            "SAVINGS_RATE_BEST",
+            "SAVINGS_RATE_WORST",
+            "INVEST_CONCENTRATION_BEST",
+            "INVEST_CONCENTRATION_WORST",
+            "INVEST_CONCENTRATED_FLOOR",
+            "TAX_DRAFT_SCORE",
+        ]
+        for name in thresholds:
+            index = next(i for i, line in enumerate(lines) if line.startswith(f"{name}:"))
+            above = "\n".join(lines[max(0, index - 6) : index])
+            assert "Source:" in above or "Project-defined:" in above, name
 
 
 class TestPlanPillar:

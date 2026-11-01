@@ -87,6 +87,7 @@ class FinanceNewsResult(BaseModel):
     symbol: str
     news_content: str
     has_news: bool
+    articles: list["NewsItem"] = Field(default_factory=list)
 
 
 class AssetSymbolMatch(BaseModel):
@@ -118,6 +119,7 @@ class NewsItem(BaseModel):
     Attributes:
         title: Article headline.
         source: Publisher name (e.g., "Reuters").
+        source_url: Publisher's site from the feed, or None when absent.
         link: Article URL, or None when unavailable.
         published_at: ISO 8601 timestamp string, or None when unparsable.
 
@@ -127,6 +129,7 @@ class NewsItem(BaseModel):
 
     title: str
     source: str = ""
+    source_url: Optional[str] = None
     link: Optional[str] = None
     published_at: Optional[str] = None
 

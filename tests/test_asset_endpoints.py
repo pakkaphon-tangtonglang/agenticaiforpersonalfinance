@@ -225,6 +225,7 @@ class TestAssetFetchEndpoint:
             {
                 "title": "Apple unveils new iPhone",
                 "source": "Reuters",
+                "source_url": None,
                 "link": "https://example.com/aapl",
                 "published_at": "2026-09-13T10:45:47+00:00",
             }

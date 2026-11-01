@@ -237,3 +237,58 @@ class TestSummarizeGoals:
         """Returns GoalSummaryResult instance."""
         result = summarize_goals([])
         assert isinstance(result, GoalSummaryResult)
+
+
+class TestInflationAdjustedTarget:
+    """Saving targets grow with inflation over the saving period."""
+
+    def test_two_years_at_two_percent(self) -> None:
+        """100,000 today costs 104,040 in two years at 2%/yr."""
+        from finance_ai.tools.planning_calculator import inflate_target
+
+        assert inflate_target(Decimal("100000"), 24, Decimal("0.02")) == Decimal("104040.00")
+
+    def test_zero_months_or_zero_inflation_unchanged(self) -> None:
+        """No time or no inflation leaves the target as is."""
+        from finance_ai.tools.planning_calculator import inflate_target
+
+        assert inflate_target(Decimal("50000"), 0, Decimal("0.02")) == Decimal("50000.00")
+        assert inflate_target(Decimal("50000"), 36, Decimal("0")) == Decimal("50000.00")
+
+    def test_partial_year_uses_fractional_exponent(self) -> None:
+        """Six months at 2%/yr grows the target by about 1%."""
+        from finance_ai.tools.planning_calculator import inflate_target
+
+        assert inflate_target(Decimal("100000"), 6, Decimal("0.02")) == Decimal("100995.05")
+
+    def test_rejects_negative_inputs(self) -> None:
+        """Negative months or inflation are reported clearly."""
+        from finance_ai.tools.planning_calculator import inflate_target
+
+        with pytest.raises(ValueError, match="Months"):
+            inflate_target(Decimal("1000"), -1, Decimal("0.02"))
+        with pytest.raises(ValueError, match="Inflation"):
+            inflate_target(Decimal("1000"), 12, Decimal("-0.01"))
+
+
+class TestPayYourselfFirst:
+    """Pay-yourself-first: save a fixed share of income first, spend the rest."""
+
+    def test_twenty_percent_of_thirty_thousand(self) -> None:
+        """30,000 income at 20% → save 6,000 first, 24,000 free to spend."""
+        from finance_ai.tools.planning_calculator import calculate_pay_yourself_first
+
+        plan = calculate_pay_yourself_first(Decimal("30000"), Decimal("0.20"))
+
+        assert plan.save_first == Decimal("6000.00")
+        assert plan.spendable == Decimal("24000.00")
+        assert plan.savings_rate == Decimal("0.20")
+
+    def test_rejects_invalid_income_or_rate(self) -> None:
+        """Income must be positive and the rate between 0 and 1."""
+        from finance_ai.tools.planning_calculator import calculate_pay_yourself_first
+
+        with pytest.raises(ValueError, match="Income"):
+            calculate_pay_yourself_first(Decimal("0"), Decimal("0.2"))
+        with pytest.raises(ValueError, match="Savings rate"):
+            calculate_pay_yourself_first(Decimal("30000"), Decimal("1.5"))

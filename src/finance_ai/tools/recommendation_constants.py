@@ -53,6 +53,18 @@ GOAL_BEHIND_SCHEDULE_PERCENTAGE: Decimal = Decimal("50.00")
 # Goal deadline warning: flag if deadline is within this many months
 GOAL_DEADLINE_WARNING_MONTHS: int = 6
 
+# Spending trends: compare each category with the user's OWN recent average
+# instead of a fixed external split such as 50/30/20 (Thai incomes and the 8
+# expense categories do not map cleanly onto needs/wants).
+# Project-defined: look back 3 months; need at least 2 months with spending
+# so one unusual month is not the baseline.
+SPENDING_TREND_HISTORY_MONTHS: int = 3
+SPENDING_TREND_MIN_HISTORY_MONTHS: int = 2
+# Project-defined: flag only increases above 30% AND at least 500 THB, so
+# small categories (a few hundred baht) do not trigger noisy alerts.
+SPENDING_TREND_MIN_INCREASE: Decimal = Decimal("0.30")
+SPENDING_TREND_MIN_AMOUNT: Decimal = Decimal("500")
+
 # Guardrail: risk levels at or below this value count as low risk
 LOW_RISK_LEVEL_THRESHOLD: int = 2
 

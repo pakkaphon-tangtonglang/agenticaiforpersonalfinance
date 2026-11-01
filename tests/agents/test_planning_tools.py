@@ -207,3 +207,59 @@ class TestCalculateSavingPlan:
         )
         assert result["current_amount"] == "0"
         assert result["monthly_saving_needed"] == "10000.00"
+
+
+class TestSavingPlanInflation:
+    """calculate_saving_plan reports inflation-adjusted figures next to nominal ones."""
+
+    def test_default_inflation_adjusts_target_and_monthly(self) -> None:
+        """With a deadline, the plan shows today's and inflation-adjusted amounts."""
+        result = calculate_saving_plan.invoke(
+            {"target_amount": "100000", "current_amount": "0", "months": "24"}
+        )
+        assert result["monthly_saving_needed"] == "4166.67"
+        assert result["annual_inflation_rate"] == "0.02"
+        assert result["target_amount_inflation_adjusted"] == "104040.00"
+        assert result["monthly_saving_needed_inflation_adjusted"] == "4335.00"
+
+    def test_zero_inflation_matches_nominal(self) -> None:
+        """Passing 0% inflation makes both figures equal."""
+        result = calculate_saving_plan.invoke(
+            {"target_amount": "120000", "months": "12", "annual_inflation_percent": "0"}
+        )
+        assert result["target_amount_inflation_adjusted"] == "120000.00"
+        assert result["monthly_saving_needed_inflation_adjusted"] == "10000.00"
+
+
+class TestPlanPayYourselfFirst:
+    """The pay-yourself-first planning tool."""
+
+    def test_default_rate_is_twenty_percent(self) -> None:
+        """Without a rate, the tool uses the 20% default."""
+        from finance_ai.agents.planning_tools import plan_pay_yourself_first
+
+        result = plan_pay_yourself_first.invoke({"monthly_income": "30000"})
+
+        assert result["save_first"] == "6000.00"
+        assert result["spendable"] == "24000.00"
+        assert result["savings_rate_percent"] == "20"
+
+    def test_custom_rate(self) -> None:
+        """A user-chosen rate is honoured."""
+        from finance_ai.agents.planning_tools import plan_pay_yourself_first
+
+        result = plan_pay_yourself_first.invoke(
+            {"monthly_income": "40000", "savings_rate_percent": "15"}
+        )
+
+        assert result["save_first"] == "6000.00"
+
+    def test_invalid_rate_returns_error(self) -> None:
+        """An impossible rate is reported instead of raising."""
+        from finance_ai.agents.planning_tools import plan_pay_yourself_first
+
+        result = plan_pay_yourself_first.invoke(
+            {"monthly_income": "40000", "savings_rate_percent": "150"}
+        )
+
+        assert "error" in result

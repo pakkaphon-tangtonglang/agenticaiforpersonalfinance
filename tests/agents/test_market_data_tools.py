@@ -137,6 +137,49 @@ class TestSearchFinanceNewsTool:
         assert result["has_news"] is False
 
 
+class TestSearchFinanceNewsCitations:
+    """News articles become numbered citation cards; the AI sees numbers, not URLs."""
+
+    def test_articles_become_numbered_citations(self) -> None:
+        """Each article gets a number, headline, publisher, domain and date."""
+        from finance_ai.tools.market_data_models import FinanceNewsResult, NewsItem
+
+        article = NewsItem(
+            title="PTT profit rises",
+            source="bangkokbiznews",
+            source_url="https://www.bangkokbiznews.com",
+            link="https://news.google.com/rss/articles/abc",
+            published_at="2026-09-12T08:00:00+00:00",
+        )
+        news = FinanceNewsResult(
+            symbol="PTT.BK", news_content="x", has_news=True, articles=[article]
+        )
+        with patch("finance_ai.tools.market_data_service.fetch_finance_news", return_value=news):
+            result = search_finance_news.invoke({"symbol": "PTT.BK"})
+
+        citation = result["citations"][0]
+        assert citation["index"] == 1
+        assert citation["title"] == "PTT profit rises"
+        assert citation["publisher"] == "bangkokbiznews"
+        assert citation["domain"] == "bangkokbiznews.com"
+        assert citation["kind"] == "original"
+        assert "12/09/2026" in citation["snippet"]
+        assert result["news_content"].startswith("ข่าวล่าสุดสำหรับ PTT.BK")
+        assert "[1] PTT profit rises" in result["news_content"]
+        assert "news.google.com" not in result["news_content"]
+
+    def test_no_articles_no_citations(self) -> None:
+        """Without articles the tool returns no citations."""
+        from finance_ai.tools.market_data_models import FinanceNewsResult
+
+        news = FinanceNewsResult(symbol="X", news_content="ไม่พบข่าว", has_news=False)
+        with patch("finance_ai.tools.market_data_service.fetch_finance_news", return_value=news):
+            result = search_finance_news.invoke({"symbol": "X"})
+
+        assert result["citations"] == []
+        assert result["news_content"] == "ไม่พบข่าว"
+
+
 class TestResolveAssetSymbolTool:
     """Tests for resolve_asset_symbol @tool wrapper."""
 
