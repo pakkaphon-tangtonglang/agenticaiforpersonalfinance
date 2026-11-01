@@ -67,6 +67,29 @@ class TestClassifyExpenseCategory:
         """Unknown description returns 'other'."""
         assert classify_expense_category("random text xyz") == "other"
 
+    def test_place_name_with_baan_is_not_housing(self) -> None:
+        """A shop in a village called บ้าน... is not a housing cost (real statement row)."""
+        assert classify_expense_category("จ่ายบิล CJ 0123 ตลาดนัดตัวอย่าง บ้านชากยา") == "food"
+
+    def test_rent_and_mortgage_still_housing(self) -> None:
+        """Specific housing phrases keep their category."""
+        assert classify_expense_category("ผ่อนบ้าน ธอส.") == "housing"
+        assert classify_expense_category("ค่าเช่าห้อง") == "housing"
+
+    def test_wallet_top_up_is_not_a_utility_bill(self) -> None:
+        """TrueMoney top-ups move money to a wallet; they are not phone bills."""
+        assert classify_expense_category("SIPS TRUE MONEY CO.,LTD.") == "other"
+        assert classify_expense_category("เติมเงิน WID1234/K Plus W") == "other"
+
+    def test_true_phone_bill_still_utilities(self) -> None:
+        """A True mobile/internet bill is still a utility."""
+        assert classify_expense_category("TRUE MOVE H ค่าโทรศัพท์") == "utilities"
+
+    def test_food_delivery_and_bakery(self) -> None:
+        """Delivery apps and bakeries are food."""
+        assert classify_expense_category("Payment to ShopeeFood") == "food"
+        assert classify_expense_category("ศรีฟ้าเบเกอรี่ลาดกระบัง") == "food"
+
     def test_case_insensitive(self) -> None:
         """Matching is case insensitive."""
         assert classify_expense_category("NETFLIX subscription") == "entertainment"

@@ -36,6 +36,14 @@ CATEGORY_KEYWORDS: dict[str, list[str]] = {
         "kfc",
         "pizza",
         "7-eleven",
+        "cj ",
+        "cj more",
+        "เบเกอรี่",
+        "bakery",
+        "shopeefood",
+        "grabfood",
+        "lineman",
+        "line man",
         "lunch",
         "dinner",
         "breakfast",
@@ -60,7 +68,9 @@ CATEGORY_KEYWORDS: dict[str, list[str]] = {
     ],
     "housing": [
         "ค่าเช่า",
-        "บ้าน",
+        "ค่าบ้าน",
+        "ผ่อนบ้าน",
+        "เช่าบ้าน",
         "คอนโด",
         "หอพัก",
         "rent",
@@ -459,6 +469,17 @@ def _parse_date_parts(parts: list[str], sep: str) -> date:
     return date(year, month, day)
 
 
+# Moving money into an e-wallet is a transfer, not spending in any category.
+# Checked before CATEGORY_KEYWORDS so e.g. "TRUE MONEY" is not a True phone bill.
+WALLET_TOP_UP_KEYWORDS: tuple[str, ...] = (
+    "true money",
+    "truemoney",
+    "เติมเงิน",
+    "top up",
+    "top-up",
+)
+
+
 def classify_expense_category(description: str) -> str:
     """Classify transaction description into expense category.
 
@@ -475,6 +496,8 @@ def classify_expense_category(description: str) -> str:
         'food'
     """
     lower = description.lower()
+    if any(keyword in lower for keyword in WALLET_TOP_UP_KEYWORDS):
+        return "other"
     for category, keywords in CATEGORY_KEYWORDS.items():
         for keyword in keywords:
             if keyword.lower() in lower:
