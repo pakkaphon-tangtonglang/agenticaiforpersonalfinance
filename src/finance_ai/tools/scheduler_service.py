@@ -1,7 +1,7 @@
 """Service layer for asset schedule management and job execution.
 
 Handles CRUD operations on asset schedules and executes scheduled
-data-fetching jobs via the Bright Data API, storing results as
+data-fetching jobs (Yahoo Finance prices + Google News RSS), storing results as
 notifications for the user.
 """
 

@@ -267,7 +267,7 @@ def refresh_portfolio_prices(
     session: Session,
     user_id: str,
 ) -> int:
-    """Fetch latest prices from Bright Data API and update all holdings.
+    """Fetch latest prices from Yahoo Finance and update all holdings.
 
     Args:
         session: Database session.
