@@ -1,4 +1,4 @@
-.PHONY: install dev run test coverage lint typecheck format check clean help bootstrap bundle-frontend guru-index guru-fetch guru-clean guru-gaps guru-sync
+.PHONY: install dev run test coverage lint typecheck format check clean help bootstrap guru-index guru-fetch guru-clean guru-gaps guru-sync
 
 # Variables
 PYTHON := uv run python
@@ -76,11 +76,6 @@ clean:  ## Clean generated files
 	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf htmlcov/ .coverage build/ dist/ 2>/dev/null || true
 	@echo "Clean complete!"
-
-bundle-frontend:  ## Bundle frontend for iHost: make bundle-frontend API_BASE=https://<app>.onrender.com
-	@echo "Bundling frontend for iHost upload..."
-	$(PYTHON) scripts/bundle_frontend.py --api-base "$(API_BASE)" --output dist/ihost
-	@echo "Bundle ready at dist/ihost — upload its contents to the iHost web root."
 
 bootstrap:  ## Prepare runtime: apply migrations + index RAG knowledge base
 	@echo "Running runtime bootstrap..."

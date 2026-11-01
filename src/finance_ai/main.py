@@ -18,7 +18,6 @@ import asyncio
 from datetime import date, datetime
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
@@ -110,14 +109,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["https://www.it.kmitl.ac.th", "http://localhost:8080"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+# No CORS middleware: FastAPI serves the web UI itself (same origin on Render
+# and locally), so browsers block every cross-origin call to the API.
 install_api_security(app)
 
 _engine = create_database_engine()

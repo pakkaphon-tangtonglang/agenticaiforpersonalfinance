@@ -1,9 +1,9 @@
-"""Tests for CORS middleware configuration.
+"""Tests for cross-origin access.
 
-The frontend is served from iHost (https://www.it.kmitl.ac.th) while the
-API runs on a separate host, so CORS must allow exactly the iHost origin
-plus localhost for development — and nothing else. No credentials are
-used (user_id travels in request bodies), so credentialed CORS must be off.
+The frontend is served by FastAPI itself (same origin on Render and in local
+dev), so no other site needs browser access to the API. With no CORS
+middleware, browsers block every cross-origin call — including the retired
+iHost origin.
 """
 
 from fastapi.testclient import TestClient
@@ -11,27 +11,34 @@ from fastapi.testclient import TestClient
 from finance_ai.main import app
 
 
-class TestCorsConfiguration:
-    """CORS must allow only the iHost origin and localhost, without credentials."""
+class TestNoCrossOriginAccess:
+    """No origin receives CORS allow headers."""
 
     client: TestClient = TestClient(app)
 
-    def test_ihost_origin_allowed(self) -> None:
-        """Requests from the iHost origin receive the matching allow-origin header."""
+    def test_retired_ihost_origin_denied(self) -> None:
+        """The old iHost frontend origin is no longer allowed."""
         response = self.client.get("/health", headers={"Origin": "https://www.it.kmitl.ac.th"})
-        assert response.headers.get("access-control-allow-origin") == "https://www.it.kmitl.ac.th"
-
-    def test_localhost_origin_allowed(self) -> None:
-        """Requests from localhost:8080 receive the matching allow-origin header."""
-        response = self.client.get("/health", headers={"Origin": "http://localhost:8080"})
-        assert response.headers.get("access-control-allow-origin") == "http://localhost:8080"
+        assert "access-control-allow-origin" not in response.headers
 
     def test_unknown_origin_denied(self) -> None:
-        """Requests from unknown origins receive no allow-origin header."""
+        """Requests from other sites receive no allow-origin header."""
         response = self.client.get("/health", headers={"Origin": "https://evil.example.com"})
         assert "access-control-allow-origin" not in response.headers
 
-    def test_credentials_not_allowed(self) -> None:
-        """CORS must not allow credentials (no cookies are used)."""
-        response = self.client.get("/health", headers={"Origin": "https://www.it.kmitl.ac.th"})
-        assert response.headers.get("access-control-allow-credentials") != "true"
+    def test_preflight_not_answered_with_cors_headers(self) -> None:
+        """A browser preflight from another site gets no permission to proceed."""
+        response = self.client.options(
+            "/chat",
+            headers={
+                "Origin": "https://evil.example.com",
+                "Access-Control-Request-Method": "POST",
+            },
+        )
+        assert "access-control-allow-origin" not in response.headers
+
+    def test_same_origin_frontend_still_served(self) -> None:
+        """The web UI is served by the API host itself."""
+        response = self.client.get("/")
+        assert response.status_code == 200
+        assert "<html" in response.text.lower()

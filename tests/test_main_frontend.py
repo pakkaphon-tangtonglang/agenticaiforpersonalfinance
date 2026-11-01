@@ -155,11 +155,11 @@ class TestAssetFetchCardsAndWatchlist:
     client: TestClient = TestClient(app)
 
     def test_index_cache_busts_static_assets_with_one_version(self) -> None:
-        """styles.css, config.js, app.js and guru.js share the same ?v= cache-buster."""
+        """styles.css, citations.js, app.js and guru.js share the same ?v= cache-buster."""
         response = self.client.get("/")
         versions = {
             re.search(rf'{asset}\?v=(\d+)"', response.text).group(1)  # type: ignore[union-attr]
-            for asset in (r"styles\.css", r"config\.js", r"app\.js", r"guru\.js")
+            for asset in (r"styles\.css", r"citations\.js", r"app\.js", r"guru\.js")
         }
         assert len(versions) == 1, f"static assets use different versions: {versions}"
         assert "?v=4" not in response.text
@@ -278,13 +278,11 @@ class TestDashboardWiring:
         assert "alignDashboardFilterTo" in response.text
 
 
-class TestDeployableFrontendPaths:
-    """Tests for iHost-deployable frontend (relative assets + configurable API base).
+class TestSameOriginFrontend:
+    """The web UI is served by the API host itself (Render or local uvicorn).
 
-    The frontend must work both locally (FastAPI serves it at /) and on
-    iHost KMITL (served under /~username/). Root-relative paths like
-    /static/styles.css would 404 on iHost, so assets must be referenced
-    relatively, and the backend URL must be configurable via config.js.
+    Assets stay relative, and the frontend always calls the origin it was
+    loaded from; there is no separately hosted copy and no config.js.
     """
 
     client: TestClient = TestClient(app)
@@ -297,26 +295,20 @@ class TestDeployableFrontendPaths:
         assert 'href="/static/styles.css"' not in response.text
         assert 'src="/static/app.js"' not in response.text
 
-    def test_index_loads_config_before_app(self) -> None:
-        """config.js is loaded before app.js so FINANCE_API_BASE is set in time."""
+    def test_index_has_no_config_js(self) -> None:
+        """The separate-host config script is gone."""
         response = self.client.get("/")
-        config_pos = response.text.index("config.js?v=")
-        app_pos = response.text.index('src="app.js?v=')
-        assert config_pos < app_pos
+        assert "config.js" not in response.text
+        assert self.client.get("/config.js").status_code == 404
 
-    def test_config_js_served(self) -> None:
-        """GET /config.js returns JavaScript defining window.FINANCE_API_BASE."""
-        response = self.client.get("/config.js")
-        assert response.status_code == 200
-        assert "window.FINANCE_API_BASE" in response.text
-
-    def test_app_js_defines_api_base_with_fallback(self) -> None:
-        """app.js derives API_BASE from window.FINANCE_API_BASE with origin fallback."""
+    def test_app_js_calls_its_own_origin(self) -> None:
+        """app.js sends API calls to the origin that served the page."""
         response = self.client.get("/static/app.js")
-        assert "const API_BASE = window.FINANCE_API_BASE ?? location.origin" in response.text
+        assert "const API_BASE = location.origin;" in response.text
+        assert "FINANCE_API_BASE" not in response.text
 
     def test_app_js_api_helper_honors_api_base(self) -> None:
-        """api() builds URLs from API_BASE instead of location.origin."""
+        """api() builds URLs from API_BASE."""
         response = self.client.get("/static/app.js")
         assert "new URL(path, API_BASE)" in response.text
 

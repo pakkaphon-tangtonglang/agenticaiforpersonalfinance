@@ -205,7 +205,7 @@ cases:
     query: "behavioral bias ที่มีผลต่อการตัดสินใจทางการเงิน"
     domain_filter: null
     expected_source_files:
-      - "finance_behavioral_reasoning_chains.pdf"
+      - "Finance_Behavioral_Reasoning_Chains.pdf"
     expected_keywords: ["bias"]
     tags: ["general", "behavioral_finance"]
 
@@ -221,7 +221,7 @@ cases:
     query: "วิธีกรอก ภ.ง.ด.90"
     domain_filter: "tax"
     expected_source_files:
-      - "tax_pit90_guide_2568.pdf"
+      - "Tax_PIT90_Guide_2568.pdf"
     expected_keywords: ["ภ.ง.ด.90"]
     tags: ["tax", "filing_pdf"]
 
@@ -229,7 +229,7 @@ cases:
     query: "สรุปคู่มือภาษีเงินได้บุคคลธรรมดา"
     domain_filter: "tax"
     expected_source_files:
-      - "tax_personal_income_guide.pdf"
+      - "Tax_Personal_Income_Guide.pdf"
     expected_keywords: ["คนละครึ่ง", "SME"]
     tags: ["tax", "guide_pdf"]
 
@@ -237,7 +237,7 @@ cases:
     query: "cognitive bias ในการลงทุน"
     domain_filter: null
     expected_source_files:
-      - "finance_behavioral_finance_ritter.pdf"
+      - "Finance_Behavioral_Finance_Ritter.pdf"
     expected_keywords: ["bias"]
     tags: ["general", "behavioral_finance_pdf"]
 
@@ -253,7 +253,7 @@ cases:
     query: "ร้านค้าคนละครึ่งได้สิทธิ์อะไรบ้าง"
     domain_filter: "tax"
     expected_source_files:
-      - "tax_personal_income_guide.pdf"
+      - "Tax_Personal_Income_Guide.pdf"
     expected_keywords: ["คนละครึ่ง", "ธงฟ้า"]
     tags: ["tax", "guide_pdf", "specific"]
 
@@ -269,7 +269,7 @@ cases:
     query: "รายได้มาตรา 40 มีกี่ประเภท"
     domain_filter: "tax"
     expected_source_files:
-      - "tax_pit90_guide_2568.pdf"
+      - "Tax_PIT90_Guide_2568.pdf"
     expected_keywords: ["มาตรา 40"]
     tags: ["tax", "filing_pdf", "specific"]
 
@@ -293,7 +293,7 @@ cases:
     query: "prospect theory ในการลงทุนคืออะไร"
     domain_filter: null
     expected_source_files:
-      - "finance_behavioral_finance_ritter.pdf"
+      - "Finance_Behavioral_Finance_Ritter.pdf"
     expected_keywords: ["prospect"]
     tags: ["general", "behavioral_finance_pdf", "specific"]
 
