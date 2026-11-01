@@ -18,7 +18,7 @@ from finance_ai.tools.expense_calculator import (
     validate_expense_amount,
     validate_expense_category,
 )
-from finance_ai.tools.expense_constants import EXPENSE_CATEGORIES
+from finance_ai.tools.expense_constants import EXPENSE_CATEGORIES, INCOME_TYPES
 
 
 def parse_date_value(value: str, field_name: str) -> date:
@@ -326,15 +326,7 @@ def _fetch_category_expenses(
     }
 
 
-INCOME_TYPE_LABELS: dict[str, str] = {
-    "salary": "เงินเดือน",
-    "freelance": "ฟรีแลนซ์",
-    "bonus": "โบนัส",
-    "investment": "รายได้จากการลงทุน",
-    "rental": "ค่าเช่า",
-    "savings": "เงินออม/เงินสะสม",
-    "other": "อื่นๆ",
-}
+INCOME_TYPE_LABELS: dict[str, str] = INCOME_TYPES
 
 
 @tool
@@ -430,6 +422,15 @@ def _persist_income(  # pylint: disable=too-many-arguments,too-many-positional-a
     from finance_ai.database.crud.transaction_crud import TransactionCRUD  # noqa: PLC0415
 
     with get_tool_session(db_session_factory) as session:
+        transaction = TransactionCRUD().create(
+            session,
+            user_id=user_id,
+            transaction_type="income",
+            category=income_type,
+            description=description or income_type,
+            amount=amount,
+            transaction_date=date.today(),
+        )
         IncomeCRUD().create(
             session,
             user_id=user_id,
@@ -440,14 +441,6 @@ def _persist_income(  # pylint: disable=too-many-arguments,too-many-positional-a
             pay_period=pay_period,
             employer_name=employer_name,
             withholding_tax=withholding_tax,
-        )
-        TransactionCRUD().create(
-            session,
-            user_id=user_id,
-            transaction_type="income",
-            category=income_type,
-            description=description or income_type,
-            amount=amount,
-            transaction_date=date.today(),
+            transaction_id=transaction.id,
         )
         session.commit()

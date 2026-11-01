@@ -17,7 +17,17 @@ import asyncio
 
 from datetime import date, datetime
 
-from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import (
+    BackgroundTasks,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -52,6 +62,17 @@ from finance_ai.tools.receipt_ocr import (
     extract_document_fields,
 )
 from finance_ai.tools.receipt_ocr_service import confirm_receipt_transactions
+from finance_ai.tools.transaction_history_service import (
+    EntryInput,
+    EntryNotFoundError,
+    HistoryEntry,
+    HistoryKind,
+    HistoryPage,
+    create_entry,
+    delete_entry,
+    list_entries,
+    update_entry,
+)
 from finance_ai.tools.user_provisioning_service import ensure_user_exists, is_valid_user_id
 from finance_ai.tools.expense_constants import VALID_EXPENSE_CATEGORIES
 from finance_ai.tools.conversation_service import (
@@ -1220,6 +1241,105 @@ def confirm_transactions(req: ConfirmTransactionRequest) -> ImportResult:
     drafts = [_input_to_draft(item) for item in req.transactions]
     result = confirm_receipt_transactions(drafts, req.user_id, _session_factory)
     return ImportResult(inserted=result.inserted, total=result.total)
+
+
+# ──────────────────── Income / expense history ───────────────────
+
+
+class HistoryEntryRequest(EntryInput):
+    """Create or edit body: the entry plus its owner."""
+
+    user_id: str = Field(..., description="User UUID")
+
+
+_ENTRY_NOT_FOUND = "ไม่พบรายการนี้ (Entry not found)"
+
+
+@app.get("/transactions", response_model=HistoryPage)
+def list_transaction_history(
+    user_id: str,
+    year: int = Query(..., ge=2000, le=2100),
+    month: int = Query(..., ge=1, le=12),
+    type: HistoryKind = "all",  # pylint: disable=redefined-builtin
+    session: Session = Depends(get_session),
+) -> HistoryPage:
+    """List one month of income and expense entries, newest first.
+
+    Args:
+        user_id: User UUID.
+        year: Year to show.
+        month: Month to show (1-12).
+        type: "all", "income" or "expense".
+        session: Database session.
+
+    Returns:
+        HistoryPage with entries and the month's totals.
+    """
+    return list_entries(session, user_id, year, month, type)
+
+
+@app.post("/transactions", response_model=HistoryEntry, status_code=201)
+def add_transaction_entry(
+    req: HistoryEntryRequest, session: Session = Depends(get_session)
+) -> HistoryEntry:
+    """Add an income or expense entry from the dashboard.
+
+    Args:
+        req: Validated entry (no future dates) and owner.
+        session: Database session.
+
+    Returns:
+        The created entry.
+    """
+    return create_entry(session, req.user_id, EntryInput(**req.model_dump(exclude={"user_id"})))
+
+
+@app.patch("/transactions/{entry_id}", response_model=HistoryEntry)
+def edit_transaction_entry(
+    entry_id: str, req: HistoryEntryRequest, session: Session = Depends(get_session)
+) -> HistoryEntry:
+    """Edit an entry; income tax copies stay in step.
+
+    Args:
+        entry_id: Transaction id.
+        req: Replacement values and owner.
+        session: Database session.
+
+    Returns:
+        The updated entry.
+
+    Raises:
+        HTTPException: 404 when the entry is missing or not the user's.
+    """
+    data = EntryInput(**req.model_dump(exclude={"user_id"}))
+    try:
+        return update_entry(session, req.user_id, entry_id, data)
+    except EntryNotFoundError as error:
+        raise HTTPException(status_code=404, detail=_ENTRY_NOT_FOUND) from error
+
+
+@app.delete("/transactions/{entry_id}", status_code=204)
+def delete_transaction_entry(
+    entry_id: str, user_id: str, session: Session = Depends(get_session)
+) -> Response:
+    """Delete an entry (and an income entry's tax copy).
+
+    Args:
+        entry_id: Transaction id.
+        user_id: Owner.
+        session: Database session.
+
+    Returns:
+        Empty 204 response.
+
+    Raises:
+        HTTPException: 404 when the entry is missing or not the user's.
+    """
+    try:
+        delete_entry(session, user_id, entry_id)
+    except EntryNotFoundError as error:
+        raise HTTPException(status_code=404, detail=_ENTRY_NOT_FOUND) from error
+    return Response(status_code=204)
 
 
 # ──────────────────────── Dashboard ──────────────────────────────

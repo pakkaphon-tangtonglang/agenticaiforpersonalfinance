@@ -8,13 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css?v=11" />
+<link rel="stylesheet" href="styles.css?v=12" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
-<script src="citations.js?v=11" defer></script>
-<script src="app.js?v=11" defer></script>
-<script src="guru.js?v=11" defer></script>
+<script src="citations.js?v=12" defer></script>
+<script src="app.js?v=12" defer></script>
+<script src="guru.js?v=12" defer></script>
+<script src="history.js?v=12" defer></script>
 </head>
 <body>
 <a href="#main" class="skip-link">ข้ามไปยังเนื้อหาหลัก</a>
@@ -215,6 +216,23 @@
             </div>
           </div>
 
+          <div class="table-card history-card" id="historyCard">
+            <div class="history-head">
+              <h3 class="card-title">ประวัติรายรับ-รายจ่าย <span class="badge-count" id="historyCount">0</span></h3>
+              <button class="btn history-add" id="historyAdd" type="button">+ เพิ่มรายการ</button>
+            </div>
+            <div class="history-filters" role="group" aria-label="กรองรายการ">
+              <button type="button" class="history-filter is-active" data-kind="all" aria-pressed="true">ทั้งหมด</button>
+              <button type="button" class="history-filter" data-kind="income" aria-pressed="false">รายรับ</button>
+              <button type="button" class="history-filter" data-kind="expense" aria-pressed="false">รายจ่าย</button>
+            </div>
+            <p class="history-totals" id="historyTotals"></p>
+            <ul class="history-list" id="historyList" aria-live="polite"></ul>
+            <p class="history-empty" id="historyEmpty" hidden>
+              ยังไม่มีรายการในเดือนนี้ — กด "+ เพิ่มรายการ" อัปโหลดรายการเดินบัญชี หรือพิมพ์บอกในแชทได้เลย
+            </p>
+          </div>
+
           <div class="risk-profile-card" id="riskProfileCard" hidden>
             <h3 class="card-title">ผลประเมินความเสี่ยง</h3>
             <p class="risk-profile-level" id="riskProfileLevel">—</p>
@@ -345,6 +363,48 @@
 
 <!-- Toast -->
 <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+<!-- Undo toast for deleted history entries (10 s before the delete is sent) -->
+<div class="undo-toast" id="undoToast" role="status" aria-live="polite" hidden>
+  <span id="undoToastText">ลบรายการแล้ว</span>
+  <button type="button" class="undo-toast-btn" id="undoToastBtn">เลิกทำ (<span id="undoToastCount">10</span>)</button>
+</div>
+
+<!-- Add / edit an income or expense entry -->
+<div class="modal-overlay" id="historyModal" hidden>
+  <form class="modal history-form" id="historyForm" role="dialog" aria-modal="true" aria-labelledby="historyModalTitle" novalidate>
+    <div class="modal-head">
+      <h2 class="modal-title" id="historyModalTitle">เพิ่มรายการ</h2>
+    </div>
+    <div class="modal-body">
+      <div class="history-type" role="radiogroup" aria-label="ประเภทรายการ">
+        <label class="history-type-option"><input type="radio" name="historyType" value="expense" checked /> รายจ่าย</label>
+        <label class="history-type-option"><input type="radio" name="historyType" value="income" /> รายรับ</label>
+      </div>
+      <label class="field">
+        <span class="field-label">วันที่</span>
+        <input class="field-input" type="date" id="historyDate" required />
+      </label>
+      <label class="field">
+        <span class="field-label">จำนวนเงิน (บาท)</span>
+        <input class="field-input" type="number" id="historyAmount" min="0.01" step="0.01" inputmode="decimal" required />
+      </label>
+      <label class="field">
+        <span class="field-label">หมวดหมู่</span>
+        <select class="field-select" id="historyCategory"></select>
+      </label>
+      <label class="field">
+        <span class="field-label">รายละเอียด (ไม่บังคับ)</span>
+        <input class="field-input" type="text" id="historyDescription" maxlength="255" />
+      </label>
+      <p class="history-form-error" id="historyFormError" role="alert" hidden></p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="button" id="historyCancel">ยกเลิก</button>
+      <button class="btn" type="submit" id="historySave">บันทึก</button>
+    </div>
+  </form>
+</div>
 
 <!-- Connect LINE modal -->
 <div class="modal-overlay" id="lineModal" hidden>

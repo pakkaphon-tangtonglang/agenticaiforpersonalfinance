@@ -23,6 +23,17 @@ EXPENSE_CATEGORIES: dict[str, str] = {
 # Valid category keys for validation
 VALID_EXPENSE_CATEGORIES: list[str] = list(EXPENSE_CATEGORIES.keys())
 
+# Income types: key -> Thai display label (income entries store this as category)
+INCOME_TYPES: dict[str, str] = {
+    "salary": "เงินเดือน",
+    "freelance": "ฟรีแลนซ์",
+    "bonus": "โบนัส",
+    "investment": "รายได้จากการลงทุน",
+    "rental": "ค่าเช่า",
+    "savings": "เงินออม/เงินสะสม",
+    "other": "อื่นๆ",
+}
+
 # Transaction type value for expense records
 EXPENSE_TRANSACTION_TYPE: str = "expense"
 
