@@ -255,3 +255,7 @@ docs/thesis-roadmap.md
 data/guru_raw/
 data/guru_clean/
 docs/guru_knowledge/*/fetched/
+
+# Real bank statements used for local testing (personal financial data)
+docs/*statement*.pdf
+*bank_statement*.pdf
