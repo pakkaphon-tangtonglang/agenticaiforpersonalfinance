@@ -42,6 +42,12 @@ class Settings(BaseSettings):
         default=None, description="LINE Messaging API channel access token (Push API)"
     )
 
+    # SEC Thailand Open API (Fund API V2): Thai mutual fund search + daily NAV.
+    # Without a key, fund search and fund prices are simply unavailable.
+    sec_api_key: Optional[str] = Field(
+        default=None, description="SEC Open API subscription key (Ocp-Apim-Subscription-Key)"
+    )
+
     # LLM Provider Selection
     llm_provider: Literal["google", "ollama", "openrouter", "opencode"] = Field(
         default="google",

@@ -7,12 +7,14 @@ list tracked symbols, and set or clear each symbol's daily news alert time.
 from collections.abc import Callable
 from typing import Annotated, Any
 
+from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from finance_ai.agents.clarification import clarification, symbol_problem
 from finance_ai.agents.session_helper import get_tool_session
 from finance_ai.database.crud.watched_asset_crud import WatchedAssetCRUD
+from finance_ai.tools.input_normalizer import ambiguous_hour
 from finance_ai.tools.symbol_guard import (
     SymbolResolutionError,
     resolve_and_validate_symbol,
@@ -28,6 +30,8 @@ ASK_ALERT_TIME_HINT = (
     "Ask the user what time each day (24-hour HH:MM) they want a news alert"
     " for this asset, then call manage_watchlist(action='set_alert')."
 )
+NOON = 12
+ASK_MORNING_OR_EVENING = "หมายถึงเช้าหรือค่ำ — เลือกเวลาที่ต้องการให้แจ้งข่าวทุกวัน"
 ASK_TIME = "อยากให้แจ้งข่าวทุกวันกี่โมง (แบบ 24 ชม. เช่น 08:30 หรือ 20:00)"
 ASK_WHICH_ASSET_TO_ADD = "อยากเพิ่มสินทรัพย์ตัวไหนเข้ารายการติดตาม"
 ASK_WHICH_WATCHED_ASSET = "หมายถึงสินทรัพย์ตัวไหนในรายการติดตาม"
@@ -42,6 +46,7 @@ def manage_watchlist(  # pylint: disable=too-many-arguments,too-many-positional-
     alert_time: str = "",
     user_id: Annotated[str, InjectedState("user_id")] = "",
     db_session_factory: Annotated[Any, InjectedState("db_session_factory")] = None,
+    messages: Annotated[list[Any] | None, InjectedState("messages")] = None,
 ) -> dict[str, Any]:
     """จัดการรายการสินทรัพย์ที่ติดตาม (Watchlist) และเวลาแจ้งเตือนข่าวรายวัน.
 
@@ -60,6 +65,8 @@ def manage_watchlist(  # pylint: disable=too-many-arguments,too-many-positional-
             (2 ทุ่ม = "20:00", 7 โมงเช้า = "07:00")
         user_id: UUID ของผู้ใช้ (injected จาก graph state).
         db_session_factory: Session factory (injected จาก graph state).
+        messages: บทสนทนา (injected จาก graph state) ใช้ตรวจว่าผู้ใช้ตอบแค่ "8"
+            ซึ่งอาจเป็นเช้าหรือค่ำ — ถ้าใช่ จะถามกลับแทนการตั้งเวลา
 
     Returns:
         Dict with the action result, or {"error": ...}.
@@ -68,6 +75,9 @@ def manage_watchlist(  # pylint: disable=too-many-arguments,too-many-positional-
         >>> manage_watchlist(action="add", symbol="PTT.BK", name="PTT")
         >>> manage_watchlist(action="set_alert", symbol="PTT.BK", alert_time="08:30")
     """
+    hour = ambiguous_hour(_latest_user_text(messages)) if alert_time.strip() else None
+    if hour is not None and action.strip().lower() in ("add", "set_alert"):
+        return _ask_morning_or_evening(action, hour, db_session_factory, user_id, (symbol, name))
     handlers: dict[str, Callable[[], dict[str, Any]]] = {
         "add": lambda: _handle_add(db_session_factory, user_id, symbol, name, alert_time),
         "remove": lambda: _handle_remove(db_session_factory, user_id, symbol),
@@ -79,6 +89,69 @@ def manage_watchlist(  # pylint: disable=too-many-arguments,too-many-positional-
     if handler is None:
         return {"error": f"Unknown action '{action}'. Use {_ACTIONS}."}
     return handler()
+
+
+def _latest_user_text(messages: list[Any] | None) -> str:
+    """Text of the user's most recent chat message ("" when unknown)."""
+    for message in reversed(messages or []):
+        if isinstance(message, HumanMessage):
+            return message.text
+    return ""
+
+
+def _ask_morning_or_evening(
+    action: str, hour: int, db_session_factory: Any, user_id: str, asset: tuple[str, str]
+) -> dict[str, Any]:
+    """The user typed a bare hour: ask which one instead of trusting the model's guess.
+
+    For "add", the asset is still added; only the alert time waits for the answer.
+    """
+    options = [f"{hhmm} ({thai_clock_label(hhmm)})" for hhmm in both_readings(hour)]
+    question = clarification(
+        f"'{hour}' could be {options[0]} or {options[1]}.", ASK_MORNING_OR_EVENING, options
+    )
+    if action.strip().lower() != "add":
+        return question
+    added = _handle_add(db_session_factory, user_id, asset[0], asset[1], "")
+    added.pop("next_step", None)
+    return {**added, "alert_error": question["error"], **_question_only(question)}
+
+
+def _question_only(result: dict[str, Any]) -> dict[str, Any]:
+    """The clarification fields of a result, without its error text."""
+    keys = ("needs_clarification", "ask_user", "options")
+    return {key: result[key] for key in keys if key in result}
+
+
+def both_readings(hour: int) -> tuple[str, str]:
+    """Morning and evening readings of a bare hour: 8 → ("08:00", "20:00"); 12 → noon, midnight.
+
+    Example:
+        >>> both_readings(12)
+        ('12:00', '00:00')
+    """
+    if hour == NOON:
+        return "12:00", "00:00"
+    return f"{hour:02d}:00", f"{hour + NOON:02d}:00"
+
+
+def thai_clock_label(hhmm: str) -> str:
+    """Everyday Thai name of an hour: 08:00 → 8 โมงเช้า, 20:00 → 2 ทุ่ม, 00:00 → เที่ยงคืน.
+
+    Example:
+        >>> thai_clock_label("15:00")
+        'บ่าย 3'
+    """
+    hour = int(hhmm[:2])
+    if hour == 0:
+        return "เที่ยงคืน"
+    if hour == NOON:
+        return "เที่ยง"
+    labels = ((6, "ตี {h}"), (NOON, "{h} โมงเช้า"), (17, "บ่าย {p}"), (19, "{p} โมงเย็น"))
+    for limit, template in labels:
+        if hour < limit:
+            return template.format(h=hour, p=hour - NOON)
+    return f"{hour - 18} ทุ่ม"
 
 
 def _handle_add(

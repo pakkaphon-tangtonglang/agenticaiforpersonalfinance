@@ -9,6 +9,7 @@ Tools (4):
   - search_finance_knowledge : RAG News Summarization Tool
   - manage_watchlist      : Asset Tracking Database Tool (+ daily news alert time)
   - get_portfolio_holdings / add_portfolio_holding : Portfolio read / add
+  - search_thai_funds     : Thai mutual fund search by name/fund house (SEC)
 """
 
 from typing import Any
@@ -20,6 +21,7 @@ from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
 
 from finance_ai.agents.asset_monitoring_tools import manage_watchlist
+from finance_ai.agents.fund_search_tools import search_thai_funds
 from finance_ai.agents.graph_utils import should_continue
 from finance_ai.agents.market_data_tools import MARKET_DATA_TOOLS
 from finance_ai.agents.portfolio_tools import add_portfolio_holding, get_portfolio_holdings
@@ -34,6 +36,7 @@ ASSET_MONITORING_TOOLS = [
     manage_watchlist,
     get_portfolio_holdings,
     add_portfolio_holding,
+    search_thai_funds,
     search_finance_knowledge,
 ] + MARKET_DATA_TOOLS  # [get_stock_price, search_finance_news]
 

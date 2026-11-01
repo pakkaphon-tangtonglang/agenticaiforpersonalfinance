@@ -140,12 +140,14 @@ class TestAssetSearchEndpoint:
                 "name": "PTT Public Company Limited",
                 "exchange": "SET",
                 "type": "EQUITY",
+                "category": "thai_stock",
             },
             {
                 "symbol": "AAPL",
                 "name": "Apple Inc.",
                 "exchange": "NASDAQ",
                 "type": "EQUITY",
+                "category": "foreign_stock",
             },
         ]
 
@@ -554,8 +556,11 @@ class TestHoldingsEndpoint:
                 "symbol": "PTT.BK",
                 "name": "PTT",
                 "quantity": "100",
+                "average_cost_per_unit": "35.50",
+                "current_price_per_unit": "42.00",
                 "current_value": "4200.00",
                 "unrealized_gain_loss": "650.00",
+                "gain_loss_percentage": "18.3099",
             }
         ]
 
@@ -669,3 +674,171 @@ class TestWatchlistSymbolTypedAnyWay:
 
         assert alert.json() == {"symbol": "PTT.BK", "alert_time": "20:30"}
         assert deleted.status_code == 200
+
+
+class TestAddHoldingEndpoint:
+    """POST /assets/holdings (asset page form) and price refresh."""
+
+    def test_blank_price_uses_latest(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Saved at the latest price and listed with its gain."""
+        user_id = _first_user_id(temp_db)
+        monkeypatch.setattr(
+            "finance_ai.tools.holding_entry_service.fetch_current_price", lambda s: Decimal("35")
+        )
+
+        response = client.post(
+            "/assets/holdings",
+            json={"user_id": user_id, "symbol": "PTT.BK", "name": "PTT", "quantity": "100"},
+        )
+
+        assert response.status_code == 200
+        assert response.json()["used_latest_price"] is True
+        assert response.json()["total_cost"] == "3500.00"
+        listed = client.get("/assets/holdings", params={"user_id": user_id}).json()
+        assert listed[0]["gain_loss_percentage"] is not None
+
+    def test_foreign_stock_returns_422(
+        self, client: TestClient, temp_db: sessionmaker[Session]
+    ) -> None:
+        """Only Thai stocks can be added from the asset page."""
+        user_id = _first_user_id(temp_db)
+        response = client.post(
+            "/assets/holdings",
+            json={"user_id": user_id, "symbol": "AAPL", "quantity": "1", "price_per_unit": "200"},
+        )
+        assert response.status_code == 422
+        assert "หุ้นไทย" in response.json()["detail"]
+
+    def test_refresh_updates_gain(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Refresh stores the latest price and returns the new gain."""
+        user_id = _first_user_id(temp_db)
+        monkeypatch.setattr(
+            "finance_ai.tools.holding_entry_service.fetch_current_price", lambda s: None
+        )
+        client.post(
+            "/assets/holdings",
+            json={"user_id": user_id, "symbol": "PTT.BK", "quantity": "10", "price_per_unit": "30"},
+        )
+        monkeypatch.setattr(
+            "finance_ai.tools.price_client.fetch_multiple_prices",
+            lambda symbols: {"PTT.BK": Decimal("33")},
+        )
+
+        rows = client.post("/assets/holdings/refresh", params={"user_id": user_id}).json()
+
+        assert rows[0]["unrealized_gain_loss"] == "30.00"
+        assert rows[0]["current_price_per_unit"] == "33.00"
+
+
+class TestFundsOnAssetPage:
+    """Thai mutual funds from SEC data on the asset page."""
+
+    def test_search_includes_fund_classes(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Fund classes come back as type FUND with Thai name, house and NAV."""
+        from datetime import date
+
+        from finance_ai.tools.fund_search_service import FundSearchOutcome, FundSearchResult
+
+        monkeypatch.setattr(
+            "finance_ai.tools.symbol_search_service.search_asset_symbols", lambda query: []
+        )
+        fund = FundSearchResult(
+            symbol="K-USA-A(A)",
+            proj_id="M1",
+            fund_code="K-USA",
+            name_th="กองทุนเปิดเค ยูเอสเอ หุ้นทุน",
+            name_en="K USA Equity",
+            amc="กสิกรไทย",
+            payout="A",
+            nav=Decimal("16.6925"),
+            nav_date=date(2026, 10, 29),
+        )
+        monkeypatch.setattr(
+            "finance_ai.tools.asset_search_service.search_funds",
+            lambda query, expand=None: FundSearchOutcome(results=[fund]),
+        )
+
+        body = client.get("/assets/search", params={"query": "k-usa"}).json()
+
+        assert body["results"] == [
+            {
+                "symbol": "K-USA-A(A)",
+                "name": "กองทุนเปิดเค ยูเอสเอ หุ้นทุน",
+                "name_en": "K USA Equity",
+                "exchange": "SEC",
+                "type": "FUND",
+                "category": "fund",
+                "fund_code": "K-USA",
+                "amc": "กสิกรไทย",
+                "payout": "A",
+                "nav": "16.6925",
+                "nav_date": "2026-10-29",
+            }
+        ]
+        assert body["clarify"] is None
+        assert body["expanded_terms"] == []
+
+    def test_add_fund_with_date(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A fund bought in the past at a typed NAV shows its gain at today's NAV."""
+        user_id = _first_user_id(temp_db)
+        monkeypatch.setattr(
+            "finance_ai.tools.holding_entry_service.fetch_latest_nav", lambda s: Decimal("16")
+        )
+
+        response = client.post(
+            "/assets/holdings",
+            json={
+                "user_id": user_id,
+                "symbol": "K-USA-A(A)",
+                "quantity": "100",
+                "price_per_unit": "15",
+                "purchase_date": "1/10/2569",
+                "asset_type": "mutual_fund",
+            },
+        )
+
+        body = response.json()
+        assert response.status_code == 200
+        assert (body["purchase_date"], body["gain_loss"]) == ("2026-10-01", "100.00")
+
+    def test_refresh_prices_funds_from_sec(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Price refresh asks the SEC for funds and Yahoo for stocks."""
+        user_id = _first_user_id(temp_db)
+        monkeypatch.setattr(
+            "finance_ai.tools.holding_entry_service.fetch_latest_nav", lambda s: None
+        )
+        client.post(
+            "/assets/holdings",
+            json={
+                "user_id": user_id,
+                "symbol": "SCBSET50",
+                "quantity": "10",
+                "price_per_unit": "20",
+                "asset_type": "mutual_fund",
+            },
+        )
+        yahoo_symbols: list[list[str]] = []
+
+        def fake_yahoo(symbols: list[str]) -> dict[str, Decimal]:
+            yahoo_symbols.append(symbols)
+            return {}
+
+        monkeypatch.setattr("finance_ai.tools.price_client.fetch_multiple_prices", fake_yahoo)
+        monkeypatch.setattr(
+            "finance_ai.tools.fund_nav_client.fetch_latest_nav", lambda s: Decimal("24")
+        )
+
+        rows = client.post("/assets/holdings/refresh", params={"user_id": user_id}).json()
+
+        assert rows[0]["unrealized_gain_loss"] == "40.00"
+        assert not yahoo_symbols

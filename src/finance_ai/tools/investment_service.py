@@ -279,14 +279,11 @@ def refresh_portfolio_prices(
     Example:
         >>> updated = refresh_portfolio_prices(session, uid)
     """
-    from finance_ai.tools.price_client import fetch_multiple_prices  # noqa: PLC0415
-
     crud = InvestmentHoldingCRUD()
     holdings = crud.get_by_user(session, user_id)
     if not holdings:
         return 0
-    symbols = [h.symbol for h in holdings]
-    prices = fetch_multiple_prices(symbols)
+    prices = _latest_prices(holdings)
     updated_count = 0
     for holding in holdings:
         price = prices.get(holding.symbol)
@@ -294,6 +291,29 @@ def refresh_portfolio_prices(
             crud.update_market_price(session, holding.id, price)
             updated_count += 1
     return updated_count
+
+
+def _latest_prices(holdings: list[InvestmentHolding]) -> dict[str, Decimal | None]:
+    """Latest price per symbol: SEC NAV for funds, market prices for stocks.
+
+    Args:
+        holdings: The user's holdings.
+
+    Returns:
+        Symbol → latest price (None when unknown).
+    """
+    from finance_ai.tools.fund_nav_client import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        fetch_latest_nav,
+    )
+    from finance_ai.tools.price_client import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        fetch_multiple_prices,
+    )
+
+    funds = {h.symbol for h in holdings if h.asset_type == "mutual_fund"}
+    stocks = [h.symbol for h in holdings if h.symbol not in funds]
+    prices: dict[str, Decimal | None] = dict(fetch_multiple_prices(stocks)) if stocks else {}
+    prices.update({symbol: fetch_latest_nav(symbol) for symbol in funds})
+    return prices
 
 
 def get_portfolio_summary(

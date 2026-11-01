@@ -224,7 +224,7 @@
   function thb(value) {
     const num = Number(value || 0);
     const sign = num < 0 ? "-" : "";
-    return sign + num.toLocaleString("th-TH", {
+    return sign + Math.abs(num).toLocaleString("th-TH", {
       minimumFractionDigits: 0, maximumFractionDigits: 2,
     }) + " ฿";
   }
@@ -247,6 +247,14 @@
       day: "numeric", month: "short", year: "numeric",
       hour: "2-digit", minute: "2-digit",
     });
+  }
+
+  // "2026-10-29" → "29 ต.ค. 2569" (read as a local date, so it never shifts a day).
+  function formatThaiDate(isoDate) {
+    const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(isoDate || ""));
+    if (!parts) return String(isoDate || "");
+    return new Date(Number(parts[1]), Number(parts[2]) - 1, Number(parts[3]))
+      .toLocaleDateString("th-TH", { day: "numeric", month: "short", year: "numeric" });
   }
 
   // Remove markdown bold markers so titles never show raw asterisks.
@@ -1747,7 +1755,16 @@
     try {
       const rows = await api("GET", "/assets/holdings", { params: { user_id: state.userId } });
       renderHoldings(Array.isArray(rows) ? rows : []);
+      if (Array.isArray(rows) && rows.length) refreshHoldingPrices();
     } catch (e) { /* silent — same as the watchlist */ }
+  }
+
+  // Stored prices may be old: fetch the latest, then show the updated gain/loss.
+  async function refreshHoldingPrices() {
+    try {
+      const rows = await api("POST", "/assets/holdings/refresh", { params: { user_id: state.userId } });
+      if (Array.isArray(rows)) renderHoldings(rows);
+    } catch (e) { /* keep the stored prices */ }
   }
 
   function renderHoldings(rows) {
@@ -1761,9 +1778,10 @@
   }
 
   function buildHoldingRow(row) {
-    const gain = row.unrealized_gain_loss == null ? null : Number(row.unrealized_gain_loss);
-    const gainText = gain == null ? "ไม่มีราคาล่าสุด" : (gain >= 0 ? "+" : "") + thb(gain);
-    const gainClass = gain == null ? "holding-gain" : `holding-gain ${gain >= 0 ? "gain" : "loss"}`;
+    const gain = row.unrealized_gain_loss;
+    const gainText = gain == null ? "ไม่มีราคาล่าสุด" : gainLabel(gain, row.gain_loss_percentage);
+    const gainClass = gain == null ? "holding-gain" : `holding-gain ${gainClassName(gain)}`;
+    const cost = row.average_cost_per_unit == null ? "" : ` · ทุน ${thb(row.average_cost_per_unit)}`;
     return el("li", { class: "watchlist-item watchlist-item-clickable" },
       el("button", {
         type: "button", class: "watchlist-open",
@@ -1771,7 +1789,7 @@
         onclick: () => fetchAssetData(row.symbol, row.name),
       },
         el("span", { class: "watchlist-symbol", title: row.symbol || "" }, displaySymbol(row.symbol)),
-        el("span", { class: "watchlist-name" }, `${row.name || ""} · ${row.quantity ?? "—"} หน่วย`),
+        el("span", { class: "watchlist-name" }, `${row.name || ""} · ${row.quantity ?? "—"} หน่วย${cost}`),
         el("span", { class: "holding-value" }, row.current_value == null ? "" : thb(row.current_value)),
         el("span", { class: gainClass }, gainText)),
     );
@@ -1839,15 +1857,25 @@
   }
 
   // ─── Asset search (free text) ───
-  async function searchAssets() {
-    const query = $("assetSearchInput").value.trim();
+  // ─── Asset search: stocks + Thai funds, with a clarify card when unsure ───
+  const searchState = { results: [], filters: {}, expanded: [] };
+
+  async function searchAssets(queryOverride, presetFilters) {
+    const input = $("assetSearchInput");
+    const query = (typeof queryOverride === "string" ? queryOverride : input.value).trim();
     if (!query) return;
+    input.value = query;
     const btn = $("assetSearchBtn");
     btn.classList.add("is-loading");
     btn.textContent = "กำลังค้นหา…";
+    showClarify(null);
     try {
       const res = await api("GET", "/assets/search", { params: { query } });
-      renderAssetSearchResults(res.results || []);
+      searchState.results = res.results || [];
+      searchState.expanded = res.expanded_terms || [];
+      searchState.filters = presetFilters || {};
+      renderAssetSearchResults();
+      showClarify(presetFilters ? null : res.clarify);
     } catch (e) {
       toast("ค้นหาไม่สำเร็จ: " + e.message, true);
     } finally {
@@ -1856,36 +1884,209 @@
     }
   }
 
-  function renderAssetSearchResults(results) {
-    const box = $("assetSearchResults");
-    box.innerHTML = "";
-    if (!results.length) {
-      box.append(el("p", { class: "asset-search-empty" }, "ไม่พบสินทรัพย์ที่ตรงกัน"));
-      box.hidden = false;
-      return;
+  function clarifyHost() {
+    let host = $("assetClarify");
+    if (!host) {
+      host = el("div", { id: "assetClarify", class: "asset-clarify", hidden: "" });
+      $("assetSearchResults").before(host);
     }
-    for (const r of results) box.append(buildAssetSearchCard(r));
+    return host;
+  }
+
+  function showClarify(clarify) {
+    const host = clarifyHost();
+    host.replaceChildren();
+    host.hidden = !(clarify && clarify.questions && clarify.questions.length && window.ClarifyCard);
+    if (host.hidden) return;
+    window.ClarifyCard.mount(host, clarify, {
+      onDone: (filters) => { host.hidden = true; applySearchFilters(filters); },
+      onSearch: (text, filters) => { host.hidden = true; searchAssets(text, filters); },
+      onClose: () => { host.hidden = true; },
+    });
+  }
+
+  function applySearchFilters(filters) {
+    searchState.filters = filters || {};
+    renderAssetSearchResults();
+  }
+
+  function filteredSearchResults() {
+    const active = Object.entries(searchState.filters);
+    return searchState.results.filter((result) =>
+      active.every(([key, filter]) => String(result[key] ?? "") === filter.value));
+  }
+
+  function searchStatusLine() {
+    const parts = [];
+    if (searchState.expanded.length) {
+      parts.push(el("span", { class: "asset-search-note" },
+        `ไม่พบตรงตัว เลยลองค้นด้วย: ${searchState.expanded.join(", ")} (คำค้นแนะนำโดย AI · ข้อมูลกองทุนจาก ก.ล.ต.)`));
+    }
+    const filters = Object.values(searchState.filters);
+    if (filters.length) {
+      parts.push(...filters.map((filter) => el("span", { class: "asset-filter-chip" }, filter.label.replace(/\s*\(\d+\)$/, ""))));
+      parts.push(el("button", { type: "button", class: "asset-filter-clear", onclick: () => applySearchFilters({}) }, "ล้างตัวกรอง"));
+    }
+    return parts.length ? el("div", { class: "asset-search-status" }, ...parts) : null;
+  }
+
+  function renderAssetSearchResults() {
+    const box = $("assetSearchResults");
+    const shown = filteredSearchResults();
+    box.innerHTML = "";
+    const status = searchStatusLine();
+    if (status) box.append(status);
+    if (!shown.length) {
+      box.append(el("p", { class: "asset-search-empty" },
+        searchState.results.length ? "ไม่มีรายการที่ตรงกับตัวกรองนี้" : "ไม่พบสินทรัพย์ที่ตรงกัน"));
+    }
+    for (const result of shown) box.append(buildAssetSearchCard(result));
     box.hidden = false;
   }
 
-  // One card = info area + ดึงข้อมูล (fetch) + ติดตาม (add to the watchlist).
+  // ─── Add to portfolio (asset page) ───
+  // Thai stocks (.BK) and Thai mutual funds (SEC data, type FUND): the portfolio
+  // is in baht. A blank price = the latest price (stocks) or latest NAV (funds).
+  const isThaiStock = (symbol) => /\.BK$/i.test(symbol || "");
+  const isFund = (result) => result.type === "FUND";
+  const unitWord = (result) => (isFund(result) ? "หน่วย" : "หุ้น");
+
+  function localToday() {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  }
+
+  function portfolioButton(result) {
+    const allowed = isFund(result) || isThaiStock(result.symbol);
+    return el("button", {
+      type: "button", class: "asset-port-btn", "aria-expanded": "false",
+      disabled: allowed ? null : "",
+      title: allowed ? "บันทึกว่าซื้อสินทรัพย์นี้แล้ว" : "พอร์ตรองรับเฉพาะหุ้นไทย (.BK) และกองทุนรวมไทย",
+      onclick: (e) => toggleHoldingForm(result, e.currentTarget),
+    }, "เพิ่มลงพอร์ต");
+  }
+
+  function toggleHoldingForm(result, button) {
+    const card = button.closest(".asset-result-card");
+    const open = card.querySelector(".holding-form");
+    button.setAttribute("aria-expanded", String(!open));
+    if (open) { open.remove(); return; }
+    const form = holdingForm(result, () => { form.remove(); button.setAttribute("aria-expanded", "false"); });
+    card.append(form);
+    form.querySelector("input").focus();
+  }
+
+  function holdingFormField(label, attrs) {
+    const input = el("input", { type: "text", inputmode: "decimal", class: "field-input", autocomplete: "off", ...attrs });
+    return [el("label", { class: "holding-form-field" }, el("span", {}, label), input), input];
+  }
+
+  function holdingForm(result, close) {
+    const unit = unitWord(result);
+    const latestWord = isFund(result) ? "NAV ล่าสุด" : "ราคาล่าสุด";
+    const [qtyField, qty] = holdingFormField(`จำนวน${unit}`, { placeholder: "เช่น 100" });
+    const [priceField, price] = holdingFormField(`ราคาซื้อต่อ${unit} (บาท)`, { placeholder: latestWord });
+    const [dateField, bought] = holdingFormField("วันที่ซื้อ", { type: "date", inputmode: null, max: localToday(), value: localToday() });
+    const out = el("div", { class: "holding-form-result", role: "status", "aria-live": "polite" });
+    const submit = el("button", { type: "submit", class: "asset-fetch-btn" }, "บันทึก");
+    const form = el("form", { class: "holding-form" }, qtyField, priceField, dateField,
+      el("p", { class: "holding-form-hint" }, `เว้นราคาว่างไว้ = ${latestWord} · ถ้าซื้อวันอื่น ให้กรอกราคาที่ซื้อจริง`),
+      el("div", { class: "asset-card-actions" }, submit,
+        el("button", { type: "button", class: "asset-track-btn", onclick: close }, "ปิด")),
+      out);
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      saveHolding(result, { qty, price, bought }, submit, out);
+    });
+    return form;
+  }
+
+  async function saveHolding(result, fields, submit, out) {
+    const { qty, price, bought } = fields;
+    if (!qty.value.trim()) { showFormMessage(out, `กรุณากรอกจำนวน${unitWord(result)}`); qty.focus(); return; }
+    submit.disabled = true;
+    submit.textContent = "กำลังบันทึก…";
+    try {
+      const res = await api("POST", "/assets/holdings", { json: {
+        user_id: state.userId, symbol: result.symbol, name: result.name,
+        asset_type: isFund(result) ? "mutual_fund" : "stock",
+        quantity: qty.value, price_per_unit: price.value.trim() || null,
+        purchase_date: bought.value || null,
+      } });
+      out.replaceChildren(...holdingSummaryLines(res, unitWord(result)));
+      out.classList.remove("is-error");
+      qty.value = "";
+      price.value = "";
+      loadHoldings();
+    } catch (e) {
+      showFormMessage(out, e.message.replace(/^\d+:\s*/, ""));
+    } finally {
+      submit.disabled = false;
+      submit.textContent = "บันทึก";
+    }
+  }
+
+  function showFormMessage(out, text) {
+    out.replaceChildren(el("p", {}, text));
+    out.classList.add("is-error");
+  }
+
+  // "+125 ฿ (+3.57%)" / "-80 ฿ (-2.10%)"
+  function gainLabel(gain, percent) {
+    const sign = Number(gain) > 0 ? "+" : "";
+    const pctText = percent == null ? "" : ` (${sign}${Number(percent).toFixed(2)}%)`;
+    return `${sign}${thb(gain)}${pctText}`;
+  }
+
+  function gainClassName(gain) {
+    const value = Number(gain);
+    return value > 0 ? "gain" : value < 0 ? "loss" : "";
+  }
+
+  function holdingSummaryLines(res, unit) {
+    const priceNote = res.used_latest_price ? " (ราคาล่าสุด)" : "";
+    const saved = el("p", {},
+      `✓ บันทึกแล้ว: ${res.quantity} ${unit} × ${res.price_per_unit} ฿${priceNote} = ต้นทุน ${thb(res.total_cost)} · ซื้อ ${formatThaiDate(res.purchase_date)}`);
+    if (res.gain_loss == null) {
+      return [saved, el("p", { class: "holding-gain" }, "ยังไม่มีราคาล่าสุด จึงยังคำนวณกำไร/ขาดทุนไม่ได้")];
+    }
+    return [saved, el("p", {}, `ราคาล่าสุด ${res.current_price} ฿ · มูลค่า ${thb(res.current_value)} · `,
+      el("span", { class: `holding-gain ${gainClassName(res.gain_loss)}` },
+        gainLabel(res.gain_loss, res.gain_loss_percent)))];
+  }
+
+  function searchCardMeta(result) {
+    if (!isFund(result)) return `${result.symbol} · ${result.exchange} · ${result.type}`;
+    const navDate = result.nav_date ? ` (${formatThaiDate(result.nav_date)})` : "";
+    const payout = result.payout === "D" ? " · ปันผล" : result.payout === "A" ? " · สะสมมูลค่า" : "";
+    const house = result.amc ? `บลจ.${result.amc} · ` : "";
+    return `${house}${result.symbol}${payout} · NAV ${result.nav ?? "—"} ฿${navDate}`;
+  }
+
+  // Funds come from SEC data: Yahoo cannot fetch or watch them, so they only get เพิ่มลงพอร์ต.
+  function searchCardActions(result) {
+    const actions = [portfolioButton(result)];
+    if (isFund(result)) return actions;
+    actions.push(
+      el("button", {
+        type: "button", class: "asset-fetch-btn",
+        onclick: (e) => fetchAssetData(result.symbol, result.name, e.currentTarget),
+      }, "ดึงข้อมูล"),
+      el("button", {
+        type: "button", class: "asset-track-btn",
+        onclick: () => addToWatchlist(result.symbol, result.name),
+      }, "ติดตาม"));
+    return actions;
+  }
+
+  // One card = info area + เพิ่มลงพอร์ต + ดึงข้อมูล (fetch) + ติดตาม (add to the watchlist).
   function buildAssetSearchCard(result) {
     return el("div", { class: "asset-result-card", dataset: { symbol: result.symbol } },
       el("span", { class: "asset-result-main" },
         el("span", { class: "asset-result-name" }, result.name),
-        el("span", { class: "asset-result-meta" },
-          `${result.symbol} · ${result.exchange} · ${result.type}`),
+        el("span", { class: "asset-result-meta" }, searchCardMeta(result)),
       ),
-      el("div", { class: "asset-card-actions" },
-        el("button", {
-          type: "button", class: "asset-fetch-btn",
-          onclick: (e) => fetchAssetData(result.symbol, result.name, e.currentTarget),
-        }, "ดึงข้อมูล"),
-        el("button", {
-          type: "button", class: "asset-track-btn",
-          onclick: () => addToWatchlist(result.symbol, result.name),
-        }, "ติดตาม"),
-      ),
+      el("div", { class: "asset-card-actions" }, ...searchCardActions(result)),
     );
   }
 
