@@ -193,6 +193,20 @@ class TestAssetFetchCardsAndWatchlist:
         assert "สินทรัพย์ที่ติดตาม" in response.text
         assert "ยังไม่มีสินทรัพย์ที่ติดตาม" in response.text
 
+    def test_holdings_list_sits_in_watchlist_section(self) -> None:
+        """Owned assets show in the watchlist panel, separate from tracked ones."""
+        html = self.client.get("/").text
+        section = html.split('id="watchlistSection"', 1)[1].split("</section>", 1)[0]
+        assert 'id="holdingsList"' in section
+        assert "รายการถือ (พอร์ต)" in section
+        assert "ยังไม่มีรายการถือ" in section
+
+    def test_app_js_loads_holdings(self) -> None:
+        """app.js loads /assets/holdings when the assets page opens."""
+        js = self.client.get("/static/app.js").text
+        assert '"/assets/holdings"' in js
+        assert "loadHoldings()" in js
+
     def test_app_js_wires_watchlist_endpoints(self) -> None:
         """app.js loads, adds to, and removes watchlist entries."""
         response = self.client.get("/static/app.js")
@@ -240,7 +254,10 @@ class TestAssetFetchCardsAndWatchlist:
     def test_app_js_loads_watchlist_on_assets_view(self) -> None:
         """Switching to the assets view loads notifications and the watchlist."""
         response = self.client.get("/static/app.js")
-        assert 'if (name === "assets") { loadNotifications(); loadWatchlist(); }' in response.text
+        assert (
+            'if (name === "assets") { loadNotifications(); loadHoldings(); loadWatchlist(); }'
+            in response.text
+        )
 
     def test_styles_define_fetch_cards_and_watchlist(self) -> None:
         """styles.css styles fetch result cards and watchlist rows."""

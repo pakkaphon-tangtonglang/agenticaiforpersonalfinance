@@ -343,7 +343,7 @@
       n.classList.toggle("is-active", n.dataset.view === name));
     $("minibarTitle").textContent = VIEW_TITLES[name] || name;
     $("headNewChat").hidden = !(name === "chat" || name === "guru");
-    if (name === "assets") { loadNotifications(); loadWatchlist(); }
+    if (name === "assets") { loadNotifications(); loadHoldings(); loadWatchlist(); }
     if (name === "dashboard") loadDashboard();
     if (name === "guru" && window.GuruView) window.GuruView.open();
     $("convHeading").textContent = name === "guru" ? "ประวัติแชทกูรู" : "ประวัติแชท";
@@ -1721,6 +1721,41 @@
   }
 
   // ─── Watchlist (tracked assets) ───
+  // Owned assets (portfolio) — shown above the watchlist, not mixed into it.
+  async function loadHoldings() {
+    try {
+      const rows = await api("GET", "/assets/holdings", { params: { user_id: state.userId } });
+      renderHoldings(Array.isArray(rows) ? rows : []);
+    } catch (e) { /* silent — same as the watchlist */ }
+  }
+
+  function renderHoldings(rows) {
+    const list = $("holdingsList");
+    list.innerHTML = "";
+    if (!rows.length) {
+      list.append(el("li", { class: "notif-empty" }, "ยังไม่มีรายการถือ"));
+      return;
+    }
+    for (const row of rows) list.append(buildHoldingRow(row));
+  }
+
+  function buildHoldingRow(row) {
+    const gain = row.unrealized_gain_loss == null ? null : Number(row.unrealized_gain_loss);
+    const gainText = gain == null ? "ไม่มีราคาล่าสุด" : (gain >= 0 ? "+" : "") + thb(gain);
+    const gainClass = gain == null ? "holding-gain" : `holding-gain ${gain >= 0 ? "gain" : "loss"}`;
+    return el("li", { class: "watchlist-item watchlist-item-clickable" },
+      el("button", {
+        type: "button", class: "watchlist-open",
+        title: "ดึงราคาและข่าวล่าสุด",
+        onclick: () => fetchAssetData(row.symbol, row.name),
+      },
+        el("span", { class: "watchlist-symbol" }, row.symbol || "—"),
+        el("span", { class: "watchlist-name" }, `${row.name || ""} · ${row.quantity ?? "—"} หน่วย`),
+        el("span", { class: "holding-value" }, row.current_value == null ? "" : thb(row.current_value)),
+        el("span", { class: gainClass }, gainText)),
+    );
+  }
+
   async function loadWatchlist() {
     try {
       const rows = await api("GET", "/assets/watchlist", { params: { user_id: state.userId } });

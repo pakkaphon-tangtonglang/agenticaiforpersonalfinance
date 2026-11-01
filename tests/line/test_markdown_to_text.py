@@ -83,3 +83,13 @@ class TestMarkdownToLineText:
         assert "ราคาหุ้น PTT (PTT.BK) 🇹🇭" in result
         assert "ราคาปัจจุบัน | 42.00 บาท" in result
         assert "• ชื่อ: PTT" in result
+
+    def test_star_and_plus_bullets_use_dot_marker(self) -> None:
+        """'* ' and '+ ' bullets (Gemini uses '*') render as '• ' too."""
+        assert markdown_to_line_text("* **ต้นทุนรวม:** 205,000 บาท") == "• ต้นทุนรวม: 205,000 บาท"
+        assert markdown_to_line_text("+ ข้อสอง") == "• ข้อสอง"
+
+    def test_html_line_breaks_removed(self) -> None:
+        """'<br>' inside table cells (or text) becomes a space, never shows literally."""
+        assert markdown_to_line_text("| PTT.BK<br>(ปตท.) | 1,000 |") == "PTT.BK (ปตท.) | 1,000"
+        assert markdown_to_line_text("บรรทัด<br/>ต่อ") == "บรรทัด ต่อ"

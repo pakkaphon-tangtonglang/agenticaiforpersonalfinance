@@ -511,3 +511,50 @@ class TestNotificationsThaiDate:
 
         assert response.status_code == 200
         assert response.json()[0]["created_at"] == "13 ก.ย. 2026, 17:45"
+
+
+class TestHoldingsEndpoint:
+    """GET /assets/holdings lists what the user owns (shown beside the watchlist)."""
+
+    def test_empty(self, client: TestClient, temp_db: sessionmaker[Session]) -> None:
+        """A user without holdings gets an empty list."""
+        response = client.get("/assets/holdings", params={"user_id": _first_user_id(temp_db)})
+        assert response.status_code == 200
+        assert response.json() == []
+
+    def test_lists_holdings(self, client: TestClient, temp_db: sessionmaker[Session]) -> None:
+        """Each holding has symbol, quantity, value and gain/loss (money as strings)."""
+        from datetime import date  # pylint: disable=import-outside-toplevel
+
+        from finance_ai.database.models.investment_holding import (  # pylint: disable=import-outside-toplevel
+            InvestmentHolding,
+        )
+
+        user_id = _first_user_id(temp_db)
+        with temp_db() as session:
+            session.add(
+                InvestmentHolding(
+                    user_id=user_id,
+                    asset_type="stock",
+                    symbol="PTT.BK",
+                    name="PTT",
+                    quantity=Decimal("100"),
+                    average_cost_per_unit=Decimal("35.50"),
+                    total_cost=Decimal("3550.00"),
+                    purchase_date=date(2025, 1, 15),
+                    current_price_per_unit=Decimal("42"),
+                    current_value=Decimal("4200"),
+                    unrealized_gain_loss=Decimal("650"),
+                )
+            )
+            session.commit()
+        rows = client.get("/assets/holdings", params={"user_id": user_id}).json()
+        assert rows == [
+            {
+                "symbol": "PTT.BK",
+                "name": "PTT",
+                "quantity": "100",
+                "current_value": "4200.00",
+                "unrealized_gain_loss": "650.00",
+            }
+        ]

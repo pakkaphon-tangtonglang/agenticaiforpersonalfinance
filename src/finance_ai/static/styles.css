@@ -786,6 +786,11 @@ svg.i {
   transition: border-color 0.15s var(--ease), color 0.15s var(--ease);
 }
 .watchlist-remove:hover { border-color: var(--negative); color: var(--negative); }
+.watchlist-subhead { margin-top: var(--sp-5); }
+.holding-value { font-variant-numeric: tabular-nums; }
+.holding-gain { font-size: var(--text-body-sm); color: var(--muted); font-variant-numeric: tabular-nums; }
+.holding-gain.gain { color: var(--positive); }
+.holding-gain.loss { color: var(--negative); }
 
 /* Asset search (free text) */
 .asset-search { display: flex; gap: var(--sp-3); align-items: flex-end; flex-wrap: wrap; }

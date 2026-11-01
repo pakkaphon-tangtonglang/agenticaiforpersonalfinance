@@ -144,3 +144,9 @@ class TestToolRegistry:
         """Tool list must expose the free-text symbol search tool."""
         tool_names = [tool.name for tool in ASSET_MONITORING_TOOLS]
         assert "resolve_asset_symbol" in tool_names
+
+    def test_includes_portfolio_holdings(self) -> None:
+        """Holdings questions need their own tool, not the watchlist."""
+        tool_names = [tool.name for tool in ASSET_MONITORING_TOOLS]
+        assert "get_portfolio_holdings" in tool_names
+        assert "manage_watchlist" in tool_names
