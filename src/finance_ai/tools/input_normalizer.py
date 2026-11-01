@@ -8,7 +8,11 @@ the agent asks the user.
 
 import re
 from datetime import date
+from decimal import Decimal, InvalidOperation
+from typing import Any
 
+# Units and separators people type around numbers: "1,000", "35 บาท", "฿35.50"
+_NUMBER_NOISE = re.compile(r"[,\s]|฿|บาท|THB|หุ้น|หน่วย", re.IGNORECASE)
 _THAI_DIGITS = str.maketrans("๐๑๒๓๔๕๖๗๘๙", "0123456789")
 _SYMBOL_PREFIXES = re.compile(r"^(?:\$|SET:|SET\s+|BKK:)", re.IGNORECASE)
 _BUDDHIST_ERA_OFFSET = 543
@@ -50,6 +54,38 @@ def clean_number_text(text: str) -> str:
         '35'
     """
     return normalize_digits(text).strip().removesuffix(".-")
+
+
+def parse_decimal_text(value: Any, field_name: str) -> Decimal:
+    """Parse a typed number ("1,000", "35 บาท", "฿35.50", "๓๕.-") into a finite Decimal.
+
+    Args:
+        value: The value to parse (str, int, float, Decimal).
+        field_name: Name of the field for error messages.
+
+    Returns:
+        Parsed Decimal value.
+
+    Raises:
+        ValueError: If the value is not a finite number ("nan" and "inf" are rejected).
+
+    Example:
+        >>> parse_decimal_text("1,200,000 บาท", "gross_income")
+        Decimal('1200000')
+    """
+    cleaned = _NUMBER_NOISE.sub("", clean_number_text(str(value)))
+    try:
+        parsed = Decimal(cleaned)
+    except (InvalidOperation, ValueError) as exc:
+        raise _number_error(field_name, value) from exc
+    if not parsed.is_finite():
+        raise _number_error(field_name, value)
+    return parsed
+
+
+def _number_error(field_name: str, value: Any) -> ValueError:
+    """Error for a value that is not a usable number."""
+    return ValueError(f"Cannot parse {field_name} as Decimal. Received: {value}")
 
 
 def twelve_hour_to_24(text: str) -> str:
@@ -110,3 +146,34 @@ def _date_parts(cleaned: str) -> tuple[int, int, int]:
 def _date_error(text: str) -> ValueError:
     """Error for a date that cannot be read."""
     return ValueError(f"Unrecognized date. Received: {text!r}. Use YYYY-MM-DD, e.g. 2026-10-01")
+
+
+# A reply that is only an hour ("8", "๘", "8 ครับ", "ตอน 8") with no time word.
+_POLITE_ENDINGS = re.compile(r"(?:ครับ|คับ|ค่ะ|คะ|ค่า|นะ|จ้า|จ้ะ|จ่ะ)+$")
+_BARE_HOUR = re.compile(r"^(?:ตอน\s*)?(\d{1,2})$")
+
+
+def ambiguous_hour(text: str) -> int | None:
+    """The hour when a reply is just "8"-style (1-12, could be morning or evening).
+
+    Times with a word or minutes are clear: "8 โมง", "2 ทุ่ม", "20", "8:30", "8 pm".
+
+    Args:
+        text: The user's message as typed.
+
+    Returns:
+        The hour (1-12) when ambiguous, else None.
+
+    Example:
+        >>> ambiguous_hour("8 ครับ")
+        8
+        >>> ambiguous_hour("2 ทุ่ม") is None
+        True
+    """
+    cleaned = normalize_digits(text).strip().rstrip(".!?").strip()
+    cleaned = _POLITE_ENDINGS.sub("", cleaned).strip()
+    match = _BARE_HOUR.match(cleaned)
+    if match is None:
+        return None
+    hour = int(match.group(1))
+    return hour if 1 <= hour <= _NOON else None

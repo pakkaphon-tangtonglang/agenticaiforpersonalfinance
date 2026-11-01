@@ -8,6 +8,7 @@ from collections.abc import Callable, Generator
 from datetime import date
 from decimal import Decimal
 
+import httpx
 import pytest
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -30,6 +31,20 @@ def _isolate_api_security(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     api_security.reset_rate_limiter()
     monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "0")
+
+
+@pytest.fixture(autouse=True)
+def _no_real_fund_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Never call the real SEC fund API from tests, even when .env has a key.
+
+    Tests that need fund data patch the client themselves (see
+    tests/tools/test_fund_nav_client.py).
+    """
+    from finance_ai.tools import sec_fund_api  # pylint: disable=import-outside-toplevel
+
+    sec_fund_api.clear_cache()
+    no_key = Settings.model_construct(sec_api_key=None)
+    monkeypatch.setattr(sec_fund_api, "get_settings", lambda: no_key)
 
 
 @pytest.fixture(autouse=True)
@@ -203,3 +218,36 @@ def db_session_factory(test_engine: Engine) -> Callable[[], Session]:
         Callable that creates new sessions from the test engine.
     """
     return sessionmaker(bind=test_engine)
+
+
+SecHandler = Callable[[httpx.Request], httpx.Response]
+
+
+@pytest.fixture
+def fake_sec_api(monkeypatch: pytest.MonkeyPatch) -> Callable[[SecHandler], list[httpx.Request]]:
+    """Route SEC Fund API calls to a handler and turn the key on.
+
+    Usage: ``calls = fake_sec_api(lambda request: httpx.Response(200, json=...))``.
+    Returns the list of requests made, for assertions.
+    """
+    from finance_ai.tools import sec_fund_api  # pylint: disable=import-outside-toplevel
+
+    def install(handler: SecHandler) -> list[httpx.Request]:
+        calls: list[httpx.Request] = []
+
+        def recording(request: httpx.Request) -> httpx.Response:
+            calls.append(request)
+            return handler(request)
+
+        real_client = httpx.Client
+        monkeypatch.setattr(
+            httpx,
+            "Client",
+            lambda **kwargs: real_client(transport=httpx.MockTransport(recording), **kwargs),
+        )
+        with_key = Settings.model_construct(sec_api_key="test-key")
+        monkeypatch.setattr(sec_fund_api, "get_settings", lambda: with_key)
+        sec_fund_api.clear_cache()
+        return calls
+
+    return install

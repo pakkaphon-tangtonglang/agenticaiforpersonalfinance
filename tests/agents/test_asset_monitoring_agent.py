@@ -151,3 +151,4 @@ class TestToolRegistry:
         assert "get_portfolio_holdings" in tool_names
         assert "manage_watchlist" in tool_names
         assert "add_portfolio_holding" in tool_names
+        assert "add_portfolio_holding" in tool_names

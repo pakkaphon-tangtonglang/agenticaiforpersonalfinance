@@ -66,6 +66,10 @@ services:
         sync: false
       - key: OCR_API_KEY
         sync: false
+      # SEC Open API key (Fund API V2): Thai mutual fund search + daily NAV
+      # on the asset page. Without it, fund search and fund prices are off.
+      - key: SEC_API_KEY
+        sync: false
       # Public API protection: per-IP rate limit. No API_KEY: the web UI is
       # served from this same host, and a key shipped in public JavaScript
       # would not be secret. (Setting API_KEY would block the web UI.)

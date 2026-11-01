@@ -5,9 +5,11 @@ from datetime import date
 import pytest
 
 from finance_ai.tools.input_normalizer import (
+    ambiguous_hour,
     clean_number_text,
     clean_symbol_text,
     normalize_digits,
+    parse_decimal_text,
     parse_flexible_date,
     twelve_hour_to_24,
 )
@@ -79,3 +81,27 @@ def test_parse_flexible_date_rejects(typed: str) -> None:
     """Impossible or unsupported dates raise with an example."""
     with pytest.raises(ValueError, match="YYYY-MM-DD"):
         parse_flexible_date(typed)
+
+
+@pytest.mark.parametrize("typed", ["nan", "NaN", "inf", "-Infinity"])
+def test_parse_decimal_text_rejects_non_finite(typed: str) -> None:
+    """'nan' and 'inf' parse as Decimal but are not usable numbers."""
+    with pytest.raises(ValueError, match="Cannot parse qty"):
+        parse_decimal_text(typed, "qty")
+
+
+@pytest.mark.parametrize(
+    ("typed", "hour"),
+    [("8", 8), ("๘", 8), (" 8 ครับ", 8), ("8ค่ะ", 8), ("ตอน 8", 8), ("12", 12), ("1.", 1)],
+)
+def test_ambiguous_hour_detected(typed: str, hour: int) -> None:
+    """A bare hour 1-12 could be morning or evening."""
+    assert ambiguous_hour(typed) == hour
+
+
+@pytest.mark.parametrize(
+    "typed", ["20", "0", "13", "8 โมง", "2 ทุ่ม", "บ่าย 3", "8:30", "8.30", "8 pm", "เพิ่ม PTT", ""]
+)
+def test_clear_times_are_not_ambiguous(typed: str) -> None:
+    """24-hour hours, time words, minutes or other text are clear."""
+    assert ambiguous_hour(typed) is None

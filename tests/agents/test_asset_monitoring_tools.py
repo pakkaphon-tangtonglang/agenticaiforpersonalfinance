@@ -483,3 +483,83 @@ class TestWatchlistInputEdgeCases:
         result = _call(sample_user, db_session_factory, action="remove", symbol="PTT")
         assert result["status"] == "not_found"
         assert "options" not in result
+
+
+class TestBareHourReply:
+    """A reply of just "8" is asked about, whatever time the model chose."""
+
+    @staticmethod
+    def _with_reply(
+        user: User, factory: Callable[[], Session], reply: str, **arguments: str
+    ) -> dict[str, object]:
+        """Invoke with a conversation whose last user message is `reply`."""
+        from langchain_core.messages import AIMessage, HumanMessage
+
+        messages = [HumanMessage("เพิ่ม PTT"), AIMessage("แจ้งกี่โมงดี"), HumanMessage(reply)]
+        payload: dict[str, object] = {
+            "user_id": user.id,
+            "db_session_factory": factory,
+            "messages": messages,
+            **arguments,
+        }
+        result: dict[str, object] = manage_watchlist.invoke(payload)
+        return result
+
+    def test_bare_hour_asks_morning_or_evening(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """The model guessed 08:00 from '8'; the tool asks instead of saving."""
+        _call(sample_user, db_session_factory, action="add", symbol="PTT.BK")
+        result = self._with_reply(
+            sample_user,
+            db_session_factory,
+            "8",
+            action="set_alert",
+            symbol="PTT.BK",
+            alert_time="08:00",
+        )
+        assert result["needs_clarification"] is True
+        assert result["options"] == ["08:00 (8 โมงเช้า)", "20:00 (2 ทุ่ม)"]
+        listed = _call(sample_user, db_session_factory, action="list")
+        assert listed["watchlist"][0]["alert_time"] is None  # type: ignore[index]
+
+    def test_clear_reply_is_saved(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """'2 ทุ่ม' is clear, so the model's 20:00 is saved."""
+        _call(sample_user, db_session_factory, action="add", symbol="PTT.BK")
+        result = self._with_reply(
+            sample_user,
+            db_session_factory,
+            "2 ทุ่ม",
+            action="set_alert",
+            symbol="PTT.BK",
+            alert_time="20:00",
+        )
+        assert result["alert_time"] == "20:00"
+
+    def test_add_with_bare_hour_adds_but_asks(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """For 'add', the asset is added and only the time waits for an answer."""
+        result = self._with_reply(
+            sample_user,
+            db_session_factory,
+            "๑๒ ครับ",
+            action="add",
+            symbol="PTT.BK",
+            alert_time="12:00",
+        )
+        assert result["status"] == "added"
+        assert result["options"] == ["12:00 (เที่ยง)", "00:00 (เที่ยงคืน)"]
+        assert "next_step" not in result
+
+    def test_no_conversation_trusts_the_time(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Without messages (e.g. direct calls), the given time is used."""
+        _call(sample_user, db_session_factory, action="add", symbol="PTT.BK")
+        result = _call(
+            sample_user, db_session_factory, action="set_alert", symbol="PTT", alert_time="08:00"
+        )
+        assert result["alert_time"] == "08:00"

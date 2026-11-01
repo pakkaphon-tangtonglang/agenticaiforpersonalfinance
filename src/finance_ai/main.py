@@ -70,7 +70,14 @@ from finance_ai.tools.bank_statement_pdf import (
     read_pdf_pages,
 )
 from finance_ai.tools.bank_statement_service import bulk_insert_transactions
-from finance_ai.tools.investment_service import get_portfolio_summary
+from finance_ai.tools.asset_search_service import search_all_assets
+from finance_ai.tools.holding_entry_service import (
+    HoldingEntry,
+    HoldingEntryError,
+    HoldingForm,
+    add_holding_from_form,
+)
+from finance_ai.tools.investment_service import get_portfolio_summary, refresh_portfolio_prices
 from finance_ai.tools.receipt_ocr import (
     SUPPORTED_MIME_TYPES,
     ReceiptOcrResult,
@@ -410,8 +417,17 @@ class HoldingItemOut(BaseModel):
     symbol: str = Field(..., description="Asset symbol (e.g. 'PTT.BK')")
     name: str = Field(default="", description="Display name")
     quantity: str | None = Field(default=None, description="Units held")
+    average_cost_per_unit: str | None = Field(default=None, description="THB paid per unit")
+    current_price_per_unit: str | None = Field(default=None, description="Latest THB price")
     current_value: str | None = Field(default=None, description="THB value; None without a price")
     unrealized_gain_loss: str | None = Field(default=None, description="THB gain/loss or None")
+    gain_loss_percentage: str | None = Field(default=None, description="Gain/loss in percent")
+
+
+class HoldingAddRequest(HoldingForm):
+    """Add a Thai stock or fund from the asset page (blank price = latest price/NAV)."""
+
+    user_id: str = Field(..., description="User UUID")
 
 
 class RiskAssessmentSubmitRequest(BaseModel):
@@ -1531,7 +1547,9 @@ def search_assets(query: str) -> dict[str, Any]:
         query: Free-text asset name or ticker (e.g. "ปตท", "Apple").
 
     Returns:
-        Dict with candidate results (symbol/name/exchange/type keys).
+        {"status", "results", "expanded_terms", "clarify"}: stocks and Thai
+        funds, the LLM terms used when nothing matched, and questions to ask
+        when the search is unsure.
 
     Raises:
         HTTPException: 422 when the query is empty or whitespace-only.
@@ -1545,17 +1563,7 @@ def search_assets(query: str) -> dict[str, Any]:
         search_asset_symbols,
     )
 
-    matches = search_asset_symbols(query.strip())
-    results = [
-        {
-            "symbol": match.symbol,
-            "name": match.name,
-            "exchange": match.exchange,
-            "type": match.quote_type,
-        }
-        for match in matches
-    ]
-    return {"status": "ok", "results": results}
+    return search_all_assets(query, search_asset_symbols)
 
 
 @app.post("/assets/fetch", response_model=AssetFetchResponse)
@@ -1698,6 +1706,41 @@ def get_holdings(user_id: str, session: Session = Depends(get_session)) -> list[
     """
     summary = get_portfolio_summary(session, user_id)
     return [HoldingItemOut(**holding_to_dict(holding)) for holding in summary.holdings]
+
+
+@app.post("/assets/holdings", response_model=HoldingEntry)
+def add_holding(req: HoldingAddRequest, session: Session = Depends(get_session)) -> HoldingEntry:
+    """Add a Thai stock or fund purchase; a blank price means "bought at the latest price".
+
+    Args:
+        req: Symbol, quantity, optional buy price and date, asset type.
+        session: Database session.
+
+    Returns:
+        The saved purchase with gain/loss at the latest price.
+
+    Raises:
+        HTTPException: 422 with a Thai message for input that cannot be saved.
+    """
+    try:
+        return add_holding_from_form(session, req.user_id, req)
+    except HoldingEntryError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@app.post("/assets/holdings/refresh", response_model=list[HoldingItemOut])
+def refresh_holdings(user_id: str, session: Session = Depends(get_session)) -> list[HoldingItemOut]:
+    """Fetch latest prices for the user's holdings, then list them with gain/loss.
+
+    Args:
+        user_id: User UUID.
+        session: Database session.
+
+    Returns:
+        Holdings with updated prices (unchanged where no price was found).
+    """
+    refresh_portfolio_prices(session, user_id)
+    return get_holdings(user_id, session)
 
 
 @app.post("/assets/watchlist")
