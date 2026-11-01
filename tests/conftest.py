@@ -32,6 +32,29 @@ def _isolate_api_security(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("RATE_LIMIT_PER_MINUTE", "0")
 
 
+@pytest.fixture(autouse=True)
+def _isolate_api_database(monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
+    """Point the API's session factory at a throwaway in-memory DB.
+
+    The app-wide user provisioning dependency writes a user row for every
+    request that names a user_id; without this, a test that forgets to
+    patch the factory would write into the developer's real database.
+    Tests that need a specific DB patch ``finance_ai.main._session_factory``
+    again after this runs.
+    """
+    import finance_ai.main as main_module  # pylint: disable=import-outside-toplevel
+
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    monkeypatch.setattr(main_module, "_session_factory", sessionmaker(bind=engine))
+    yield
+    engine.dispose()
+
+
 @pytest.fixture
 def mock_settings() -> Settings:
     """
