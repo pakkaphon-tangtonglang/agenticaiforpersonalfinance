@@ -36,6 +36,7 @@ from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
 from finance_ai.agents.llm_factory import create_chat_model, create_ocr_chat_model
+from finance_ai.agents.portfolio_tools import holding_to_dict
 from finance_ai.agents.guru_panel import PanelEvent, run_guru_panel, synthesis_to_markdown
 from finance_ai.agents.guru_personas import (
     UnknownGuruError,
@@ -66,6 +67,7 @@ from finance_ai.tools.bank_statement_pdf import (
     read_pdf_pages,
 )
 from finance_ai.tools.bank_statement_service import bulk_insert_transactions
+from finance_ai.tools.investment_service import get_portfolio_summary
 from finance_ai.tools.receipt_ocr import (
     SUPPORTED_MIME_TYPES,
     ReceiptOcrResult,
@@ -365,6 +367,16 @@ class WatchlistItemOut(BaseModel):
     id: str = Field(..., description="Asset UUID used by DELETE /assets/watchlist/{id}")
     symbol: str = Field(..., description="Canonical Yahoo symbol (e.g. 'PTT.BK')")
     name: str = Field(default="", description="Display name")
+
+
+class HoldingItemOut(BaseModel):
+    """Portfolio row returned by GET /assets/holdings (owned, not just watched)."""
+
+    symbol: str = Field(..., description="Asset symbol (e.g. 'PTT.BK')")
+    name: str = Field(default="", description="Display name")
+    quantity: str | None = Field(default=None, description="Units held")
+    current_value: str | None = Field(default=None, description="THB value; None without a price")
+    unrealized_gain_loss: str | None = Field(default=None, description="THB gain/loss or None")
 
 
 class RiskAssessmentSubmitRequest(BaseModel):
@@ -1620,6 +1632,21 @@ def get_watchlist(user_id: str, session: Session = Depends(get_session)) -> list
     return [
         WatchlistItemOut(id=str(asset.id), symbol=asset.symbol, name=asset.name) for asset in assets
     ]
+
+
+@app.get("/assets/holdings", response_model=list[HoldingItemOut])
+def get_holdings(user_id: str, session: Session = Depends(get_session)) -> list[HoldingItemOut]:
+    """List the assets the user owns, shown beside the watchlist.
+
+    Args:
+        user_id: User UUID.
+        session: Database session.
+
+    Returns:
+        One row per holding (money as strings, None without a stored price).
+    """
+    summary = get_portfolio_summary(session, user_id)
+    return [HoldingItemOut(**holding_to_dict(holding)) for holding in summary.holdings]
 
 
 @app.post("/assets/watchlist")

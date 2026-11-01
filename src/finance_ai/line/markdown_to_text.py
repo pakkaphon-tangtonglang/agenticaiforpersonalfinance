@@ -12,7 +12,8 @@ from typing import Optional
 _TABLE_SEPARATOR_CELL = re.compile(r":?-{1,}:?")
 _HEADING = re.compile(r"^#{1,6}\s*")
 _HORIZONTAL_RULE = re.compile(r"^-{3,}$")
-_BULLET = re.compile(r"^-\s+")
+_BULLET = re.compile(r"^[-*+]\s+")
+_HTML_LINE_BREAK = re.compile(r"\s*<br\s*/?>\s*", re.IGNORECASE)
 _BOLD = re.compile(r"\*\*(.+?)\*\*")
 _BOLD_UNDERSCORE = re.compile(r"__(.+?)__")
 _ITALIC = re.compile(r"\*([^*\n]+)\*")
@@ -59,7 +60,7 @@ def _convert_line(line: str) -> Optional[str]:
         Converted plain-text line, or None when the line should be
         dropped entirely.
     """
-    stripped = line.strip()
+    stripped = _HTML_LINE_BREAK.sub(" ", line).strip()
     if not stripped:
         return line
     if stripped.startswith(">"):

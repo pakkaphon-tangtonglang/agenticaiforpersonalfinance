@@ -73,3 +73,17 @@ class TestVagueMessageRule:
     def test_production_prompt_has_vague_example(self) -> None:
         """The shipped prompt shows a vague one-word message with low confidence."""
         assert '"เงิน" → {"intent": "general", "confidence": 0.4}' in ORCHESTRATOR_SYSTEM_PROMPT
+
+
+class TestAssetPromptPortfolioVsWatchlist:
+    """The asset agent must not answer holdings questions from the watchlist."""
+
+    def test_prompt_separates_holdings_from_watchlist(self) -> None:
+        """The prompt names the portfolio tool and says holdings are not the watchlist."""
+        from finance_ai.agents.prompts import (  # pylint: disable=import-outside-toplevel
+            ASSET_MONITORING_AGENT_SYSTEM_PROMPT,
+        )
+
+        assert "get_portfolio_holdings" in ASSET_MONITORING_AGENT_SYSTEM_PROMPT
+        assert "รายการถือหุ้น" in ASSET_MONITORING_AGENT_SYSTEM_PROMPT
+        assert "ไม่ใช่ Watchlist" in ASSET_MONITORING_AGENT_SYSTEM_PROMPT
