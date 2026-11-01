@@ -6,6 +6,7 @@ import pytest
 
 from finance_ai.line.messaging_client import (
     CLARIFY_QUICK_REPLY_LABELS,
+    download_line_content,
     LOADING_ANIMATION_SECONDS,
     send_line_push,
     send_line_reply,
@@ -116,3 +117,71 @@ class TestSendLineReply:
         request = FakeMessagingApi.calls[0]["reply_message_request"]
         assert request.reply_token == "reply-token-1"
         assert request.messages[0].text == "ได้รับคำถามแล้ว"
+
+
+class FakeBlobApi:
+    """Returns fixed bytes instead of downloading from LINE."""
+
+    requested: list[str] = []
+
+    def __init__(self, *args: Any) -> None:
+        """Accept the ApiClient argument like the real SDK class."""
+
+    def get_message_content(self, message_id: str) -> bytearray:
+        """Record the id and return fake content."""
+        FakeBlobApi.requested.append(message_id)
+        return bytearray(b"%PDF-1.7")
+
+
+class TestDownloadLineContent:
+    """Tests for download_line_content."""
+
+    def test_returns_bytes_for_message(self, monkeypatch: Any) -> None:
+        """The message content is downloaded by id and returned as bytes."""
+        FakeBlobApi.requested = []
+        monkeypatch.setattr("finance_ai.line.messaging_client.MessagingApiBlob", FakeBlobApi)
+        content = download_line_content("token-123", "m-1")
+        assert content == b"%PDF-1.7"
+        assert isinstance(content, bytes)
+        assert FakeBlobApi.requested == ["m-1"]
+
+
+class TestCustomQuickReply:
+    """send_line_push can carry other buttons than the clarify menu."""
+
+    def setup_method(self) -> None:
+        """Clear recorded calls between tests."""
+        FakeMessagingApi.calls = []
+
+    def test_custom_labels(self, monkeypatch: Any) -> None:
+        """Given labels replace the default clarify buttons."""
+        monkeypatch.setattr("finance_ai.line.messaging_client.MessagingApi", FakeMessagingApi)
+        send_line_push("token", "U1", "สรุป", quick_reply_labels=("บันทึก", "ยกเลิก"))
+        message = FakeMessagingApi.calls[0]["push_message_request"].messages[0]
+        assert [item.action.label for item in message.quick_reply.items] == ["บันทึก", "ยกเลิก"]
+
+    def test_reply_with_labels(self, monkeypatch: Any) -> None:
+        """Replies can carry quick-reply buttons too."""
+        monkeypatch.setattr("finance_ai.line.messaging_client.MessagingApi", FakeMessagingApi)
+        send_line_reply("token", "rt", "สรุป", quick_reply_labels=("บันทึก", "ยกเลิก"))
+        message = FakeMessagingApi.calls[0]["reply_message_request"].messages[0]
+        assert [item.action.label for item in message.quick_reply.items] == ["บันทึก", "ยกเลิก"]
+
+    def test_reply_without_labels_has_no_quick_reply(self, monkeypatch: Any) -> None:
+        """Plain replies (the processing notice) stay button-free."""
+        monkeypatch.setattr("finance_ai.line.messaging_client.MessagingApi", FakeMessagingApi)
+        send_line_reply("token", "rt", "รอสักครู่")
+        message = FakeMessagingApi.calls[0]["reply_message_request"].messages[0]
+        assert message.quick_reply is None
+
+
+class TestPushWithoutButtons:
+    """An empty label list sends no quick reply (LINE rejects an empty menu)."""
+
+    def test_empty_labels_send_no_quick_reply(self, monkeypatch: Any) -> None:
+        """quick_reply is None when no labels are given."""
+        FakeMessagingApi.calls = []
+        monkeypatch.setattr("finance_ai.line.messaging_client.MessagingApi", FakeMessagingApi)
+        send_line_push("token", "U1", "บันทึกแล้ว", quick_reply_labels=())
+        message = FakeMessagingApi.calls[0]["push_message_request"].messages[0]
+        assert message.quick_reply is None
