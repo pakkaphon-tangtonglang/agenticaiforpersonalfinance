@@ -1,6 +1,7 @@
 /* Personal Finance AI — frontend logic
    Wires all FastAPI endpoints into a single-page app.
-   Search-centric hero + thread layout, single accent #134611.
+   v2 layout (designref/v2_design.md): icon rail + chat panel + canvas,
+   light/dark themes driven by CSS custom properties.
 */
 (function () {
   "use strict";
@@ -9,20 +10,30 @@
   const API_BASE = location.origin;
 
   // ─── Intent config (mirrors ui/app_constants.py INTENT_CONFIG) ───
-  // One accent (#134611) for the primary intent; others muted neutrals.
+  // Badges are neutral pills (styled in CSS) so they read in light and dark.
   const INTENT_CONFIG = {
-    tax: { label: "ภาษี", icon: "🧾", color: "#134611" },
-    expense: { label: "ค่าใช้จ่าย", icon: "💸", color: "#8a7a6a" },
-    asset_monitoring: { label: "ติดตามสินทรัพย์", icon: "📈", color: "#5a6a5a" },
-    planning: { label: "วางแผนการเงิน", icon: "🗓️", color: "#6a7a8a" },
-    recommendation: { label: "คำแนะนำการเงิน", icon: "💡", color: "#7a6a8a" },
-    report: { label: "รายงานการเงิน", icon: "📊", color: "#4a6b3a" },
-    general: { label: "ทั่วไป", icon: "💬", color: "#72706b" },
-    general_chat: { label: "แชททั่วไป", icon: "💬", color: "#72706b" },
-    clarify: { label: "ขอข้อมูลเพิ่ม", icon: "🤔", color: "#8a7a5a" },
-    upload: { label: "แนบไฟล์", icon: "📎", color: "#4a6b3a" },
-    unknown: { label: "ไม่ทราบ", icon: "❓", color: "#92918b" },
-    error: { label: "ข้อผิดพลาด", icon: "⚠️", color: "#a8442c" },
+    tax: { label: "ภาษี", icon: "🧾" },
+    expense: { label: "ค่าใช้จ่าย", icon: "💸" },
+    asset_monitoring: { label: "ติดตามสินทรัพย์", icon: "📈" },
+    planning: { label: "วางแผนการเงิน", icon: "🗓️" },
+    recommendation: { label: "คำแนะนำการเงิน", icon: "💡" },
+    report: { label: "รายงานการเงิน", icon: "📊" },
+    general: { label: "ทั่วไป", icon: "💬" },
+    general_chat: { label: "แชททั่วไป", icon: "💬" },
+    clarify: { label: "ขอข้อมูลเพิ่ม", icon: "🤔" },
+    upload: { label: "แนบไฟล์", icon: "📎" },
+    unknown: { label: "ไม่ทราบ", icon: "❓" },
+    error: { label: "ข้อผิดพลาด", icon: "⚠️", tone: "error" },
+  };
+
+  // Follow-up questions per agent (fixed lists: no extra LLM call).
+  const FOLLOW_UPS = {
+    tax: ["ค่าลดหย่อนที่ยังใช้ได้มีอะไรอีกบ้าง", "ถ้าซื้อ RMF 50,000 บาท ภาษีลดเท่าไหร่", "ยื่นภาษีออนไลน์ต้องเตรียมอะไรบ้าง"],
+    expense: ["สรุปรายจ่ายเดือนนี้", "หมวดไหนใช้จ่ายเยอะที่สุด", "ช่วยตั้งงบรายจ่ายต่อเดือนให้หน่อย"],
+    asset_monitoring: ["ดูพอร์ตของฉัน", "ข่าวล่าสุดของหุ้นในพอร์ต", "ควรกระจายความเสี่ยงยังไง"],
+    planning: ["ต้องออมเดือนละเท่าไหร่ถึงจะถึงเป้า", "ควรมีเงินสำรองฉุกเฉินเท่าไหร่", "วางแผนเกษียณเบื้องต้นให้หน่อย"],
+    recommendation: ["ควรปรับเรื่องไหนก่อน", "ช่วยวางแผนการออมให้หน่อย", "สรุปการเงินเดือนนี้"],
+    report: ["เทียบกับเดือนที่แล้วเป็นยังไง", "สรุปการเงินรายปี", "มีข้อสังเกตอะไรบ้าง"],
   };
 
   // ─── Suggestion cards (hero home) ───
@@ -56,12 +67,13 @@
     investment: "ลงทุน", other: "อื่นๆ",
   };
 
-  // Chart palette — accent-led, muted
+  // Chart palette — mid-tone hues that read on light and dark cards
   const CHART_PALETTE = [
-    "#134611", "#4a6b3a", "#7a8a6a", "#b8a86a",
-    "#a8442c", "#6a7a8a", "#8a7a6a", "#5a6a5a",
-    "#92918b", "#3f7d3f",
+    "#3b82f6", "#ef4444", "#22c55e", "#f59e0b", "#8b5cf6",
+    "#06b6d4", "#ec4899", "#84cc16", "#64748b", "#f97316",
   ];
+  // Theme colours come from CSS custom properties, so charts follow light/dark.
+  const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
   const CHART_FONT = "'Inter','Sarabun',sans-serif";
 
   // ─── State ───
@@ -70,6 +82,7 @@
     conversationId: localStorage.getItem("pfai_conv") || "",
     streaming: false,
     charts: {},
+    lastReport: null, // last /dashboard payload, reused to redraw charts on theme change
     mode: "hero", // "hero" | "thread"
     view: "chat", // active sidebar tab; the history list follows it
     riskProfile: null, // latest risk assessment {risk_category, risk_level, total_score}
@@ -108,6 +121,23 @@
     label.title = state.userId;
   }
 
+  // ─── Dismiss overlays: Escape, or a tap outside the mobile sidebar ───
+  function closeTopOverlay() {
+    if (!$("lineModal").hidden) closeLineModal();
+    else if (!$("riskModal").hidden && !$("riskSkipLink").hidden) closeRiskModal();
+    else $("sidebar").classList.remove("open");
+  }
+
+  function bindOverlayDismissal() {
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeTopOverlay(); });
+    $("main").addEventListener("click", (e) => {
+      const sidebar = $("sidebar");
+      if (sidebar.classList.contains("open") && !$("menuToggle").contains(e.target)) {
+        sidebar.classList.remove("open");
+      }
+    });
+  }
+
   // ─── Connect LINE ───
   function openLineModal() {
     $("lineCommandText").textContent = "เชื่อมต่อ " + state.userId;
@@ -115,10 +145,12 @@
     $("lineModalNote").hidden = true;
     $("unlinkLineBtn").disabled = false;
     $("lineModal").hidden = false;
+    $("copyLineCmdBtn").focus();
   }
 
   function closeLineModal() {
     $("lineModal").hidden = true;
+    $("connectLineBtn").focus();
   }
 
   async function copyLineCommand() {
@@ -165,9 +197,17 @@
 
   // ─── Toast ───
   let toastTimer;
-  function toast(message, isError = false) {
+  // A check mark that draws itself in: only on "saved" confirmations.
+  function savedMark() {
+    const mark = el("span", { class: "saved-mark", "aria-hidden": "true" });
+    mark.innerHTML = '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M7 12.5l3.2 3.2L17 9"/></svg>';
+    return mark;
+  }
+
+  function toast(message, isError = false, { saved = false } = {}) {
     const t = $("toast");
     t.textContent = message;
+    if (saved && !isError) t.prepend(savedMark());
     t.classList.toggle("error", isError);
     t.hidden = false;
     requestAnimationFrame(() => t.classList.add("show"));
@@ -302,6 +342,9 @@
     document.querySelectorAll(".nav-item").forEach((n) =>
       n.classList.toggle("is-active", n.dataset.view === name));
     $("minibarTitle").textContent = VIEW_TITLES[name] || name;
+    const hasPanel = name === "chat" || name === "guru";
+    $("app").classList.toggle("no-panel", !hasPanel);
+    $("headNewChat").hidden = !hasPanel;
     if (name === "assets") { loadNotifications(); loadWatchlist(); }
     if (name === "dashboard") loadDashboard();
     if (name === "guru" && window.GuruView) window.GuruView.open();
@@ -374,7 +417,7 @@
 
   function conversationText(conv, options, rename) {
     const subtitle = options.subtitle ? options.subtitle(conv) : "";
-    return el("span", { class: "conv-text" },
+    return el("button", { class: "conv-text", type: "button" },
       el("span", { class: "conv-title", ondblclick: rename }, conv.title || DEFAULT_CONV_TITLE),
       subtitle ? el("span", { class: "conv-sub" }, subtitle) : null);
   }
@@ -416,7 +459,7 @@
     };
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") { e.preventDefault(); finish(true); }
-      else if (e.key === "Escape") finish(false);
+      else if (e.key === "Escape") { e.stopPropagation(); finish(false); }
     });
     input.addEventListener("blur", () => finish(true));
     li.replaceChildren(input);
@@ -526,10 +569,8 @@
   }
 
   function intentBadge(cfg) {
-    return el("span", {
-      class: "msg-intent",
-      style: `background:${cfg.color}1a;color:${cfg.color};`,
-    }, `${cfg.icon} ${cfg.label}`);
+    return el("span", { class: "msg-intent" + (cfg.tone ? " is-" + cfg.tone : "") },
+      `${cfg.icon} ${cfg.label}`);
   }
 
   function intentDisclaimer() {
@@ -537,22 +578,94 @@
       "AI ให้ข้อมูลเพื่อการศึกษา ไม่ใช่คำแนะนำการลงทุน");
   }
 
-  function appendIntentExtras(msgEl, intent) {
+  function appendIntentExtras(msgEl, intent, { badge = true } = {}) {
     // An "unknown" badge tells the user nothing, so skip it.
     const cfg = INTENT_CONFIG[intent];
-    if (cfg && intent !== "unknown") msgEl.append(intentBadge(cfg));
+    if (badge && cfg && intent !== "unknown") msgEl.append(intentBadge(cfg));
     if (intent === "recommendation" && !state.recommendationDisclaimerShown) {
       state.recommendationDisclaimerShown = true;
       msgEl.append(intentDisclaimer());
     }
   }
 
+  // ─── Beautiful UI: Loading State → Thinking trace, actions, follow-ups ───
+  function thinkingRow() {
+    const row = el("div", { class: "thinking", role: "status" },
+      el("span", { class: "pixels", "aria-hidden": "true" }, ...Array.from({ length: 9 }, () => el("i"))),
+      el("span", {}, "กำลังหาคำตอบ"),
+      el("span", { class: "thinking-time num" }, "0.0s"));
+    const started = performance.now();
+    const timer = setInterval(() => {
+      row.lastChild.textContent = ((performance.now() - started) / 1000).toFixed(1) + "s";
+    }, 100);
+    // The row stays in place while the answer streams, then becomes the trace,
+    // so the answer never jumps up or down (find-animation-opportunities #1).
+    return {
+      row, started,
+      answering: () => { row.children[1].textContent = "กำลังตอบ"; },
+      settle: (node) => { clearInterval(timer); node.classList.add("fade-in"); row.replaceWith(node); },
+      stop: () => { clearInterval(timer); row.remove(); },
+    };
+  }
+
+  function traceDetails(seconds, intent, sourceCount) {
+    const cfg = INTENT_CONFIG[intent];
+    const steps = [];
+    if (cfg && intent !== "unknown") steps.push(el("li", {}, `${cfg.icon} ผู้ช่วยด้าน${cfg.label} `, el("span", {}, "ตอบคำถามนี้")));
+    if (sourceCount) steps.push(el("li", {}, "ค้นคลังความรู้ ", el("span", {}, `ใช้ ${sourceCount} แหล่ง`)));
+    const details = el("details", { class: "trace" },
+      el("summary", {}, `✦ ใช้เวลา ${Math.max(1, Math.round(seconds))} วินาที`));
+    if (steps.length) details.append(el("ol", {}, ...steps));
+    return details;
+  }
+
+  function answerActions(getText) {
+    const copy = el("button", { type: "button", class: "answer-action", "aria-label": "คัดลอกคำตอบ", title: "คัดลอก" });
+    copy.innerHTML = '<svg class="i"><use href="#i-copy"/></svg>';
+    copy.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(getText()); showCopied(copy); }
+      catch (_) { toast("คัดลอกไม่สำเร็จ เลือกข้อความแล้วกด Ctrl+C แทน", true); }
+    });
+    return el("div", { class: "answer-actions fade-in" }, copy);
+  }
+
+  // Copy → check for 1.5 s, then back (the label changes too, for screen readers).
+  function showCopied(button) {
+    button.innerHTML = '<svg class="i icon-swap"><use href="#i-check"/></svg>';
+    button.setAttribute("aria-label", "คัดลอกแล้ว");
+    setTimeout(() => {
+      button.innerHTML = '<svg class="i icon-swap"><use href="#i-copy"/></svg>';
+      button.setAttribute("aria-label", "คัดลอกคำตอบ");
+    }, 1500);
+  }
+
+  function followUps(intent) {
+    const questions = FOLLOW_UPS[intent];
+    if (!questions) return null;
+    return el("div", { class: "followups fade-in" }, el("p", {}, "ถามต่อ"),
+      ...questions.map((q) => el("button", { type: "button", onclick: () => sendChat(q) },
+        el("span", { "aria-hidden": "true" }, "↳"), q)));
+  }
+
+  // Live answers get the trace (which names the agent) instead of the intent badge.
+  function finishLiveAnswer(bubble, live) {
+    const msg = bubble.closest(".msg");
+    live.thinking.settle(traceDetails(live.seconds, live.intent, live.sources.length));
+    appendIntentExtras(msg, live.intent, { badge: false });
+    msg.append(answerActions(() => bubble.innerText));
+    const more = followUps(live.intent);
+    if (more) msg.append(more);
+    $("chatThread").scrollTop = $("chatThread").scrollHeight;
+  }
+
   async function sendChat(text) {
     if (!text.trim() || state.streaming) return;
     if (state.mode === "hero") enterThreadMode();
+    $("chatThread").querySelectorAll(".followups").forEach((node) => node.remove());
     appendMessage("user", text);
     const assistantBubble = appendMessage("assistant", "");
-    assistantBubble.classList.add("msg-cursor");
+    const thinking = thinkingRow();
+    assistantBubble.before(thinking.row);
     state.streaming = true;
     setComposerDisabled(true);
     try { await ensureConversation(); } catch (e) { /* server falls back to the latest chat */ }
@@ -567,6 +680,7 @@
 
       await new Promise((resolve, reject) => {
         source.addEventListener("message", (ev) => {
+          if (!full) { thinking.answering(); assistantBubble.classList.add("msg-cursor"); }
           full += JSON.parse(ev.data);
           assistantBubble.innerHTML = renderMarkdown(full);
           $("chatThread").scrollTop = $("chatThread").scrollHeight;
@@ -584,9 +698,10 @@
 
       assistantBubble.classList.remove("msg-cursor");
       attachSources(assistantBubble, full, sources);
-      appendIntentExtras(assistantBubble.closest(".msg"), intent);
+      finishLiveAnswer(assistantBubble, { intent, sources, thinking, seconds: (performance.now() - thinking.started) / 1000 });
       maybeAutoTitle();
     } catch (e) {
+      thinking.stop();
       assistantBubble.classList.remove("msg-cursor");
       assistantBubble.textContent = "เชื่อมต่อสตรีมไม่สำเร็จ กำลังลองใหม่แบบไม่สตรีม…";
       try {
@@ -621,36 +736,109 @@
     }
   }
 
-  // ─── Suggestion cards + category filter ───
-  function renderSuggestions(cat) {
-    const grid = $("suggestionGrid");
-    grid.innerHTML = "";
-    const items = cat === "all" ? SUGGESTIONS
-      : SUGGESTIONS.filter((s) => s.cat === cat);
-    for (const s of items) {
-      grid.append(el("button", {
-        type: "button",
-        class: "suggestion-card",
-        onclick: () => {
-          if (state.streaming) return;
-          if (state.mode === "hero") enterThreadMode();
-          sendChat(s.query);
-        },
-      },
-        el("span", { class: "suggestion-icon", "aria-hidden": "true" }, s.icon),
-        el("span", { class: "suggestion-title" }, s.title),
-        el("span", { class: "suggestion-desc" }, s.desc),
-      ));
+  // ─── Home: suggestion rows, prompt card, category picker ───
+  const CATEGORY_LOOK = {
+    tax: { dot: "dot-tax", icon: "i-receipt" },
+    expense: { dot: "dot-expense", icon: "i-wallet" },
+    asset: { dot: "dot-asset", icon: "i-trend" },
+    planning: { dot: "dot-planning", icon: "i-target" },
+    report: { dot: "dot-planning", icon: "i-chart" },
+  };
+
+  // Inline SVG icon from the sprite in index.html (el() cannot build SVG nodes).
+  function iconDot(cat) {
+    const look = CATEGORY_LOOK[cat] || CATEGORY_LOOK.report;
+    const dot = el("span", { class: "dot " + look.dot, "aria-hidden": "true" });
+    dot.innerHTML = `<svg class="i"><use href="#${look.icon}"/></svg>`;
+    return dot;
+  }
+
+  function askFromHome(query) {
+    if (state.streaming) return;
+    if (state.mode === "hero") enterThreadMode();
+    sendChat(query);
+  }
+
+  // "all": one example each from tax, expense and assets; planning is the prompt.
+  function pickHomeSuggestions(cat) {
+    if (cat !== "all") {
+      const items = SUGGESTIONS.filter((s) => s.cat === cat);
+      return { tasks: items, prompt: items[0] };
     }
+    const firstOf = (c) => SUGGESTIONS.find((s) => s.cat === c);
+    return { tasks: ["tax", "expense", "asset"].map(firstOf), prompt: firstOf("planning") };
+  }
+
+  function renderSuggestions(cat) {
+    const { tasks, prompt } = pickHomeSuggestions(cat);
+    $("suggestionGrid").replaceChildren(...tasks.map((s) => el("button", {
+      type: "button", class: "suggestion-row", title: s.desc,
+      onclick: () => askFromHome(s.query),
+    }, iconDot(s.cat), el("span", { class: "suggestion-title" }, s.title))));
+    $("promptCard").textContent = prompt.query;
+    $("promptCard").onclick = () => askFromHome(prompt.query);
+    $("promptCardAsk").onclick = () => askFromHome(prompt.query);
   }
 
   function setupCategoryNav() {
-    document.querySelectorAll(".cat-link").forEach((link) =>
-      link.addEventListener("click", () => {
-        document.querySelectorAll(".cat-link").forEach((l) => l.classList.remove("is-active"));
-        link.classList.add("is-active");
-        renderSuggestions(link.dataset.cat);
-      }));
+    $("catSelect").addEventListener("change", (e) => renderSuggestions(e.target.value));
+  }
+
+  // Quick-action pills reuse existing flows: attach, bank upload tab, risk modal, LINE.
+  function setupHomeActions() {
+    $("pillAttach").addEventListener("click", () => { if (!state.streaming) $("chatFileInput").click(); });
+    $("pillStatement").addEventListener("click", () => { switchView("upload"); switchUploadMode("bank"); });
+    $("pillRisk").addEventListener("click", openRiskModal);
+    $("pillLine").addEventListener("click", openLineModal);
+    $("homeHealthOpen").addEventListener("click", () => switchView("dashboard"));
+    $("headNewChat").addEventListener("click", () => $("newChatBtn").click());
+  }
+
+  // ─── Home health card (same /dashboard report as the dashboard view) ───
+  const HEALTH_BAND_TEXT = (s) =>
+    s >= 80 ? "ดีเยี่ยม" : s >= 60 ? "พอใช้" : s >= 40 ? "ควรปรับปรุง" : "ต้องดูแลด่วน";
+
+  function setHomeHealth(score, savingsRate) {
+    const known = score !== null && score !== undefined;
+    $("homeHealthCard").classList.toggle("is-empty", !known);
+    $("homeScore").textContent = known ? String(Math.round(score)) : "—";
+    $("homeScoreUnit").hidden = !known;
+    const rate = savingsRate === null || savingsRate === undefined ? "" : ` · ออมได้ ${pct(savingsRate)}`;
+    $("homeStatus").textContent = known ? HEALTH_BAND_TEXT(score) + rate
+      : "ยังไม่มีข้อมูลเดือนนี้ แนบสลิปหรือพิมพ์รายจ่ายแรกได้เลย";
+  }
+
+  async function loadHomeHealth() {
+    const now = new Date();
+    try {
+      const report = await api("GET", "/dashboard", {
+        params: { user_id: state.userId, year: now.getFullYear(), month: now.getMonth() + 1 },
+      });
+      renderGauge(report.health_score ?? null, report.health_missing_data || []);
+      setHomeHealth(report.health_score ?? null, (report.monthly_overview || {}).savings_rate);
+    } catch (_err) {
+      setHomeHealth(null, null);
+    }
+  }
+
+  // ─── Theme (light / dark) ───
+  function applyTheme(theme) {
+    document.documentElement.dataset.theme = theme;
+    $("themeToggle").setAttribute("aria-pressed", String(theme === "dark"));
+    document.querySelector('meta[name="theme-color"]').content = theme === "dark" ? "#141518" : "#ffffff";
+    if (state.lastReport) {
+      renderExpenseChart(state.lastReport.expense_breakdown || {});
+      renderPortfolio(state.lastReport.investment_portfolio || {});
+    }
+  }
+
+  function setupThemeToggle() {
+    applyTheme(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+    $("themeToggle").addEventListener("click", () => {
+      const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      try { localStorage.setItem("pfai_theme", next); } catch (_) { /* storage blocked: this visit only */ }
+      applyTheme(next);
+    });
   }
 
   // ─── Dashboard ───
@@ -695,6 +883,7 @@
   }
 
   function renderDashboard(r) {
+    state.lastReport = r;
     const ov = r.monthly_overview || {};
     setStat("statIncome", ov.total_income);
     setStat("statExpense", ov.total_expenses);
@@ -702,6 +891,7 @@
     $("statRate").textContent = pct(ov.savings_rate);
 
     renderGauge(r.health_score ?? null, r.health_missing_data || []);
+    setHomeHealth(r.health_score ?? null, ov.savings_rate);
     renderPillars(r.health_pillars || {});
     renderExpenseChart(r.expense_breakdown || {});
     renderPortfolio(r.investment_portfolio || {});
@@ -800,12 +990,12 @@
       data: { labels, datasets: [{
         data,
         backgroundColor: CHART_PALETTE,
-        borderWidth: 2, borderColor: "#fdfbfa",
+        borderWidth: 2, borderColor: cssVar("--sheet"),
       }] },
       options: {
         responsive: true, maintainAspectRatio: false,
         plugins: { legend: { position: "right",
-          labels: { font: { family: CHART_FONT }, color: "#27251e" } } },
+          labels: { font: { family: CHART_FONT }, color: cssVar("--ink") } } },
       },
     });
   }
@@ -834,15 +1024,17 @@
           datasets: [{
             label: "มูลค่า",
             data: p.holdings.map((h) => Number(h.current_value ?? h.total_value ?? 0)),
-            backgroundColor: "#134611", borderRadius: 6,
+            backgroundColor: cssVar("--accent"), borderRadius: 6,
           }],
         },
         options: {
           responsive: true, maintainAspectRatio: false,
           plugins: { legend: { display: false } },
           scales: {
-            x: { ticks: { font: { family: CHART_FONT }, color: "#72706b" } },
-            y: { ticks: { font: { family: CHART_FONT }, color: "#72706b" } },
+            x: { ticks: { font: { family: CHART_FONT }, color: cssVar("--muted") },
+              grid: { color: cssVar("--line") } },
+            y: { ticks: { font: { family: CHART_FONT }, color: cssVar("--muted") },
+              grid: { color: cssVar("--line") } },
           },
         },
       });
@@ -891,14 +1083,25 @@
       list.append(el("li", { class: "notif-empty" }, "ไม่มีข้อสังเกตพิเศษ"));
       return;
     }
-    for (const h of highlights) {
-      list.append(el("li", { class: `highlight-item ${h.highlight_type || "info"}` },
-        el("div", {},
-          el("div", { class: "highlight-title" }, h.title || ""),
-          el("div", { class: "highlight-desc" }, h.description || ""),
-        ),
-      ));
-    }
+    for (const h of highlights) list.append(recommendationCard(h));
+  }
+
+  // ─── Beautiful UI "Recommendation Card": what we noticed + a next step ───
+  const HIGHLIGHT_LABELS = { achievement: "ทำได้ดี", warning: "ควรระวัง", info: "ข้อมูล" };
+
+  function recommendationCard(h) {
+    const type = HIGHLIGHT_LABELS[h.highlight_type] ? h.highlight_type : "info";
+    const ask = () => {
+      switchView("chat");
+      sendChat(`อธิบายเพิ่มเรื่อง "${h.title}" และควรทำอะไรต่อ`);
+    };
+    return el("li", { class: `highlight-item ${type}` },
+      el("div", { class: "highlight-head" },
+        el("span", { class: "highlight-tag" }, HIGHLIGHT_LABELS[type]),
+        el("div", { class: "highlight-title" }, h.title || "")),
+      el("div", { class: "highlight-desc" }, h.description || ""),
+      el("div", { class: "highlight-foot" },
+        el("button", { type: "button", class: "btn btn-secondary", onclick: ask }, "ถามผู้ช่วย")));
   }
 
   function destroyChart(name) {
@@ -964,15 +1167,38 @@
  || /\.(png|jpe?g|webp|heic|heif|pdf)$/i.test(file.name || "");
   }
 
+  // ─── Beautiful UI "Task Rows": progress of one file import ───
+  const IMPORT_STEPS = ["ส่งไฟล์", "อ่านรายการในไฟล์", "ผลลัพธ์"];
+
+  function setImportSteps(states, resultText) {
+    const list = $("importSteps");
+    list.hidden = false;
+    list.replaceChildren(...IMPORT_STEPS.map((label, i) => el("li", { class: "task-row is-" + states[i] },
+      el("span", { class: "task-state", "aria-hidden": "true" }),
+      el("span", { class: "task-label" }, i === 2 && resultText ? resultText : label),
+      el("span", { class: "task-status" }, TASK_STATUS_TEXT[states[i]]))));
+  }
+
+  const TASK_STATUS_TEXT = { waiting: "รอ", running: "กำลังทำ", done: "เสร็จ", failed: "ไม่สำเร็จ" };
+
+  function importResultText() {
+    const rows = $("recheckBody").querySelectorAll(".recheck-row").length;
+    if (rows) return `พบ ${rows} รายการ ตรวจด้านล่างก่อนบันทึก`;
+    return $("uploadResult").hidden ? "ไม่พบรายการ" : $("uploadResult").textContent;
+  }
+
   async function uploadFile(file) {
  const dz = $("dropzone");
  dz.classList.add("is-loading");
+ setImportSteps(["done", "running", "waiting"]);
  try {
  if (uploadMode === "scan" && isScanFile(file)) await scanReceipt(file);
  else if (uploadMode === "bank" && isPdfFile(file)) await importBankPdf(file, "");
  else if (uploadMode === "bank" && !isScanFile(file)) await importBankStatement(file);
- else toast("ประเภทไฟล์ไม่ตรงกับโหมดที่เลือก", true);
+ else { toast("ประเภทไฟล์ไม่ตรงกับโหมดที่เลือก", true); $("importSteps").hidden = true; return; }
+ setImportSteps(["done", "done", "done"], importResultText());
  } catch (e) {
+ setImportSteps(["done", "failed", "waiting"]);
  toast("บันทึกจากไฟล์ไม่สำเร็จ: " + e.message, true);
  } finally {
  dz.classList.remove("is-loading");
@@ -1036,8 +1262,8 @@
  });
  const r = $("uploadResult");
  r.hidden = false;
- r.textContent = `บันทึกแล้ว ${res.inserted} จาก ${res.total} รายการ`;
- toast(`บันทึกแล้ว ${res.inserted} รายการ`);
+ r.replaceChildren(savedMark(), `บันทึกแล้ว ${res.inserted} จาก ${res.total} รายการ`);
+ toast(`บันทึกแล้ว ${res.inserted} รายการ`, false, { saved: true });
   }
 
   // Send a slip/receipt image or PDF to the OCR endpoint (100 s timeout).
@@ -1058,7 +1284,7 @@
   async function scanReceipt(file) {
  const hint = $("dropzoneHint");
  const prevHint = hint ? hint.textContent : "";
- if (hint) hint.textContent = "กำลังอ่านสลิป/ใบเสร็จด้วย AI... อาจใช้เวลาสักครู่";
+ if (hint) hint.textContent = "กำลังอ่านสลิป/ใบเสร็จด้วย AI… อาจใช้เวลาสักครู่";
  try {
  const res = await fetchReceiptDrafts(file);
  $("uploadResult").hidden = true;
@@ -1081,6 +1307,8 @@
  body.innerHTML = "";
  drafts.forEach((draft) => body.append(buildRecheckRow(draft)));
  $("recheckArea").hidden = false;
+ if (!body.dataset.countBound) { bindSaveCount(body, $("confirmBtn")); body.dataset.countBound = "1"; }
+ announceRecheckChange(body);
   }
 
   function buildRecheckRow(draft) {
@@ -1099,12 +1327,30 @@
 
   // Own-account transfers start unticked: moving money between your own
   // accounts is not income or spending.
+  // Rows announce changes so the save button can show how many will be saved.
+  function announceRecheckChange(body) {
+    if (body) body.dispatchEvent(new Event("recheckchange"));
+  }
+
+  function bindSaveCount(body, button) {
+    const update = () => {
+      const count = collectRecheckRows(body).length;
+      button.textContent = count ? `บันทึก ${count} รายการ` : "ไม่มีรายการที่เลือก";
+      button.disabled = count === 0;
+    };
+    body.addEventListener("recheckchange", update);
+    update();
+  }
+
   function buildIncludeCell(draft, row) {
     const box = el("input", { type: "checkbox", class: "recheck-include",
       "aria-label": "บันทึกรายการนี้" });
     box.checked = !draft.own_transfer;
     row.classList.toggle("is-excluded", !box.checked);
-    box.addEventListener("change", () => row.classList.toggle("is-excluded", !box.checked));
+    box.addEventListener("change", () => {
+      row.classList.toggle("is-excluded", !box.checked);
+      announceRecheckChange(row.parentElement);
+    });
     const note = draft.own_transfer
       ? el("span", { class: "recheck-note" }, "โอนเข้าบัญชีตัวเอง") : null;
     return el("td", { class: "recheck-include-cell" }, box, note);
@@ -1151,7 +1397,7 @@
   function buildRemoveCell(row) {
  return el("td", { class: "recheck-remove-cell" },
  el("button", { type: "button", class: "recheck-remove", "aria-label": "ลบรายการ",
- onclick: () => row.remove() }, "✕"));
+ onclick: () => { const body = row.parentElement; row.remove(); announceRecheckChange(body); } }, "✕"));
   }
 
   function collectRecheckRows(body = $("recheckBody")) {
@@ -1180,7 +1426,7 @@
       const res = await api("POST", "/transactions/confirm", {
         json: { user_id: state.userId, transactions: rows },
       });
-      toast(`บันทึก ${res.inserted} จาก ${res.total} รายการ`);
+      toast(`บันทึก ${res.inserted} จาก ${res.total} รายการ`, false, { saved: true });
       clearRecheck();
       alignDashboardFilterTo(rows);
       switchView("dashboard");
@@ -1188,7 +1434,7 @@
       toast("บันทึกไม่สำเร็จ: " + e.message, true);
     } finally {
       btn.classList.remove("is-loading");
-      btn.disabled = false;
+      announceRecheckChange($("recheckBody"));
     }
   }
 
@@ -1208,6 +1454,7 @@
   function clearRecheck() {
  $("recheckBody").innerHTML = "";
  $("recheckArea").hidden = true;
+ $("importSteps").hidden = true;
   }
 
   // ─── Attach a file in chat (like GPT/Claude) ───
@@ -1275,7 +1522,7 @@
     form.append("file", file);
     const res = await api("POST", "/upload/bank-statement", { params: { user_id: state.userId }, form });
     await finishAttachment(file, bubble,
-      `บันทึกแล้ว **${res.inserted}** จาก ${res.total} รายการ จากไฟล์ธนาคาร ดูสรุปได้ที่แดชบอร์ด`);
+      `บันทึกแล้ว **${res.inserted}** จาก ${res.total} รายการ จากไฟล์ธนาคาร ดูสรุปได้ที่แดชบอร์ด`, { saved: true });
   }
 
   async function scanInChat(file, bubble) {
@@ -1293,15 +1540,16 @@
     const body = el("tbody");
     drafts.forEach((draft) => body.append(buildRecheckRow(draft)));
     const head = el("thead", {}, el("tr", {},
-      ...["ประเภท", "จำนวนเงิน", "วันที่", "หมวดหมู่", "รายละเอียด", ""].map((h) => el("th", {}, h))));
-    const saveBtn = el("button", { type: "button", class: "btn btn-primary" }, "บันทึกเลย");
+      ...["บันทึก", "ประเภท", "จำนวนเงิน", "วันที่", "หมวดหมู่", "รายละเอียด", ""].map((h) => el("th", {}, h))));
+    const saveBtn = el("button", { type: "button", class: "btn btn-primary" }, "บันทึก");
+    bindSaveCount(body, saveBtn);
     const cancelBtn = el("button", { type: "button", class: "btn btn-ghost" }, "ยกเลิก");
     saveBtn.addEventListener("click", () => saveChatRecheck(file, bubble, body, [saveBtn, cancelBtn]));
     cancelBtn.addEventListener("click", () =>
       finishAttachment(file, bubble, "ยกเลิกแล้ว ไม่ได้บันทึกรายการจากไฟล์นี้"));
     return el("div", { class: "chat-recheck" },
       el("p", { class: "chat-recheck-title" }, `AI กรอกให้ ${drafts.length} รายการ — เช็กให้ถูกก่อนบันทึก`),
-      el("p", { class: "chat-recheck-hint" }, "แก้หรือลบรายการได้ แล้วกด “บันทึกเลย”"),
+      el("p", { class: "chat-recheck-hint" }, "แก้หรือลบรายการได้ ติ๊กออกถ้าไม่ต้องการบันทึก"),
       el("div", { class: "recheck-table-wrap" }, el("table", { class: "recheck-table" }, head, body)),
       el("div", { class: "recheck-actions" }, saveBtn, cancelBtn));
   }
@@ -1315,7 +1563,7 @@
         json: { user_id: state.userId, transactions: rows },
       });
       alignDashboardFilterTo(rows);
-      await finishAttachment(file, bubble, savedRowsSummary(res, rows));
+      await finishAttachment(file, bubble, savedRowsSummary(res, rows), { saved: true });
     } catch (e) {
       toast("บันทึกไม่สำเร็จ: " + e.message, true);
       buttons.forEach((b) => { b.disabled = false; });
@@ -1332,9 +1580,10 @@
     return [`บันทึกแล้ว **${res.inserted}** จาก ${res.total} รายการ`, ...lines].join("\n");
   }
 
-  async function finishAttachment(file, bubble, summary) {
+  async function finishAttachment(file, bubble, summary, { saved = false } = {}) {
     bubble.classList.remove("msg-cursor");
     bubble.innerHTML = renderMarkdown(summary);
+    if (saved) bubble.prepend(savedMark());
     appendIntentExtras(bubble.closest(".msg"), "upload");
     if (!state.conversationId) return;
     try {
@@ -1475,13 +1724,14 @@
   }
 
   function buildWatchlistRow(row) {
-    return el("li", {
-      class: "watchlist-item watchlist-item-clickable",
-      title: "คลิกเพื่อดึงราคาและข่าวล่าสุด",
-      onclick: () => fetchAssetData(row.symbol, row.name),
-    },
-      el("span", { class: "watchlist-symbol" }, row.symbol || "—"),
-      el("span", { class: "watchlist-name" }, row.name || ""),
+    return el("li", { class: "watchlist-item watchlist-item-clickable" },
+      el("button", {
+        type: "button", class: "watchlist-open",
+        title: "ดึงราคาและข่าวล่าสุด",
+        onclick: () => fetchAssetData(row.symbol, row.name),
+      },
+        el("span", { class: "watchlist-symbol" }, row.symbol || "—"),
+        el("span", { class: "watchlist-name" }, row.name || "")),
       el("button", {
         type: "button", class: "watchlist-remove",
         "aria-label": `ตัด ${row.name || row.symbol} ออกจากรายการ`,
@@ -1681,6 +1931,7 @@
     $("riskSkipLink").hidden = false;
     $("riskModal").hidden = false;
     renderRiskStep();
+    $("riskSkipLink").focus();
   }
 
   function closeRiskModal() {
@@ -1863,6 +2114,7 @@
     $("unlinkLineBtn").addEventListener("click", unlinkLineFromWeb);
     $("healthChip").addEventListener("click", () => switchView("dashboard"));
     $("menuToggle").addEventListener("click", () => $("sidebar").classList.toggle("open"));
+    bindOverlayDismissal();
   }
 
   // ─── Init ───
@@ -1872,12 +2124,15 @@
     setupSidebar();
     setupComposer();
     setupCategoryNav();
+    setupHomeActions();
+    setupThemeToggle();
     setupUpload();
     setupChatAttach();
     setupAssets();
     setupRiskAssessment();
     maybeShowRiskAssessment();
     renderSuggestions("all");
+    loadHomeHealth();
     await loadConversations();
     if (state.conversationId) selectConversation(state.conversationId, "");
     else enterHeroMode();

@@ -25,7 +25,7 @@ class TestFrontendServing:
         response = self.client.get("/static/styles.css")
         assert response.status_code == 200
         assert "text/css" in response.headers.get("content-type", "")
-        assert "--color-parchment" in response.text
+        assert "--canvas:" in response.text
 
     def test_static_js_served(self) -> None:
         """GET /static/app.js returns JavaScript."""
@@ -486,3 +486,175 @@ class TestBankStatementPdfUpload:
         assert "/upload/bank-statement/pdf" in js
         assert "pdf_password_required" in js
         assert "box.checked = !draft.own_transfer;" in js
+
+
+class TestDesignPolish:
+    """Accessibility and motion fixes from the design polish pass (4.9)."""
+
+    client: TestClient = TestClient(app)
+
+    def test_conversation_and_watchlist_rows_open_with_a_button(self) -> None:
+        """Opening a chat or a watched asset works by keyboard (a real button)."""
+        response = self.client.get("/static/app.js")
+        assert 'el("button", { class: "conv-text", type: "button" }' in response.text
+        assert 'class: "watchlist-open"' in response.text
+        assert "onclick: () => fetchAssetData(row.symbol, row.name)" in response.text
+
+    def test_escape_and_outside_tap_dismiss_overlays(self) -> None:
+        """Escape closes the top overlay; tapping outside closes the mobile sidebar."""
+        response = self.client.get("/static/app.js")
+        assert "function closeTopOverlay()" in response.text
+        assert "bindOverlayDismissal();" in response.text
+
+    def test_styles_define_every_token_they_use(self) -> None:
+        """No var(--x) refers to a custom property that styles.css never defines."""
+        import re
+
+        css = self.client.get("/static/styles.css").text
+        defined = set(re.findall(r"(--[\w-]+)\s*:", css))
+        used = set(re.findall(r"var\((--[\w-]+)", css))
+        assert used - defined == set()
+
+    def test_styles_have_base_focus_ring_and_coarse_targets(self) -> None:
+        """Every control gets a focus ring; touch targets grow on coarse pointers."""
+        css = self.client.get("/static/styles.css").text
+        assert ":where(button, a, [tabindex], summary, select):focus-visible" in css
+        assert "@media (pointer: coarse)" in css
+
+    def test_styles_animate_entrances_with_starting_style(self) -> None:
+        """Modals, undo toast and citation popover fade in via @starting-style."""
+        css = self.client.get("/static/styles.css").text
+        assert css.count("@starting-style") >= 4
+        assert "@media (prefers-reduced-motion: reduce)" in css
+
+    def test_index_declares_theme_color(self) -> None:
+        """The browser chrome matches the light shell; JS switches it in dark mode."""
+        response = self.client.get("/")
+        assert '<meta name="theme-color" content="#ffffff" />' in response.text
+
+
+class TestDesignV2:
+    """v2 redesign (designref/v2_design.md): Orbita shell, Lucide icons, light/dark."""
+
+    client: TestClient = TestClient(app)
+
+    def test_emblem_and_favicon_are_served(self) -> None:
+        """The full emblem is the logo; a small copy is the favicon."""
+        html = self.client.get("/").text
+        assert 'class="rail-logo" src="emblem.png"' in html
+        assert 'rel="icon" type="image/png" href="favicon.png"' in html
+        for asset in ("/emblem.png", "/favicon.png"):
+            response = self.client.get(asset)
+            assert response.status_code == 200
+            assert response.headers["content-type"] == "image/png"
+
+    def test_icons_come_from_the_lucide_sprite(self) -> None:
+        """Icons are Lucide symbols referenced with <use>, licence noted."""
+        html = self.client.get("/").text
+        assert "Lucide v0.469.0" in html and "ISC" in html
+        assert '<symbol id="i-chat"' in html
+        assert '<use href="#i-chat"/>' in html
+
+    def test_theme_is_light_unless_user_picked_dark(self) -> None:
+        """A head script starts light and switches only on a saved "dark" choice."""
+        html = self.client.get("/").text
+        head = html[: html.index("</head>")]
+        assert 'var theme = "light";' in head
+        assert 'localStorage.getItem("pfai_theme") === "dark"' in head
+        assert "prefers-color-scheme" not in head
+        assert 'id="themeToggle"' in html
+
+    def test_every_light_colour_has_a_dark_value(self) -> None:
+        """Each colour token in :root is redefined for the dark theme."""
+        import re
+
+        css = self.client.get("/static/styles.css").text
+        light_block = css[css.index(":root {") : css.index("/* ── Typography ── */")]
+        dark_block = css[css.index(':root[data-theme="dark"] {') :]
+        dark_block = dark_block[: dark_block.index("}")]
+        light = set(re.findall(r"(--[\w-]+)\s*:", light_block))
+        dark = set(re.findall(r"(--[\w-]+)\s*:", dark_block))
+        assert light - dark == set()
+
+    def test_app_js_wires_theme_home_and_panel(self) -> None:
+        """Theme toggle, home actions and the chat panel are wired in app.js."""
+        js = self.client.get("/static/app.js").text
+        assert "function applyTheme" in js and "function setupThemeToggle" in js
+        assert "function setupHomeActions" in js and "function loadHomeHealth" in js
+        assert '$("app").classList.toggle("no-panel", !hasPanel)' in js
+        assert 'cssVar("--accent")' in js
+        assert "#134611" not in js
+
+
+class TestBeautifulUiComponents:
+    """Phase 2: Beautiful UI behaviours wired into the real app."""
+
+    client: TestClient = TestClient(app)
+
+    def test_chat_answers_get_thinking_trace_actions_and_follow_ups(self) -> None:
+        """Live answers show a loader, then a trace, a copy action and follow-ups."""
+        js = self.client.get("/static/app.js").text
+        assert "function thinkingRow" in js and "function traceDetails" in js
+        assert "function answerActions" in js and "function followUps" in js
+        assert "const FOLLOW_UPS = {" in js
+        assert "finishLiveAnswer(assistantBubble" in js
+
+    def test_review_table_save_button_counts_selected_rows(self) -> None:
+        """The save button names how many rows will be saved."""
+        js = self.client.get("/static/app.js").text
+        assert "function bindSaveCount" in js
+        assert "บันทึก ${count} รายการ" in js
+        css = self.client.get("/static/styles.css").text
+        assert ".recheck-row.is-excluded .recheck-input { text-decoration: line-through; }" in css
+
+    def test_chat_review_card_header_matches_its_columns(self) -> None:
+        """The in-chat review table has a header for the include column too."""
+        js = self.client.get("/static/app.js").text
+        assert '["บันทึก", "ประเภท", "จำนวนเงิน", "วันที่", "หมวดหมู่", "รายละเอียด", ""]' in js
+
+    def test_file_imports_show_task_rows(self) -> None:
+        """Uploads show send → read → result progress rows."""
+        html = self.client.get("/").text
+        assert 'id="importSteps"' in html
+        js = self.client.get("/static/app.js").text
+        assert "function setImportSteps" in js
+        assert 'setImportSteps(["done", "failed", "waiting"])' in js
+
+    def test_highlights_render_as_recommendation_cards(self) -> None:
+        """Dashboard highlights get a type label and an ask-the-assistant action."""
+        js = self.client.get("/static/app.js").text
+        assert "function recommendationCard" in js
+        assert "ถามผู้ช่วย" in js
+
+    def test_guru_descriptions_are_not_clamped(self) -> None:
+        """Guru taglines show in full so people can choose by reading them."""
+        css = self.client.get("/static/styles.css").text
+        start = css.index(".guru-card-tagline {")
+        rule = css[start : css.index("}", start)]
+        assert "line-clamp" not in rule
+
+
+class TestMotionAdditions:
+    """Animation-skill picks: guru answers fade in; saved confirmations draw a check."""
+
+    client: TestClient = TestClient(app)
+
+    def test_guru_panel_answers_fade_in_as_they_arrive(self) -> None:
+        """Each guru card and the comparison summary fade in when filled."""
+        js = self.client.get("/static/guru.js").text
+        assert 'body.classList.add("fade-in")' in js
+        assert '.classList.add("guru-synthesis", "fade-in")' in js
+
+    def test_saved_confirmations_show_a_drawn_check(self) -> None:
+        """Toasts and chat summaries for saved rows carry the check mark."""
+        js = self.client.get("/static/app.js").text
+        assert "function savedMark" in js
+        assert js.count("{ saved: true }") >= 4
+        css = self.client.get("/static/styles.css").text
+        assert "@keyframes saved-tick" in css
+
+    def test_chat_answer_loader_settles_into_the_trace(self) -> None:
+        """The loader row is replaced by the trace in place (no layout jump)."""
+        js = self.client.get("/static/app.js").text
+        assert "live.thinking.settle(traceDetails(" in js
+        assert "thinking.answering()" in js
