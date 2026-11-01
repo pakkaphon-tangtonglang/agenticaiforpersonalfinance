@@ -576,12 +576,13 @@ class TestDesignV2:
         dark = set(re.findall(r"(--[\w-]+)\s*:", dark_block))
         assert light - dark == set()
 
-    def test_app_js_wires_theme_home_and_panel(self) -> None:
-        """Theme toggle, home actions and the chat panel are wired in app.js."""
+    def test_app_js_wires_theme_home_and_sidebar(self) -> None:
+        """Theme toggle, home actions and the sidebar collapse are wired in app.js."""
         js = self.client.get("/static/app.js").text
         assert "function applyTheme" in js and "function setupThemeToggle" in js
         assert "function setupHomeActions" in js and "function loadHomeHealth" in js
-        assert '$("app").classList.toggle("no-panel", !hasPanel)' in js
+        assert "function setupSidebarCollapse" in js
+        assert "no-panel" not in js
         assert 'cssVar("--accent")' in js
         assert "#134611" not in js
 
@@ -658,3 +659,27 @@ class TestMotionAdditions:
         js = self.client.get("/static/app.js").text
         assert "live.thinking.settle(traceDetails(" in js
         assert "thinking.answering()" in js
+
+
+class TestSingleSidebar:
+    """One sidebar on every page (ChatGPT/Claude style), collapsible to icons."""
+
+    client: TestClient = TestClient(app)
+
+    def test_sidebar_holds_menu_history_and_account(self) -> None:
+        """Menu labels, chat history and the account menu live in one sidebar."""
+        html = self.client.get("/").text
+        sidebar = html[
+            html.index('<div class="sidebar" id="sidebar">') : html.index("<!-- Main canvas -->")
+        ]
+        assert '<span class="nav-label">แดชบอร์ด</span>' in sidebar
+        assert 'id="convList"' in sidebar and 'id="newChatBtn"' in sidebar
+        assert 'id="sidebarCollapse"' in sidebar and 'class="user-menu"' in sidebar
+
+    def test_collapsed_state_is_applied_before_first_paint(self) -> None:
+        """The saved collapsed state is set in <head>, so the layout never jumps."""
+        html = self.client.get("/").text
+        head = html[: html.index("</head>")]
+        assert 'localStorage.getItem("pfai_sidebar") === "collapsed"' in head
+        css = self.client.get("/static/styles.css").text
+        assert ':root[data-sidebar="collapsed"] .app' in css

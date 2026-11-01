@@ -342,9 +342,7 @@
     document.querySelectorAll(".nav-item").forEach((n) =>
       n.classList.toggle("is-active", n.dataset.view === name));
     $("minibarTitle").textContent = VIEW_TITLES[name] || name;
-    const hasPanel = name === "chat" || name === "guru";
-    $("app").classList.toggle("no-panel", !hasPanel);
-    $("headNewChat").hidden = !hasPanel;
+    $("headNewChat").hidden = !(name === "chat" || name === "guru");
     if (name === "assets") { loadNotifications(); loadWatchlist(); }
     if (name === "dashboard") loadDashboard();
     if (name === "guru" && window.GuruView) window.GuruView.open();
@@ -819,6 +817,23 @@
     } catch (_err) {
       setHomeHealth(null, null);
     }
+  }
+
+  // ─── Sidebar collapse (remembered; applied before first paint in index.html) ───
+  function setSidebarCollapsed(collapsed) {
+    if (collapsed) document.documentElement.dataset.sidebar = "collapsed";
+    else delete document.documentElement.dataset.sidebar;
+    $("sidebarCollapse").setAttribute("aria-expanded", String(!collapsed));
+    $("sidebarCollapse").setAttribute("aria-label", collapsed ? "ขยายแถบด้านข้าง" : "พับแถบด้านข้าง");
+  }
+
+  function setupSidebarCollapse() {
+    setSidebarCollapsed(document.documentElement.dataset.sidebar === "collapsed");
+    $("sidebarCollapse").addEventListener("click", () => {
+      const collapse = document.documentElement.dataset.sidebar !== "collapsed";
+      try { localStorage.setItem("pfai_sidebar", collapse ? "collapsed" : "open"); } catch (_) { /* this visit only */ }
+      setSidebarCollapsed(collapse);
+    });
   }
 
   // ─── Theme (light / dark) ───
@@ -2126,6 +2141,7 @@
     setupCategoryNav();
     setupHomeActions();
     setupThemeToggle();
+    setupSidebarCollapse();
     setupUpload();
     setupChatAttach();
     setupAssets();
