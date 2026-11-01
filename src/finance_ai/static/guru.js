@@ -250,7 +250,7 @@
       "", `**เห็นตรงกัน:** ${clean(synthesis.consensus)}`,
       `**เห็นต่าง:** ${clean(synthesis.differences)}`].join("\n");
     const bubble = appendMessage("assistant", markdown, "");
-    bubble.closest(".msg").classList.add("guru-synthesis");
+    bubble.closest(".msg").classList.add("guru-synthesis", "fade-in");
     bubble.closest(".msg").querySelector(".msg-role").textContent = "สรุปเปรียบเทียบ";
   }
 
@@ -277,6 +277,7 @@
         if (!body) return;
         body.classList.remove("msg-cursor");
         body.innerHTML = failed ? "ตอบไม่สำเร็จ" : app().renderMarkdown(data.content);
+        body.classList.add("fade-in"); // each guru's answer arrives on its own
         if (!failed) app().attachSources(body, data.content, data.sources, body.closest(".guru-panel-card"));
       };
       source.addEventListener("guru_answer", (ev) => settle(ev, false));
