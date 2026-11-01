@@ -42,9 +42,18 @@
   }
 
   // ─── List ───
+  // Each row sits in a wrapper that folds closed (grid-template-rows 1fr → 0fr)
+  // when the filter hides it or it is deleted, so the list never jumps.
   function entryRow(entry) {
     const el = app().el;
-    return el("li", { class: `history-row is-${entry.transaction_type}`, dataset: { id: entry.id } },
+    const item = el("li", { class: "history-item", dataset: { id: entry.id, kind: entry.transaction_type } },
+      el("div", { class: "history-clip" }, entryContent(entry)));
+    return item;
+  }
+
+  function entryContent(entry) {
+    const el = app().el;
+    return el("div", { class: `history-row is-${entry.transaction_type}` },
       el("span", { class: "history-date" }, shortDate(entry.transaction_date)),
       el("span", { class: "history-main" },
         el("span", { class: "history-category" }, entry.category_label),
@@ -60,10 +69,31 @@
   function renderList(page) {
     history.entries = page.entries;
     $("historyList").replaceChildren(...page.entries.map(entryRow));
-    $("historyCount").textContent = String(page.entries.length);
-    $("historyEmpty").hidden = page.entries.length > 0;
     $("historyTotals").textContent =
       `รายรับ ${app().thb(page.total_income)} · รายจ่าย ${app().thb(page.total_expense)}`;
+    applyFilter();
+  }
+
+  function setFolded(item, reason, folded) {
+    item.classList.toggle(reason, folded);
+    item.inert = item.classList.contains("is-filtered") || item.classList.contains("is-removed");
+  }
+
+  // Show the selected kind, update the chip counts and the empty note.
+  function applyFilter() {
+    const items = [...document.querySelectorAll("#historyList .history-item")];
+    for (const item of items) {
+      setFolded(item, "is-filtered", history.kind !== "all" && item.dataset.kind !== history.kind);
+    }
+    const live = items.filter((item) => !item.classList.contains("is-removed"));
+    const counts = { all: live.length, income: 0, expense: 0 };
+    live.forEach((item) => { counts[item.dataset.kind] += 1; });
+    document.querySelectorAll(".history-filter-count").forEach((badge) => {
+      badge.textContent = String(counts[badge.closest(".history-filter").dataset.kind] || 0);
+    });
+    const shown = counts[history.kind] || 0;
+    $("historyCount").textContent = String(shown);
+    $("historyEmpty").hidden = shown > 0;
   }
 
   async function load(year, month) {
@@ -71,7 +101,7 @@
     history.month = month;
     try {
       const page = await app().api("GET", "/transactions", {
-        params: { user_id: app().getUserId(), year, month, type: history.kind },
+        params: { user_id: app().getUserId(), year, month, type: "all" },
       });
       renderList(page);
     } catch (e) {
@@ -86,7 +116,7 @@
       b.classList.toggle("is-active", on);
       b.setAttribute("aria-pressed", String(on));
     });
-    load(history.year, history.month);
+    applyFilter();
   }
 
   // ─── Add / edit form ───
@@ -199,8 +229,9 @@
 
   function removeWithUndo(entry) {
     if (pending.id) commitPendingDelete();
-    const row = document.querySelector(`.history-row[data-id='${entry.id}']`);
-    if (row) row.hidden = true;
+    const row = document.querySelector(`.history-item[data-id='${entry.id}']`);
+    if (row) setFolded(row, "is-removed", true);
+    applyFilter();
     pending.id = entry.id;
     pending.row = row;
     $("undoToastText").textContent = `ลบ "${entry.description || entry.category_label}" แล้ว`;
@@ -209,7 +240,8 @@
   }
 
   function undoDelete() {
-    if (pending.row) pending.row.hidden = false;
+    if (pending.row) setFolded(pending.row, "is-removed", false);
+    applyFilter();
     pending.id = "";
     pending.row = null;
     hideUndoToast();

@@ -166,6 +166,9 @@ class TestAssetFetchCardsAndWatchlist:
                 r"app\.js",
                 r"guru\.js",
                 r"history\.js",
+                r"conv_search\.js",
+                r"ask_about\.js",
+                r"insights\.js",
             )
         }
         assert len(versions) == 1, f"static assets use different versions: {versions}"
@@ -707,3 +710,67 @@ class TestSingleSidebar:
         assert 'localStorage.getItem("pfai_sidebar") === "collapsed"' in head
         css = self.client.get("/static/styles.css").text
         assert ':root[data-sidebar="collapsed"] .app' in css
+
+
+class TestAnimationPass:
+    """designref/animation.md: theme reveal, chat search, history fold, sources, ask bar, insights."""
+
+    client: TestClient = TestClient(app)
+
+    def test_theme_reveals_from_bottom_left_with_fallback(self) -> None:
+        """The circle grows from the bottom-left; no API or reduced motion → instant."""
+        js = self.client.get("/static/app.js").text
+        assert "document.startViewTransition" in js
+        assert "prefers-reduced-motion: reduce" in js
+        assert 'pseudoElement: "::view-transition-new(root)"' in js
+        assert "::view-transition-new(root)" in self.client.get("/static/styles.css").text
+
+    def test_sidebar_search_markup_and_wiring(self) -> None:
+        """The history header has a search field; app.js filters and marks matches."""
+        html = self.client.get("/").text
+        for element_id in ("convSearchOpen", "convSearch", "convSearchInput", "convSearchClose"):
+            assert f'id="{element_id}"' in html
+        js = self.client.get("/static/app.js").text
+        assert "function setupConvSearch()" in js and "setupConvSearch();" in js
+        assert "window.ConvSearch.matches(searchableText(conv, options)" in js
+        assert 'class: "conv-glide"' in js
+
+    def test_guru_history_search_uses_aliases(self) -> None:
+        """Guru chats are found by Thai or English guru name."""
+        js = self.client.get("/static/guru.js").text
+        assert "searchText: (conv) => guruSearchWords(conv.guru_id)" in js
+        assert "persona.aliases" in js
+
+    def test_history_rows_fold_and_chips_are_coloured(self) -> None:
+        """Filtering folds rows client-side; chips show counts; expenses are red."""
+        html = self.client.get("/").text
+        assert html.count('class="history-filter-count"') == 3
+        js = self.client.get("/static/history.js").text
+        assert "function applyFilter()" in js
+        assert 'type: "all"' in js
+        css = self.client.get("/static/styles.css").text
+        assert (
+            ".history-item.is-filtered, .history-item.is-removed { grid-template-rows: 0fr;" in css
+        )
+        assert ".history-row.is-expense .history-amount { color: var(--exp); }" in css
+        assert '.history-filter[data-kind="expense"] { --chip-bg: var(--exp-bg);' in css
+
+    def test_source_chips_arrive_staggered(self) -> None:
+        """Each visible source chip gets its own entrance delay."""
+        js = self.client.get("/static/citations.js").text
+        assert 'node.style.setProperty("--cite-i", String(i))' in js
+        assert "animation: cite-rise" in self.client.get("/static/styles.css").text
+
+    def test_ask_bar_keeps_highlight_until_dismissed(self) -> None:
+        """The picked text is pinned with the Highlight API and sent to chat or Guru."""
+        js = self.client.get("/static/ask_about.js").text
+        assert "CSS.highlights.set(HIGHLIGHT_NAME" in js
+        assert "root.FinanceApp.sendChat(message)" in js and "root.GuruView.send(message)" in js
+        assert "::highlight(ask-pin)" in self.client.get("/static/styles.css").text
+
+    def test_insight_cards_load_with_the_dashboard(self) -> None:
+        """The carousel markup exists and loads /dashboard/trends with the month."""
+        html = self.client.get("/").text
+        assert 'id="insightCard"' in html and 'id="insightBody"' in html
+        assert '"/dashboard/trends"' in self.client.get("/static/insights.js").text
+        assert "window.InsightCards.load(year, month)" in self.client.get("/static/app.js").text

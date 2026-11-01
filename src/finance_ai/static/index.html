@@ -19,18 +19,21 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css?v=30" />
+<link rel="stylesheet" href="styles.css?v=31" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
-<script src="chat_format.js?v=30" defer></script>
-<script src="citations.js?v=30" defer></script>
-<script src="tool_chips.js?v=30" defer></script>
-<script src="app.js?v=30" defer></script>
-<script src="alerts.js?v=30" defer></script>
-<script src="search_clarify.js?v=30" defer></script>
-<script src="guru.js?v=30" defer></script>
-<script src="history.js?v=30" defer></script>
+<script src="chat_format.js?v=31" defer></script>
+<script src="citations.js?v=31" defer></script>
+<script src="tool_chips.js?v=31" defer></script>
+<script src="conv_search.js?v=31" defer></script>
+<script src="app.js?v=31" defer></script>
+<script src="alerts.js?v=31" defer></script>
+<script src="search_clarify.js?v=31" defer></script>
+<script src="guru.js?v=31" defer></script>
+<script src="ask_about.js?v=31" defer></script>
+<script src="history.js?v=31" defer></script>
+<script src="insights.js?v=31" defer></script>
 </head>
 <body>
 <a href="#main" class="skip-link">ข้ามไปยังเนื้อหาหลัก</a>
@@ -60,6 +63,10 @@
   <symbol id="i-panel" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" /> <path d="M9 3v18" /></symbol>
   <symbol id="i-bell" viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0" /> <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" /></symbol>
   <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8" /> <path d="m21 21-4.3-4.3" /></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18" /> <path d="m6 6 12 12" /></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M12 20h9" /> <path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z" /></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6" /></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6" /></symbol>
 </svg>
 
 <!-- ───────────── App Shell ───────────── -->
@@ -97,7 +104,21 @@
       <button class="conv-new" id="newChatBtn" type="button" data-label="แชทใหม่">
         <svg class="i" aria-hidden="true"><use href="#i-plus"/></svg><span class="nav-label">แชทใหม่</span>
       </button>
-      <h2 class="conv-heading" id="convHeading">ประวัติแชท</h2>
+      <div class="conv-head" id="convHead">
+        <h2 class="conv-heading" id="convHeading">ประวัติแชท</h2>
+        <button class="conv-search-open" id="convSearchOpen" type="button" aria-label="ค้นหาแชท"
+          aria-expanded="false" aria-controls="convSearch">
+          <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+        </button>
+        <div class="conv-search" id="convSearch" role="search">
+          <svg class="i" aria-hidden="true"><use href="#i-search"/></svg>
+          <input class="conv-search-input" id="convSearchInput" type="text" placeholder="ค้นหาแชท"
+            aria-label="ค้นหาประวัติแชท" autocomplete="off" tabindex="-1" />
+          <button class="conv-search-close" id="convSearchClose" type="button" aria-label="ปิดการค้นหา" tabindex="-1">
+            <svg class="i" aria-hidden="true"><use href="#i-x"/></svg>
+          </button>
+        </div>
+      </div>
       <ul class="conv-list" id="convList" aria-label="รายการบทสนทนา"></ul>
     </section>
 
@@ -319,6 +340,18 @@
             </div>
           </div>
 
+          <section class="chart-card insight-card" id="insightCard" aria-labelledby="insightTitle" hidden>
+            <div class="insight-head">
+              <h3 class="card-title" id="insightTitle">ข้อมูลเชิงลึก <span class="insight-count" id="insightCount">0</span></h3>
+              <span class="insight-pager" id="insightPager">
+                <button type="button" class="insight-nav" id="insightPrev" aria-label="การ์ดก่อนหน้า"><svg class="i" aria-hidden="true"><use href="#i-left"/></svg></button>
+                <button type="button" class="insight-nav" id="insightNext" aria-label="การ์ดถัดไป"><svg class="i" aria-hidden="true"><use href="#i-right"/></svg></button>
+              </span>
+            </div>
+            <div class="insight-body" id="insightBody" aria-live="polite"></div>
+            <div class="insight-dots" id="insightDots" aria-hidden="true"></div>
+          </section>
+
           <div class="charts-grid">
             <div class="chart-card">
               <h3 class="card-title">รายจ่ายแยกตามหมวดหมู่</h3>
@@ -336,9 +369,9 @@
               <button class="btn history-add" id="historyAdd" type="button">+ เพิ่มรายการ</button>
             </div>
             <div class="history-filters" role="group" aria-label="กรองรายการ">
-              <button type="button" class="history-filter is-active" data-kind="all" aria-pressed="true">ทั้งหมด</button>
-              <button type="button" class="history-filter" data-kind="income" aria-pressed="false">รายรับ</button>
-              <button type="button" class="history-filter" data-kind="expense" aria-pressed="false">รายจ่าย</button>
+              <button type="button" class="history-filter is-active" data-kind="all" aria-pressed="true">ทั้งหมด<span class="history-filter-count">0</span></button>
+              <button type="button" class="history-filter" data-kind="income" aria-pressed="false"><span class="history-filter-dot" aria-hidden="true"></span>รายรับ<span class="history-filter-count">0</span></button>
+              <button type="button" class="history-filter" data-kind="expense" aria-pressed="false"><span class="history-filter-dot" aria-hidden="true"></span>รายจ่าย<span class="history-filter-count">0</span></button>
             </div>
             <p class="history-totals" id="historyTotals"></p>
             <ul class="history-list" id="historyList" aria-live="polite"></ul>

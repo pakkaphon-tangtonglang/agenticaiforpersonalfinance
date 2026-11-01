@@ -42,6 +42,13 @@
     return guru.byId[guruId] ? guru.byId[guruId].display_name : guruId;
   }
 
+  // Extra words the sidebar search matches: the guru id plus its Thai/English aliases.
+  function guruSearchWords(guruId) {
+    if (guruId === PANEL_ID) return "panel วงกูรู";
+    const persona = guru.byId[guruId];
+    return [guruId, ...(persona && persona.aliases ? persona.aliases : [])].join(" ");
+  }
+
   function scrollThread() {
     const thread = $("guruThread");
     thread.scrollTop = thread.scrollHeight;
@@ -146,6 +153,7 @@
       onDeleted: (conv) => { if (conv.id === guru.conversationId) startFresh(); },
       leading: historyAvatar,
       subtitle: (conv) => guruName(conv.guru_id),
+      searchText: (conv) => guruSearchWords(conv.guru_id),
     });
   }
 
@@ -370,5 +378,5 @@
     renderHistory();
   }
 
-  window.GuruView = { open, loadHistory, newChat };
+  window.GuruView = { open, loadHistory, newChat, send, isBusy: () => guru.streaming };
 })();

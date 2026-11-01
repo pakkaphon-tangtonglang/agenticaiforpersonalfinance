@@ -141,11 +141,13 @@
     sources.forEach((source, i) => {
       const node = chip(source);
       if (i >= VISIBLE_CHIPS) node.hidden = true;
+      else node.style.setProperty("--cite-i", String(i));  // staggered entrance (styles.css)
       row.append(node);
     });
     if (sources.length > VISIBLE_CHIPS) {
       const more = h("button", { type: "button", class: "cite-more", "aria-label": "แสดงแหล่งที่มาทั้งหมด" },
         `+${sources.length - VISIBLE_CHIPS}`);
+      more.style.setProperty("--cite-i", String(VISIBLE_CHIPS));
       more.addEventListener("click", () => {
         row.querySelectorAll(".cite-chip[hidden]").forEach((node) => { node.hidden = false; });
         more.remove();
