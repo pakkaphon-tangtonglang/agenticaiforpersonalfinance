@@ -155,11 +155,18 @@ class TestAssetFetchCardsAndWatchlist:
     client: TestClient = TestClient(app)
 
     def test_index_cache_busts_static_assets_with_one_version(self) -> None:
-        """styles.css, citations.js, app.js and guru.js share the same ?v= cache-buster."""
+        """All local CSS/JS files share the same ?v= cache-buster."""
         response = self.client.get("/")
         versions = {
             re.search(rf'{asset}\?v=(\d+)"', response.text).group(1)  # type: ignore[union-attr]
-            for asset in (r"styles\.css", r"citations\.js", r"app\.js", r"guru\.js", r"history\.js")
+            for asset in (
+                r"styles\.css",
+                r"chat_format\.js",
+                r"citations\.js",
+                r"app\.js",
+                r"guru\.js",
+                r"history\.js",
+            )
         }
         assert len(versions) == 1, f"static assets use different versions: {versions}"
         assert "?v=4" not in response.text

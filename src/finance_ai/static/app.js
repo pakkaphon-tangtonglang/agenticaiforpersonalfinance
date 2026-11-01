@@ -258,11 +258,11 @@
     catch (_) { return String(link).slice(0, 60); }
   }
 
-  // Normalize model output before markdown parsing so chat bubbles never
-  // show stray blank space: collapse runs of 3+ newlines to one paragraph
-  // break, normalize CRLF, and trim the edges. Matches how GPT/Claude
-  // render — a single newline is a soft wrap, not a hard break.
+  // Normalize model output before markdown parsing (chat_format.js): collapse
+  // stray blank lines and keep "• a" / "✅ a" / "**label:**" items on their
+  // own lines. Falls back to the basic cleanup if that script did not load.
   function normalizeForChat(text) {
+    if (window.ChatFormat) return window.ChatFormat.normalizeForChat(text);
     return String(text == null ? "" : text)
       .replace(/\r\n/g, "\n")
       .replace(/\n{3,}/g, "\n\n")
