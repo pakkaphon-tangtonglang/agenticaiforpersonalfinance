@@ -551,6 +551,7 @@ class TestHoldingsEndpoint:
             )
             session.commit()
         rows = client.get("/assets/holdings", params={"user_id": user_id}).json()
+        assert rows[0].pop("holding_id")  # each row carries its id for edit/delete
         assert rows == [
             {
                 "symbol": "PTT.BK",
@@ -842,3 +843,90 @@ class TestFundsOnAssetPage:
 
         assert rows[0]["unrealized_gain_loss"] == "40.00"
         assert not yahoo_symbols
+
+
+class TestEditDeleteHoldingEndpoints:
+    """PATCH/DELETE /assets/holdings/{holding_id} (edit or remove a portfolio row)."""
+
+    @staticmethod
+    def _add_ptt(client: TestClient, user_id: str, monkeypatch: pytest.MonkeyPatch) -> str:
+        """Add 500 PTT at 42 and return its holding id."""
+        monkeypatch.setattr(
+            "finance_ai.tools.holding_entry_service.fetch_current_price", lambda s: Decimal("42")
+        )
+        client.post(
+            "/assets/holdings",
+            json={"user_id": user_id, "symbol": "PTT.BK", "name": "PTT_PTT", "quantity": "500"},
+        )
+        return str(
+            client.get("/assets/holdings", params={"user_id": user_id}).json()[0]["holding_id"]
+        )
+
+    def test_edit_quantity_and_cost(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The row shows the new quantity and cost after the edit."""
+        user_id = _first_user_id(temp_db)
+        holding_id = self._add_ptt(client, user_id, monkeypatch)
+
+        response = client.patch(
+            f"/assets/holdings/{holding_id}",
+            json={"user_id": user_id, "quantity": "600", "price_per_unit": "40"},
+        )
+
+        assert response.status_code == 204
+        [row] = client.get("/assets/holdings", params={"user_id": user_id}).json()
+        assert (row["quantity"], row["average_cost_per_unit"]) == ("600", "40.00")
+
+    def test_edit_with_bad_number_is_422(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A Thai message explains what to fix."""
+        user_id = _first_user_id(temp_db)
+        holding_id = self._add_ptt(client, user_id, monkeypatch)
+
+        response = client.patch(
+            f"/assets/holdings/{holding_id}",
+            json={"user_id": user_id, "quantity": "0", "price_per_unit": "40"},
+        )
+
+        assert response.status_code == 422
+        assert "จำนวนหุ้น/หน่วย" in response.json()["detail"]
+
+    def test_delete_the_only_holding(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Deleting the last row leaves an empty portfolio (the reported bug)."""
+        user_id = _first_user_id(temp_db)
+        holding_id = self._add_ptt(client, user_id, monkeypatch)
+
+        response = client.delete(f"/assets/holdings/{holding_id}", params={"user_id": user_id})
+
+        assert response.status_code == 204
+        assert client.get("/assets/holdings", params={"user_id": user_id}).json() == []
+
+    def test_unknown_or_foreign_holding_is_404(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Another user's id cannot edit or delete the row."""
+        user_id = _first_user_id(temp_db)
+        holding_id = self._add_ptt(client, user_id, monkeypatch)
+
+        edit = client.patch(
+            f"/assets/holdings/{holding_id}",
+            json={"user_id": "someone-else", "quantity": "1", "price_per_unit": "1"},
+        )
+        delete = client.delete(f"/assets/holdings/{holding_id}", params={"user_id": "someone-else"})
+
+        assert (edit.status_code, delete.status_code) == (404, 404)
+
+    def test_yahoo_ticker_prefix_is_hidden(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A name saved as 'PTT_PTT' (Yahoo's SET format) is listed as 'PTT'."""
+        user_id = _first_user_id(temp_db)
+        self._add_ptt(client, user_id, monkeypatch)
+
+        [row] = client.get("/assets/holdings", params={"user_id": user_id}).json()
+
+        assert row["name"] == "PTT"

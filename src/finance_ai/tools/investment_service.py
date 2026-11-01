@@ -44,6 +44,7 @@ def convert_holding_to_record(
     return HoldingRecord(
         symbol=holding.symbol,
         name=holding.name or "",
+        holding_id=holding.id,
         asset_type=holding.asset_type,
         quantity=holding.quantity,
         average_cost_per_unit=holding.average_cost_per_unit,

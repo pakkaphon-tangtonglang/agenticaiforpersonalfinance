@@ -9,6 +9,7 @@ from typing import Any, Optional
 import httpx
 
 from finance_ai.tools.symbol_search_service import (
+    clean_listing_name,
     search_asset_symbols,
     translate_thai_query,
 )
@@ -240,3 +241,20 @@ class TestSearchAssetSymbols:
 
         assert len(matches) == 1
         assert matches[0].symbol == "PTT.BK"
+
+
+class TestCleanListingName:
+    """Yahoo names SET stocks 'TICKER_NAME'; the ticker prefix is dropped."""
+
+    def test_strips_set_ticker_prefix(self) -> None:
+        """PTT_PTT → PTT; PTTEP_PTT EXPLORATION AND → PTT EXPLORATION AND."""
+        assert clean_listing_name("PTT.BK", "PTT_PTT") == "PTT"
+        assert clean_listing_name("PTTEP.BK", "PTTEP_PTT EXPLORATION AND") == "PTT EXPLORATION AND"
+        assert clean_listing_name("ptt.bk", "ptt_ptt") == "ptt"
+
+    def test_other_names_are_untouched(self) -> None:
+        """Funds, foreign stocks and names without the prefix stay as they are."""
+        assert clean_listing_name("K-USA-A(A)", "K-USA-A(A)") == "K-USA-A(A)"
+        assert clean_listing_name("AAPL", "Apple Inc.") == "Apple Inc."
+        assert clean_listing_name("PTT.BK", "ปตท.") == "ปตท."
+        assert clean_listing_name("PTT.BK", "PTT_") == "PTT"
