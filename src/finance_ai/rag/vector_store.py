@@ -161,11 +161,14 @@ def _build_chroma_filter(
     return {"$and": conditions}
 
 
+_OPTIONAL_METADATA_FIELDS = ("guru_id", "source_url", "source_title", "source_publisher")
+
+
 def _chunk_to_chroma_metadata(chunk: DocumentChunk) -> dict[str, str]:
     """Build Chroma metadata for one chunk, skipping unset optional fields.
 
-    Chroma rejects None values, so guru_id and source_url are only
-    included when present.
+    Chroma rejects None values, so guru_id and the source_* text fields
+    are only included when present.
 
     Args:
         chunk: The chunk to describe.
@@ -177,11 +180,12 @@ def _chunk_to_chroma_metadata(chunk: DocumentChunk) -> dict[str, str]:
         "source_file": chunk.metadata.source_file,
         "domain": chunk.metadata.domain,
         "title": chunk.metadata.title,
+        "source_kind": chunk.metadata.source_kind,
     }
-    if chunk.metadata.guru_id:
-        metadata["guru_id"] = chunk.metadata.guru_id
-    if chunk.metadata.source_url:
-        metadata["source_url"] = chunk.metadata.source_url
+    for field in _OPTIONAL_METADATA_FIELDS:
+        value = getattr(chunk.metadata, field)
+        if value:
+            metadata[field] = value
     return metadata
 
 
@@ -221,6 +225,10 @@ def _convert_search_results(
             relevance_score=score,
             guru_id=doc.metadata.get("guru_id"),
             source_url=doc.metadata.get("source_url"),
+            title=doc.metadata.get("title", ""),
+            source_title=doc.metadata.get("source_title"),
+            source_publisher=doc.metadata.get("source_publisher"),
+            source_kind=doc.metadata.get("source_kind", "compiled"),
         )
         for doc, score in docs_with_scores
     ]

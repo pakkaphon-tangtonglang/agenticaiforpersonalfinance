@@ -9,7 +9,7 @@ from typing import Any, Literal
 
 import yaml
 
-from finance_ai.rag.document_models import DocumentMetadata
+from finance_ai.rag.document_models import DocumentMetadata, SourceKind
 
 DOMAIN_PREFIXES: dict[str, Literal["tax", "expense", "investment"]] = {
     "tax_": "tax",
@@ -25,10 +25,10 @@ FRONT_MATTER_PATTERN = re.compile(r"\A---\r?\n(.*?)\r?\n---\r?\n", re.DOTALL)
 def infer_domain_from_filename(
     filename: str,
 ) -> Literal["tax", "expense", "investment", "general"]:
-    """Infer the knowledge domain from a filename prefix.
+    """Infer the knowledge domain from a filename prefix (case-insensitive).
 
     Args:
-        filename: The filename to analyze (e.g., "tax_guide.md").
+        filename: The filename to analyze (e.g., "Tax_Guide.md").
 
     Returns:
         The inferred domain string.
@@ -37,8 +37,9 @@ def infer_domain_from_filename(
         >>> infer_domain_from_filename("tax_deductions_guide.md")
         'tax'
     """
+    lowered = filename.lower()
     for prefix, domain in DOMAIN_PREFIXES.items():
-        if filename.startswith(prefix):
+        if lowered.startswith(prefix):
             return domain
     return "general"
 
@@ -84,6 +85,28 @@ def parse_front_matter(content: str) -> tuple[dict[str, Any], str]:
     return front_matter, content[match.end() :]
 
 
+def _source_fields(front_matter: dict[str, Any]) -> dict[str, Any]:
+    """Pick the public-source attribution fields out of front-matter.
+
+    Args:
+        front_matter: Parsed front-matter (may be empty).
+
+    Returns:
+        Keyword arguments for DocumentMetadata's source_* fields.
+
+    Example:
+        >>> _source_fields({"auto_fetched": True})["source_kind"]
+        'original'
+    """
+    kind: SourceKind = "original" if front_matter.get("auto_fetched") else "compiled"
+    return {
+        "source_url": front_matter.get("source_url"),
+        "source_title": front_matter.get("source_title"),
+        "source_publisher": front_matter.get("source_publisher"),
+        "source_kind": kind,
+    }
+
+
 def _build_guru_metadata(
     filename: str, front_matter: dict[str, Any], body: str
 ) -> DocumentMetadata:
@@ -103,8 +126,8 @@ def _build_guru_metadata(
         domain="guru",
         title=str(title),
         guru_id=str(front_matter["guru_id"]),
-        source_url=front_matter.get("source_url"),
         language=str(front_matter.get("language", "th")),
+        **_source_fields(front_matter),
     )
 
 
@@ -132,6 +155,7 @@ def load_markdown_file(file_path: Path) -> tuple[str, DocumentMetadata]:
         source_file=filename,
         domain=infer_domain_from_filename(filename),
         title=title,
+        **_source_fields(front_matter),
     )
     return content, metadata
 
@@ -202,8 +226,60 @@ def load_pdf_file(file_path: Path) -> tuple[str, DocumentMetadata]:
     return content, metadata
 
 
+SOURCE_REGISTRY_FILENAME = "sources.yaml"
+_REGISTRY_FIELDS = ("title", "source_title", "source_url", "source_publisher", "source_kind")
+
+
+def _read_source_registry(registry_path: Path) -> dict[str, dict[str, Any]]:
+    """Read the per-folder source registry, keyed by filename.
+
+    Args:
+        registry_path: Path to a sources.yaml file (may not exist).
+
+    Returns:
+        Mapping of filename to source fields; empty when the file is absent.
+
+    Raises:
+        ValueError: If the registry's 'sources' entry is not a mapping.
+    """
+    if not registry_path.is_file():
+        return {}
+    data = yaml.safe_load(registry_path.read_text(encoding="utf-8")) or {}
+    sources = data.get("sources") or {}
+    if not isinstance(sources, dict):
+        raise ValueError(f"'sources' in {registry_path} must map filenames to source fields.")
+    return sources
+
+
+def apply_source_registry(metadata: DocumentMetadata, file_path: Path) -> DocumentMetadata:
+    """Overlay readable title/source fields from the folder's sources.yaml.
+
+    PDFs cannot carry front-matter, so a sources.yaml next to the documents
+    names each file's display title and public source.
+
+    Args:
+        metadata: Metadata produced by the per-extension loader.
+        file_path: Path of the loaded document.
+
+    Returns:
+        Updated metadata, or the original when the file is not listed.
+
+    Raises:
+        ValueError: If the registry is malformed.
+
+    Example:
+        >>> meta = apply_source_registry(meta, Path("docs/knowledge_base/a.pdf"))
+    """
+    registry = _read_source_registry(file_path.parent / SOURCE_REGISTRY_FILENAME)
+    entry = registry.get(file_path.name)
+    if not entry:
+        return metadata
+    overrides = {field: entry[field] for field in _REGISTRY_FIELDS if entry.get(field)}
+    return metadata.model_copy(update=overrides)
+
+
 def load_document(file_path: Path) -> tuple[str, DocumentMetadata]:
-    """Load a document, dispatching to the appropriate loader by extension.
+    """Load a document and attach its source attribution.
 
     Args:
         file_path: Path to the document file.
@@ -216,6 +292,22 @@ def load_document(file_path: Path) -> tuple[str, DocumentMetadata]:
 
     Example:
         >>> content, meta = load_document(Path("tax_guide.md"))
+    """
+    content, metadata = _load_by_extension(file_path)
+    return content, apply_source_registry(metadata, file_path)
+
+
+def _load_by_extension(file_path: Path) -> tuple[str, DocumentMetadata]:
+    """Dispatch to the loader for the file's extension.
+
+    Args:
+        file_path: Path to the document file.
+
+    Returns:
+        Tuple of (raw_text, metadata).
+
+    Raises:
+        ValueError: If the file extension is not supported.
     """
     extension = file_path.suffix.lower()
     if extension == ".md":

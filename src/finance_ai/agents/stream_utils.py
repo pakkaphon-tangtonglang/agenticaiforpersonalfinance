@@ -6,14 +6,16 @@ chunks during the final LLM response.
 """
 
 from collections.abc import Callable, Generator
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, AIMessageChunk
+from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 from langgraph.graph.state import CompiledStateGraph
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
+from finance_ai.agents.citation_sources import CitationSource, collect_turn_citations
 from finance_ai.agents.graph_cache import get_compiled_graph
 from finance_ai.agents.llm_error_messages import describe_llm_error
 from finance_ai.agents.router_agent import (
@@ -32,17 +34,27 @@ class StreamEvent(BaseModel):
     """A single event in the agent response stream.
 
     Attributes:
-        event_type: Type of event (status, token, or complete).
+        event_type: Type of event (status, token, sources, or complete).
         content: Text content of the event.
         intent: The classified intent (set on 'complete' event).
+        sources: Numbered citation sources (set on 'sources' event).
 
     Example:
         >>> e = StreamEvent(event_type="token", content="สวัสดี")
     """
 
-    event_type: Literal["status", "token", "complete"] = "token"
+    event_type: Literal["status", "token", "sources", "complete"] = "token"
     content: str = ""
     intent: str = Field(default="")
+    sources: list[CitationSource] = Field(default_factory=list)
+
+
+@dataclass
+class _StreamResult:
+    """What one streamed graph run produced: answer text and tool messages."""
+
+    text: str = ""
+    tool_messages: list[ToolMessage] = field(default_factory=list)
 
 
 def stream_agent_response(
@@ -55,6 +67,7 @@ def stream_agent_response(
     Streams with stream_mode='messages' for token-level output.
     If streaming produces no content (Gemini intermittent empty
     response), falls back to graph.invoke() with fresh state.
+    Sources cited by search tools are sent once, before 'complete'.
 
     Args:
         graph: Compiled LangGraph state graph.
@@ -62,46 +75,75 @@ def stream_agent_response(
         intent: The classified intent for the complete event.
 
     Yields:
-        StreamEvent objects (status, token, or complete).
+        StreamEvent objects (status, token, sources, or complete).
     """
     yield StreamEvent(event_type="status", content="กำลังประมวลผล...")
-
-    full_response = ""
     original_messages = list(input_state.get("messages", []))
+    result = _StreamResult()
+    yield from _stream_graph(graph, input_state, result)
+    citations = collect_turn_citations(result.tool_messages)
+    if not result.text.strip():
+        fallback_state = {**input_state, "messages": original_messages}
+        final_messages = _invoke_graph_messages(graph, fallback_state)
+        result.text = _extract_last_ai_from_messages(final_messages)
+        citations = collect_turn_citations(final_messages)
+        if result.text:
+            yield StreamEvent(event_type="token", content=result.text)
+    if citations:
+        yield StreamEvent(event_type="sources", sources=citations)
+    yield StreamEvent(event_type="complete", content=result.text, intent=intent)
+
+
+def _stream_graph(
+    graph: CompiledStateGraph,  # type: ignore[type-arg]
+    input_state: dict[str, Any],
+    result: _StreamResult,
+) -> Generator[StreamEvent, None, None]:
+    """Stream one graph run, recording the answer text and tool messages.
+
+    An LLM failure becomes a user-facing Thai message instead of an error.
+
+    Args:
+        graph: Compiled LangGraph state graph.
+        input_state: Initial state dict.
+        result: Accumulator filled with text and tool messages.
+
+    Yields:
+        Status and token events.
+    """
     try:
-        for chunk, _metadata in graph.stream(
-            input_state,
-            stream_mode="messages",
-        ):
+        for chunk, _metadata in graph.stream(input_state, stream_mode="messages"):
+            if isinstance(chunk, ToolMessage):
+                result.tool_messages.append(chunk)
             event = _process_chunk(chunk)
             if event is not None:
                 if event.event_type == "token":
-                    full_response += event.content
+                    result.text += event.content
                 yield event
     except Exception as exc:  # noqa: BLE001
         logger.error("Stream error: %s", exc, exc_info=True)
-        full_response = describe_llm_error(exc)
-        yield StreamEvent(event_type="token", content=full_response)
+        result.text = describe_llm_error(exc)
+        yield StreamEvent(event_type="token", content=result.text)
 
-    # FALLBACK: streaming produced no content → invoke graph with fresh state
-    if not full_response.strip():
-        # Keep every input key (e.g. guru_id); only reset messages to the originals.
-        fallback_state = {
-            **input_state,
-            "messages": original_messages,
-            "user_id": input_state.get("user_id", ""),
-            "db_session_factory": input_state.get("db_session_factory"),
-        }
-        fallback = _invoke_and_extract(graph, fallback_state)
-        if fallback:
-            full_response = fallback
-            yield StreamEvent(event_type="token", content=full_response)
 
-    yield StreamEvent(
-        event_type="complete",
-        content=full_response,
-        intent=intent,
-    )
+def _invoke_graph_messages(
+    graph: CompiledStateGraph,  # type: ignore[type-arg]
+    input_state: dict[str, Any],
+) -> list[Any]:
+    """Invoke the graph and return its final messages ([] on failure).
+
+    Args:
+        graph: Compiled LangGraph state graph.
+        input_state: Fresh input state (not mutated by prior stream).
+
+    Returns:
+        Final message list, or [] if the invoke failed.
+    """
+    try:
+        return list(graph.invoke(input_state).get("messages", []))
+    except Exception:  # noqa: BLE001
+        logger.warning("Fallback invoke failed", exc_info=True)
+    return []
 
 
 def _invoke_and_extract(
@@ -111,8 +153,6 @@ def _invoke_and_extract(
     """Invoke graph and extract the response content.
 
     Used as fallback when streaming produces no content.
-    Extracts from the last AIMessage, or falls back to
-    ToolMessage content if the AI response is empty.
 
     Args:
         graph: Compiled LangGraph state graph.
@@ -121,13 +161,7 @@ def _invoke_and_extract(
     Returns:
         Response content string, or empty string if none found.
     """
-    try:
-        final_state = graph.invoke(input_state)
-        messages = final_state.get("messages", [])
-        return _extract_last_ai_from_messages(messages)
-    except Exception:  # noqa: BLE001
-        logger.warning("Fallback invoke failed", exc_info=True)
-    return ""
+    return _extract_last_ai_from_messages(_invoke_graph_messages(graph, input_state))
 
 
 def _process_chunk(chunk: Any) -> StreamEvent | None:
@@ -238,8 +272,6 @@ def _extract_last_ai_from_messages(messages: list[Any]) -> str:
     Returns:
         Content string, or empty string if none found.
     """
-    from langchain_core.messages import AIMessage, ToolMessage  # noqa: PLC0415
-
     for msg in reversed(messages):
         if isinstance(msg, ToolMessage):
             continue

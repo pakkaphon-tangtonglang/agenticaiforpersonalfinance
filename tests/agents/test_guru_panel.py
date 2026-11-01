@@ -62,9 +62,31 @@ class TestAnswerAsGuru:
         answer = answer_as_guru("ตลาดตก", "dalio", "u1", None, MagicMock())
 
         sent_state = graph.invoke.call_args.args[0]
-        assert answer == "จุดยืน: กระจายความเสี่ยง"
+        assert answer.text == "จุดยืน: กระจายความเสี่ยง"
+        assert answer.sources == []
         assert sent_state["guru_id"] == "dalio"
         assert "จุดยืน:" in sent_state["messages"][0][1]
+
+    @patch("finance_ai.agents.guru_panel.get_compiled_graph")
+    def test_returns_sources_from_guru_searches(self, mock_get_graph: MagicMock) -> None:
+        """Citations from the guru's knowledge search come back with the answer."""
+        from finance_ai.agents.citation_sources import build_citations
+        from tests.agents.test_citation_sources import _result, _tool_message
+
+        citations = build_citations([_result("letter.md", title="Letter")], [])
+        graph = MagicMock()
+        graph.invoke.return_value = {
+            "messages": [
+                HumanMessage(content="q"),
+                _tool_message(citations),
+                AIMessage(content="a [1]"),
+            ]
+        }
+        mock_get_graph.return_value = graph
+
+        answer = answer_as_guru("q", "buffett", "u1", None, MagicMock())
+
+        assert [source.title for source in answer.sources] == ["Letter"]
 
 
 class TestSynthesizePanel:

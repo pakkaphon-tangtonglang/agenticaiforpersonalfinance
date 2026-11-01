@@ -86,3 +86,20 @@ class TestFormatSseEvent:
         """Status events are not emitted to the client."""
         event = StreamEvent(event_type="status", content="กำลังประมวลผล...")
         assert _format_sse_event(event) is None
+
+
+class TestSourcesEvent:
+    """Citation sources are sent as a named SSE event."""
+
+    def test_sources_event_carries_cards(self) -> None:
+        """The payload is the list of source cards, JSON-encoded on one line."""
+        from finance_ai.agents.citation_sources import CitationSource
+
+        source = CitationSource(index=1, document_key="k", title="คู่มือภาษี\nบรรทัด")
+        sse = _format_sse_event(StreamEvent(event_type="sources", sources=[source]))
+
+        assert sse is not None
+        assert sse.startswith("event: sources\ndata: ")
+        assert sse.count("\n") == 3
+        payload = json.loads(sse.split("data: ", 1)[1])
+        assert payload[0]["title"] == "คู่มือภาษี\nบรรทัด"

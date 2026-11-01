@@ -72,6 +72,28 @@ class TestSaveMessages:
         conv_id = self._make_conversation(test_session, sample_user)
         msg = save_assistant_message(test_session, conv_id, "ผลลัพธ์...")
         assert msg.intent is None
+        assert msg.sources is None
+
+    def test_saved_sources_are_returned_with_messages(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """Citation sources round-trip so history can show source cards."""
+        conv_id = self._make_conversation(test_session, sample_user)
+        sources = [{"index": 1, "title": "คู่มือภาษี", "url": "https://www.rd.go.th"}]
+        save_assistant_message(test_session, conv_id, "ตอบ [1]", "tax", sources=sources)
+
+        loaded = load_conversation_messages(test_session, conv_id)
+
+        assert loaded[0]["sources"] == sources
+
+    def test_messages_without_sources_omit_the_key(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """Plain answers keep the old dict shape."""
+        conv_id = self._make_conversation(test_session, sample_user)
+        save_assistant_message(test_session, conv_id, "ตอบ", "tax", sources=[])
+
+        assert "sources" not in load_conversation_messages(test_session, conv_id)[0]
 
 
 class TestGetRecentHistoryAsTuples:

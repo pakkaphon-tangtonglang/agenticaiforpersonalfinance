@@ -19,12 +19,14 @@ _ITALIC = re.compile(r"\*([^*\n]+)\*")
 _ITALIC_UNDERSCORE = re.compile(r"_([^_\n]+)_")
 
 _LINE_DIVIDER = "————————"
+# Numbered citation markers like " [1]", "[2][3]" or " [1, 2]" (LINE shows no source cards).
+_CITATION_MARKERS = re.compile(r"[ \t]*(?:\[\d+(?:\s*,\s*\d+)*\])+")
 
 
 def markdown_to_line_text(markdown: str) -> str:
     """Convert a markdown reply to plain text suitable for LINE.
 
-    Strips headings, emphasis, and blockquote markers; converts tables
+    Strips headings, emphasis, blockquote and [n] citation markers; converts tables
     to pipe-separated lines (dropping separator rows); renders bullets
     with a dot marker and horizontal rules as a divider line.
 
@@ -43,7 +45,7 @@ def markdown_to_line_text(markdown: str) -> str:
         converted = _convert_line(line)
         if converted is not None:
             converted_lines.append(converted)
-    text = "\n".join(converted_lines)
+    text = _CITATION_MARKERS.sub("", "\n".join(converted_lines))
     return re.sub(r"\n{3,}", "\n\n", text).strip()
 
 

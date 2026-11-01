@@ -11,9 +11,14 @@ from typing import Annotated, Any
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
+from finance_ai.agents.citation_sources import (
+    build_citations,
+    collect_turn_citations,
+    format_citations_as_context,
+)
 from finance_ai.core.config import get_settings
 from finance_ai.core.logging import get_logger
-from finance_ai.rag.retriever import FinanceRetriever, format_results_as_context
+from finance_ai.rag.retriever import FinanceRetriever
 from finance_ai.tools.guru_gap_service import record_gap_if_needed
 
 logger = get_logger(__name__)
@@ -74,19 +79,21 @@ def search_guru_knowledge(
     query: str,
     guru_id: Annotated[str, InjectedState("guru_id")] = "",
     db_session_factory: Annotated[Any, InjectedState("db_session_factory")] = None,
+    messages: Annotated[list[Any] | None, InjectedState("messages")] = None,
 ) -> dict[str, Any]:
     """Search the active guru's public writings, letters and interviews.
 
     Call this before answering so the answer follows the guru's documented
-    views, and cite the [แหล่งที่มา] labels it returns.
+    views, and cite passages with the [number] shown before each one.
 
     Args:
         query: What to look up (Thai or English).
         guru_id: Active guru (injected from graph state).
         db_session_factory: Session factory for gap logging (injected from graph state).
+        messages: Conversation so far (injected from graph state) for citation numbering.
 
     Returns:
-        Dict with 'results' list and 'context' string, or 'error'.
+        Dict with numbered 'citations' and 'context' string, or 'error'.
     """
     if not guru_id:
         return {"error": "No guru selected. guru_id is missing from the conversation state."}
@@ -95,5 +102,6 @@ def search_guru_knowledge(
     record_gap_if_needed(
         db_session_factory, guru_id, query, results, get_settings().rag_guru_gap_distance_threshold
     )
-    context = format_results_as_context(results) if results else NOT_FOUND_CONTEXT
-    return {"results": [result.model_dump() for result in results], "context": context}
+    citations = build_citations(results, collect_turn_citations(messages or []))
+    context = format_citations_as_context(results, citations) if results else NOT_FOUND_CONTEXT
+    return {"citations": [citation.model_dump() for citation in citations], "context": context}

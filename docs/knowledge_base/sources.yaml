@@ -1,0 +1,114 @@
+# Readable source attribution for the knowledge base (shown on citation cards).
+# Filenames are never shown to users; each entry gives the publisher (and a
+# link) the document's content is based on. PDFs also set a display title,
+# since they have no markdown heading.
+#
+# Fields: title (optional display title), source_title (optional, the exact
+# name of the public source), source_publisher (required), source_url,
+# source_kind ("original" = the file IS the published document,
+# "compiled" = team-written notes based on the publisher's material).
+#
+# The .md notes were written by the team; their publisher is the official body
+# whose rules or guidance the note summarises. Replace with the exact page or
+# book whenever the original source of a note is known.
+sources:
+  # ── Debt ──
+  Debt_Management_Guide.md:
+    source_publisher: ธนาคารแห่งประเทศไทย
+    source_url: https://www.bot.or.th
+  Debt_Psychology_Payoff.md:
+    source_publisher: ธนาคารแห่งประเทศไทย
+    source_url: https://www.bot.or.th
+
+  # ── Budgeting, saving and planning ──
+  Expense_Budgeting_Guide.md:
+    source_publisher: ตลาดหลักทรัพย์แห่งประเทศไทย (SET Education)
+    source_url: https://www.set.or.th/th/education
+  Expense_Emergency_Fund.md:
+    source_publisher: ตลาดหลักทรัพย์แห่งประเทศไทย (SET Education)
+    source_url: https://www.set.or.th/th/education
+  Financial_Planning_Basics.md:
+    source_publisher: ตลาดหลักทรัพย์แห่งประเทศไทย (SET Education)
+    source_url: https://www.set.or.th/th/education
+  Planning_Savings_Guide.md:
+    source_publisher: ตลาดหลักทรัพย์แห่งประเทศไทย (SET Education)
+    source_url: https://www.set.or.th/th/education
+  Retirement_Planning_Guide.md:
+    source_publisher: สำนักงาน ก.ล.ต.
+    source_url: https://www.sec.or.th
+
+  # ── Insurance ──
+  Insurance_Life_Health.md:
+    source_publisher: สำนักงาน คปภ.
+    source_url: https://www.oic.or.th
+  Insurance_Social_Security.md:
+    source_publisher: สำนักงานประกันสังคม
+    source_url: https://www.sso.go.th
+
+  # ── Investment ──
+  Investment_DCA_Strategy.md:
+    source_publisher: ตลาดหลักทรัพย์แห่งประเทศไทย (SET Education)
+    source_url: https://www.set.or.th/th/education
+  Investment_Digital_Assets.md:
+    source_publisher: สำนักงาน ก.ล.ต. และกรมสรรพากร
+    source_title: คริปโทเคอร์เรนซี โทเคนดิจิทัล คำแนะนำการเสียภาษีเงินได้บุคคลธรรมดา (กรมสรรพากร, 2565)
+    source_url: https://www.sec.or.th
+  Investment_ETF_Bonds.md:
+    source_publisher: ตลาดหลักทรัพย์แห่งประเทศไทย และสมาคมตลาดตราสารหนี้ไทย
+    source_url: https://www.set.or.th
+  Investment_Mutual_Funds.md:
+    source_publisher: สมาคมบริษัทจัดการลงทุน (AIMC)
+    source_url: https://www.aimc.or.th
+  Investment_Thai_Stocks.md:
+    source_publisher: ตลาดหลักทรัพย์แห่งประเทศไทย
+    source_url: https://www.set.or.th
+
+  # ── Tax ──
+  Tax_Deductions_Guide.md:
+    source_publisher: กรมสรรพากร
+    source_url: https://www.rd.go.th
+  Tax_Filing_Guide.md:
+    source_publisher: กรมสรรพากร
+    source_url: https://www.rd.go.th
+  Tax_Thai_Personal_Income.md:
+    source_publisher: กรมสรรพากร
+    source_url: https://www.rd.go.th
+  Tax_VAT_Withholding.md:
+    source_publisher: กรมสรรพากร
+    source_url: https://www.rd.go.th
+
+  # ── Published documents (PDF) ──
+  tax_pit90_guide_2568.pdf:
+    title: วิธีกรอกแบบ ภ.ง.ด.90 ปีภาษี 2568
+    source_title: วิธีกรอกแบบแสดงรายการภาษีเงินได้บุคคลธรรมดา ภ.ง.ด.90 ปีภาษี 2568
+    source_publisher: กรมสรรพากร
+    source_url: https://www.rd.go.th
+    source_kind: original
+  tax_personal_income_guide.pdf:
+    title: คู่มือภาษีเงินได้บุคคลธรรมดา สำหรับผู้ประกอบการ SME
+    source_title: คู่มือภาษีเงินได้บุคคลธรรมดา สำหรับผู้ประกอบการ SME ที่เข้าร่วมโครงการคนละครึ่ง
+    source_publisher: กรมสรรพากร
+    source_url: https://www.rd.go.th
+    source_kind: original
+  finance_behavioral_finance_ritter.pdf:
+    title: Behavioral Finance
+    source_title: Behavioral Finance (Pacific-Basin Finance Journal, 2003)
+    source_publisher: Jay R. Ritter
+    source_url: https://ideas.repec.org/a/eee/pacfin/v11y2003i4p429-437.html
+    source_kind: original
+  finance_behavioral_reasoning_chains.pdf:
+    title: Synthesizing Behaviorally-Grounded Reasoning Chains for Personal Finance LLMs
+    source_title: Synthesizing Behaviorally-Grounded Reasoning Chains (FinNLP 2025)
+    source_publisher: Akhil Theerthala
+    source_url: https://arxiv.org/abs/2509.14180
+    source_kind: original
+
+  # ── Team-written summaries of third-party works (own words, credited) ──
+  Finance_Psychology_Of_Money.md:
+    source_title: The Psychology of Money (Harriman House, 2020)
+    source_publisher: Morgan Housel
+    source_kind: compiled
+  Investment_Earthh_Evans_Lifelong.md:
+    source_title: คู่มือการลงทุนตลอดชีวิต และ Fundamental Stock Checklist
+    source_publisher: Earthh Evans
+    source_kind: compiled

@@ -13,6 +13,7 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from pydantic import BaseModel, Field
 
+from finance_ai.agents.citation_sources import CitationSource, collect_turn_citations
 from finance_ai.agents.graph_cache import get_compiled_graph
 from finance_ai.core.logging import get_logger
 
@@ -34,7 +35,15 @@ class PanelEvent(BaseModel):
     event_type: PanelEventType
     guru_id: str | None = None
     content: str = ""
+    sources: list[CitationSource] = Field(default_factory=list)
     synthesis: "PanelSynthesis | None" = None
+
+
+class GuruAnswer(BaseModel):
+    """One guru's panel answer and the sources it cited."""
+
+    text: str
+    sources: list[CitationSource] = Field(default_factory=list)
 
 
 class GuruStance(BaseModel):
@@ -88,7 +97,7 @@ def answer_as_guru(
     user_id: str,
     db_session_factory: Any,
     chat_model: BaseChatModel | None,
-) -> str:
+) -> GuruAnswer:
     """Get one guru's short panel answer (no chat history).
 
     Args:
@@ -99,7 +108,7 @@ def answer_as_guru(
         chat_model: Chat model for the guru graph.
 
     Returns:
-        The guru's final answer text.
+        The guru's final answer text and the sources its searches returned.
 
     Raises:
         Exception: Whatever the graph raises; run_guru_panel reports it.
@@ -116,7 +125,11 @@ def answer_as_guru(
         "db_session_factory": db_session_factory,
         "guru_id": guru_id,
     }
-    return _final_answer_text(graph.invoke(state))
+    final_state = graph.invoke(state)
+    return GuruAnswer(
+        text=_final_answer_text(final_state),
+        sources=collect_turn_citations(final_state.get("messages", [])),
+    )
 
 
 def _build_synthesis_prompt(query: str, answers: dict[str, str]) -> str:
@@ -125,6 +138,7 @@ def _build_synthesis_prompt(query: str, answers: dict[str, str]) -> str:
     return (
         "สรุปคำตอบของกูรูแต่ละคนต่อคำถามเดียวกัน เป็นภาษาไทย\n"
         "ใช้เฉพาะข้อมูลในคำตอบด้านล่าง ห้ามเพิ่มความเห็นใหม่\n"
+        "ไม่ต้องใส่เลขอ้างอิงแบบ [1] ในสรุป\n"
         f"คำถาม: {query}\n\n{sections}"
     )
 
@@ -158,20 +172,23 @@ def synthesize_panel(
 
 
 def _collect_answers(
-    futures: dict[Future[str], str],
+    futures: dict[Future[GuruAnswer], str],
     answers: dict[str, str],
 ) -> Iterator[PanelEvent]:
     """Yield an event per guru as each future finishes, filling answers."""
     for future in as_completed(futures):
         guru_id = futures[future]
         try:
-            answers[guru_id] = future.result()
+            answer = future.result()
         except Exception as error:  # pylint: disable=broad-exception-caught
             logger.warning("Panel guru %s failed: %s", guru_id, error)
             # Details stay in the log; the client only gets a generic message.
             yield PanelEvent(event_type="guru_error", guru_id=guru_id, content=GURU_ERROR_MESSAGE)
             continue
-        yield PanelEvent(event_type="guru_answer", guru_id=guru_id, content=answers[guru_id])
+        answers[guru_id] = answer.text
+        yield PanelEvent(
+            event_type="guru_answer", guru_id=guru_id, content=answer.text, sources=answer.sources
+        )
 
 
 def run_guru_panel(  # pylint: disable=too-many-arguments,too-many-positional-arguments

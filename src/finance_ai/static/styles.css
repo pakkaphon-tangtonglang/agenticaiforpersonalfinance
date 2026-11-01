@@ -185,7 +185,13 @@ a:hover { text-decoration: underline; }
   transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
 .conv-list li.notif-empty { cursor: default; }
-.conv-title { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.conv-title { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv-sub {
+  font-size: var(--text-caption); color: var(--color-ash); font-weight: var(--fw-regular);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.conv-avatar { margin-right: var(--sp-1); }
 .conv-actions { display: flex; gap: 2px; flex-shrink: 0; opacity: 0; transition: opacity 0.15s var(--ease); }
 .conv-list li:hover .conv-actions,
 .conv-list li:focus-within .conv-actions { opacity: 1; }
@@ -960,13 +966,21 @@ a:hover { text-decoration: underline; }
   .msg-cursor::after { animation: none; }
 }
 
-/* ─── Markdown rendering in chat bubbles (Excel-style tables) ─── */
-.msg-bubble .table-wrap { overflow-x: auto; margin: 0.75rem 0; }
+/* ─── Markdown tables in chat bubbles ───
+   Like ChatGPT: columns share the bubble width and wrap; when their minimum
+   readable width does not fit, the table scrolls sideways inside its own
+   frame instead of crushing text. Prose wraps at Thai word
+   boundaries; only numeric cells (td.num, tagged by renderMarkdown) are
+   right-aligned with tabular figures. */
+.msg-bubble .table-wrap {
+  max-width: 100%; overflow-x: auto; margin: 0.75rem 0;
+  border: 1px solid #cbd5e1; border-radius: var(--radius-sm);
+  -webkit-overflow-scrolling: touch;
+}
 .msg-bubble table {
   border-collapse: collapse;
   width: 100%;
   font-size: 0.9rem;
-  font-variant-numeric: tabular-nums;
   background: #fff;
 }
 .msg-bubble table th,
@@ -974,21 +988,27 @@ a:hover { text-decoration: underline; }
   border: 1px solid #cbd5e1;
   padding: 6px 10px;
   vertical-align: top;
+  text-align: left;
+  min-width: 8rem;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: normal;
 }
+.msg-bubble table tr > :first-child { border-left: 0; min-width: 0; white-space: nowrap; font-weight: 500; }
+.msg-bubble table tr > :last-child { border-right: 0; }
+.msg-bubble table thead tr:first-child > * { border-top: 0; }
+.msg-bubble table tbody tr:last-child > * { border-bottom: 0; }
 .msg-bubble table thead th {
   background: #e2e8f0;
   font-weight: 600;
-  text-align: left;
-  white-space: nowrap;
 }
 .msg-bubble table tbody tr:nth-child(even) { background: #f8fafc; }
 .msg-bubble table tbody tr:nth-child(odd) { background: #ffffff; }
-/* Right-align every column after the first (numbers), like a spreadsheet. */
-.msg-bubble table td:nth-child(n + 2),
-.msg-bubble table th:nth-child(n + 2) {
+.msg-bubble table .num {
+  min-width: 0;
   text-align: right;
-  font-family: "Inter", "Sarabun", monospace;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 .msg-bubble p { margin: 0.4rem 0; white-space: pre-line; }
 .msg-bubble > :first-child { margin-top: 0; }
@@ -1022,11 +1042,6 @@ a:hover { text-decoration: underline; }
 }
 .guru-mode-btn.is-active { background: var(--color-ink); color: var(--color-parchment); }
 .guru-mode-btn:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
-.guru-history {
-  max-width: 260px; padding: var(--sp-1) var(--sp-2);
-  border: 1px solid var(--color-warm-mist); border-radius: var(--radius-sm);
-  background: var(--color-soft-paper); font-size: var(--text-body-sm);
-}
 .guru-disclaimer {
   font-size: var(--text-body-sm); color: var(--color-graphite);
   background: var(--color-accent-tint); border-radius: var(--radius-sm);
@@ -1063,13 +1078,65 @@ a:hover { text-decoration: underline; }
 }
 .guru-chip:hover { border-color: var(--color-accent); }
 .guru-thread { min-height: 160px; }
-.guru-sources { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); margin-top: var(--sp-1); }
-.guru-sources-label { font-size: var(--text-caption); color: var(--color-ash); }
-.guru-source {
-  font-size: var(--text-caption); padding: 2px var(--sp-2); border-radius: var(--radius-full);
-  background: var(--color-parchment-2); color: var(--color-accent); text-decoration: none;
+/* ─── Citations: inline [n] pills, source chips, popover card ─── */
+.cite-pill {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 18px; height: 18px; padding: 0 5px; margin: 0 1px 0 3px;
+  border-radius: var(--radius-full); vertical-align: 2px;
+  background: var(--color-parchment-2); color: var(--color-graphite);
+  font-size: var(--text-caption); font-weight: var(--fw-medium); line-height: 1;
+  font-variant-numeric: tabular-nums; cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
 }
-.guru-source:hover { text-decoration: underline; }
+.cite-pill:hover, .cite-pill[aria-expanded="true"] { background: var(--color-accent); color: #ffffff; }
+.cite-pill:focus-visible, .cite-chip:focus-visible, .cite-more:focus-visible {
+  outline: 2px solid var(--color-accent); outline-offset: 2px;
+}
+.cite-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--sp-1); margin-top: var(--sp-1); }
+.cite-row-label { font-size: var(--text-caption); color: var(--color-ash); margin-right: 2px; }
+.cite-chip, .cite-more {
+  display: inline-flex; align-items: center; gap: 6px; max-width: 220px;
+  padding: 3px var(--sp-2) 3px 6px; border-radius: var(--radius-full);
+  border: 1px solid var(--color-warm-mist-soft); background: var(--color-soft-paper);
+  font-size: var(--text-body-sm); color: var(--color-ink); cursor: pointer;
+  transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+}
+.cite-more { padding: 3px var(--sp-2); color: var(--color-graphite); }
+.cite-chip:hover, .cite-chip[aria-expanded="true"], .cite-more:hover {
+  border-color: var(--color-accent); box-shadow: var(--shadow-subtle);
+}
+.cite-chip-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cite-icon { flex: none; width: 16px; height: 16px; border-radius: 4px; }
+.cite-icon-letter {
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--color-accent-tint); color: var(--color-accent);
+  font-size: 10px; font-weight: var(--fw-medium);
+}
+.cite-popover {
+  position: fixed; z-index: 1000; width: min(340px, calc(100vw - 16px));
+  display: flex; flex-direction: column; gap: 6px;
+  padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-md);
+  background: var(--color-soft-paper); border: 1px solid var(--color-warm-mist-soft);
+  box-shadow: 0 12px 32px rgba(39, 37, 30, 0.16), var(--shadow-subtle);
+  font-size: var(--text-body-sm); color: var(--color-ink); line-height: var(--leading);
+}
+.cite-popover[hidden] { display: none; }
+.cite-card-site { display: flex; align-items: center; gap: 6px; color: var(--color-graphite); }
+.cite-card-num { margin-left: auto; color: var(--color-ash); font-variant-numeric: tabular-nums; }
+.cite-card-title { font-size: var(--text-body); font-weight: var(--fw-medium); color: var(--color-ink); text-decoration: none; }
+a.cite-card-title:hover { text-decoration: underline; }
+.cite-card-origin { font-size: var(--text-caption); color: var(--color-accent); }
+.cite-card-snippet {
+  margin: 0; color: var(--color-graphite);
+  display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+}
+.cite-card-link { align-self: flex-start; color: var(--color-accent); font-weight: var(--fw-medium); text-decoration: none; }
+.cite-card-link:hover { text-decoration: underline; }
+.cite-popover.is-sheet {
+  left: 0; right: 0; bottom: 0; top: auto; width: 100%;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  padding: var(--sp-4) var(--sp-4) calc(var(--sp-4) + env(safe-area-inset-bottom));
+}
 .guru-panel-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-3); width: 100%; }
 .guru-panel-card { display: flex; flex-direction: column; gap: var(--sp-1); min-width: 0; }
 .guru-panel-head {
@@ -1088,7 +1155,6 @@ a:hover { text-decoration: underline; }
 }
 @media (max-width: 760px) {
   .guru-panel-grid { grid-template-columns: 1fr; }
-  .guru-history { max-width: 100%; flex: 1; }
 }
 @media (max-width: 480px) {
   .guru-cards { grid-template-columns: 1fr; }

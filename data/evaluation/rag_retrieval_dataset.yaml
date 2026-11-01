@@ -5,7 +5,7 @@ cases:
     query: "ค่าลดหย่อนส่วนตัว ปี 2024 เท่าไหร่"
     domain_filter: "tax"
     expected_source_files:
-      - "tax_deductions_guide.md"
+      - "Tax_Deductions_Guide.md"
     expected_keywords: ["60,000", "ลดหย่อนส่วนตัว"]
     tags: ["tax", "deduction"]
 
@@ -13,7 +13,7 @@ cases:
     query: "อัตราภาษีเงินได้บุคคลธรรมดา"
     domain_filter: "tax"
     expected_source_files:
-      - "tax_thai_personal_income.md"
+      - "Tax_Thai_Personal_Income.md"
     expected_keywords: ["อัตราภาษี"]
     tags: ["tax", "bracket"]
 
@@ -21,7 +21,7 @@ cases:
     query: "RMF ลดหย่อนได้สูงสุดเท่าไหร่"
     domain_filter: "tax"
     expected_source_files:
-      - "tax_deductions_guide.md"
+      - "Tax_Deductions_Guide.md"
     expected_keywords: ["RMF"]
     tags: ["tax", "rmf"]
 
@@ -29,7 +29,7 @@ cases:
     query: "กองทุน RMF SSF ต่างกันยังไง"
     domain_filter: "investment"
     expected_source_files:
-      - "investment_mutual_funds.md"
+      - "Investment_Mutual_Funds.md"
     expected_keywords: ["RMF", "SSF"]
     tags: ["investment", "mutual_fund"]
 
@@ -37,7 +37,7 @@ cases:
     query: "วิธีซื้อขายหุ้นในตลาดหลักทรัพย์ไทย"
     domain_filter: "investment"
     expected_source_files:
-      - "investment_thai_stocks.md"
+      - "Investment_Thai_Stocks.md"
     expected_keywords: ["หุ้น"]
     tags: ["investment", "stock"]
 
@@ -45,7 +45,7 @@ cases:
     query: "วิธีจัดทำงบประมาณส่วนบุคคล"
     domain_filter: "expense"
     expected_source_files:
-      - "expense_budgeting_guide.md"
+      - "Expense_Budgeting_Guide.md"
     expected_keywords: ["งบประมาณ"]
     tags: ["expense", "budgeting"]
 
@@ -53,7 +53,7 @@ cases:
     query: "วิธีออมเงินสำหรับมนุษย์เงินเดือน"
     domain_filter: null
     expected_source_files:
-      - "planning_savings_guide.md"
+      - "Planning_Savings_Guide.md"
     expected_keywords: ["ออมเงิน"]
     tags: ["planning", "savings"]
 
@@ -61,7 +61,7 @@ cases:
     query: "กฎเกณฑ์การยื่นภาษีประจำปี"
     domain_filter: "tax"
     expected_source_files:
-      - "tax_thai_personal_income.md"
+      - "Tax_Thai_Personal_Income.md"
     expected_keywords: ["ยื่นแบบ", "กรมสรรพากร"]
     tags: ["tax", "filing"]
 
@@ -69,7 +69,7 @@ cases:
     query: "การวางแผนเกษียณอายุ"
     domain_filter: null
     expected_source_files:
-      - "retirement_planning_guide.md"
+      - "Retirement_Planning_Guide.md"
     expected_keywords: ["เกษียณ"]
     tags: ["planning", "retirement"]
 
@@ -77,7 +77,7 @@ cases:
     query: "วิธีจัดการหนี้สิน"
     domain_filter: null
     expected_source_files:
-      - "debt_management_guide.md"
+      - "Debt_Management_Guide.md"
     expected_keywords: ["หนี้"]
     tags: ["general", "debt"]
 
@@ -85,7 +85,7 @@ cases:
     query: "ประกันชีวิตลดหย่อนภาษีได้เท่าไหร่"
     domain_filter: "tax"
     expected_source_files:
-      - "tax_deductions_guide.md"
+      - "Tax_Deductions_Guide.md"
     expected_keywords: ["ประกันชีวิต"]
     tags: ["tax", "insurance"]
 
@@ -93,7 +93,7 @@ cases:
     query: "ค่าลดหย่อนบุตรกี่บาท"
     domain_filter: "tax"
     expected_source_files:
-      - "tax_deductions_guide.md"
+      - "Tax_Deductions_Guide.md"
     expected_keywords: ["บุตร"]
     tags: ["tax", "child"]
 
@@ -101,7 +101,7 @@ cases:
     query: "กองทุนรวมคืออะไร มีกี่ประเภท"
     domain_filter: "investment"
     expected_source_files:
-      - "investment_mutual_funds.md"
+      - "Investment_Mutual_Funds.md"
     expected_keywords: ["กองทุนรวม"]
     tags: ["investment", "fund_types"]
 
@@ -109,7 +109,7 @@ cases:
     query: "หลักการบริหารเงินพื้นฐาน"
     domain_filter: null
     expected_source_files:
-      - "financial_planning_basics.md"
+      - "Financial_Planning_Basics.md"
     expected_keywords: ["การเงิน"]
     tags: ["general", "basics"]
 
@@ -117,7 +117,7 @@ cases:
     query: "50/30/20 rule คืออะไร"
     domain_filter: "expense"
     expected_source_files:
-      - "expense_budgeting_guide.md"
+      - "Expense_Budgeting_Guide.md"
     expected_keywords: ["50"]
     tags: ["expense", "budgeting_rule"]
 
@@ -125,7 +125,7 @@ cases:
     query: "วิธียื่นภาษีออนไลน์ ภ.ง.ด.91"
     domain_filter: "tax"
     expected_source_files:
-      - "tax_filing_guide.md"
+      - "Tax_Filing_Guide.md"
     expected_keywords: ["ภ.ง.ด.91", "e-Filing"]
     tags: ["tax", "filing"]
 
@@ -133,7 +133,7 @@ cases:
     query: "อัตราภาษีหัก ณ ที่จ่าย"
     domain_filter: "tax"
     expected_source_files:
-      - "tax_vat_withholding.md"
+      - "Tax_VAT_Withholding.md"
     expected_keywords: ["หัก ณ ที่จ่าย"]
     tags: ["tax", "withholding"]
 
@@ -141,7 +141,7 @@ cases:
     query: "ETF คืออะไร ต่างจากกองทุนรวมยังไง"
     domain_filter: "investment"
     expected_source_files:
-      - "investment_etf_bonds.md"
+      - "Investment_ETF_Bonds.md"
     expected_keywords: ["ETF"]
     tags: ["investment", "etf"]
 
@@ -149,7 +149,7 @@ cases:
     query: "DCA ลงทุนยังไง"
     domain_filter: "investment"
     expected_source_files:
-      - "investment_dca_strategy.md"
+      - "Investment_DCA_Strategy.md"
     expected_keywords: ["DCA"]
     tags: ["investment", "dca"]
 
@@ -157,7 +157,7 @@ cases:
     query: "เงินฉุกเฉินควรมีเท่าไหร่"
     domain_filter: "expense"
     expected_source_files:
-      - "expense_emergency_fund.md"
+      - "Expense_Emergency_Fund.md"
     expected_keywords: ["เงินฉุกเฉิน"]
     tags: ["expense", "emergency_fund"]
 
@@ -165,7 +165,7 @@ cases:
     query: "ประกันสังคมมาตรา 33 ได้สิทธิอะไรบ้าง"
     domain_filter: null
     expected_source_files:
-      - "insurance_social_security.md"
+      - "Insurance_Social_Security.md"
     expected_keywords: ["มาตรา 33", "ประกันสังคม"]
     tags: ["general", "social_security"]
 
@@ -173,7 +173,7 @@ cases:
     query: "ประกันชีวิตแบบไหนเหมาะกับมนุษย์เงินเดือน"
     domain_filter: null
     expected_source_files:
-      - "insurance_life_health.md"
+      - "Insurance_Life_Health.md"
     expected_keywords: ["ประกันชีวิต"]
     tags: ["general", "insurance"]
 
@@ -181,7 +181,7 @@ cases:
     query: "หลักการลงทุนระยะยาว"
     domain_filter: "investment"
     expected_source_files:
-      - "investment_earthh_evans_lifelong.pdf"
+      - "Investment_Earthh_Evans_Lifelong.md"
     expected_keywords: ["พอร์ตลงทุน", "ความมั่นคง"]
     tags: ["investment", "pdf"]
 
@@ -189,7 +189,7 @@ cases:
     query: "จิตวิทยาคนเป็นหนี้ ทำไมปลดหนี้ไม่ได้"
     domain_filter: null
     expected_source_files:
-      - "debt_psychology_payoff.md"
+      - "Debt_Psychology_Payoff.md"
     expected_keywords: ["หนี้", "จิตวิทยา"]
     tags: ["general", "debt_psychology"]
 
@@ -197,7 +197,7 @@ cases:
     query: "Debt Snowball กับ Debt Avalanche ต่างกันยังไง"
     domain_filter: null
     expected_source_files:
-      - "debt_psychology_payoff.md"
+      - "Debt_Psychology_Payoff.md"
     expected_keywords: ["Snowball", "Avalanche"]
     tags: ["general", "debt_strategy"]
 
@@ -213,7 +213,7 @@ cases:
     query: "จิตวิทยาการออมเงิน"
     domain_filter: null
     expected_source_files:
-      - "finance_psychology_of_money.pdf"
+      - "Finance_Psychology_Of_Money.md"
     expected_keywords: ["Compounding", "Save Money"]
     tags: ["general", "psychology"]
 
@@ -245,7 +245,7 @@ cases:
     query: "ก่อนเริ่มลงทุนควรเก็บเงินสำรองฉุกเฉินไว้กี่เท่าของค่าใช้จ่ายต่อเดือน"
     domain_filter: "investment"
     expected_source_files:
-      - "investment_earthh_evans_lifelong.pdf"
+      - "Investment_Earthh_Evans_Lifelong.md"
     expected_keywords: ["6 เท่า", "เงินสำรองฉุกเฉิน"]
     tags: ["investment", "pdf", "cross_domain", "hard"]
 
@@ -261,7 +261,7 @@ cases:
     query: "หุ้นปันผล ถูกหักภาษี ณ ที่จ่ายแล้วต้องนำไปรวมคำนวณไหม"
     domain_filter: "tax"
     expected_source_files:
-      - "tax_vat_withholding.md"
+      - "Tax_VAT_Withholding.md"
     expected_keywords: ["ปันผล", "หัก ณ ที่จ่าย"]
     tags: ["tax", "withholding", "cross_domain", "hard"]
 
@@ -277,7 +277,7 @@ cases:
     query: "What is DCA and why does it reduce risk"
     domain_filter: "investment"
     expected_source_files:
-      - "investment_dca_strategy.md"
+      - "Investment_DCA_Strategy.md"
     expected_keywords: ["DCA"]
     tags: ["investment", "dca", "english_query", "cross_lingual"]
 
@@ -285,7 +285,7 @@ cases:
     query: "difference between ETF and mutual fund"
     domain_filter: "investment"
     expected_source_files:
-      - "investment_etf_bonds.md"
+      - "Investment_ETF_Bonds.md"
     expected_keywords: ["ETF", "กองทุนรวม"]
     tags: ["investment", "etf", "english_query", "cross_lingual"]
 
@@ -301,7 +301,7 @@ cases:
     query: "ควรลงทุนคริปโตไหม มีความเสี่ยงอะไรบ้าง"
     domain_filter: "investment"
     expected_source_files:
-      - "investment_digital_assets.md"
+      - "Investment_Digital_Assets.md"
     expected_keywords: ["ความเสี่ยง", "ก.ล.ต."]
     tags: ["investment", "crypto", "suitability"]
 
@@ -309,6 +309,6 @@ cases:
     query: "กำไรจากคริปโตต้องเสียภาษียังไง"
     domain_filter: "investment"
     expected_source_files:
-      - "investment_digital_assets.md"
+      - "Investment_Digital_Assets.md"
     expected_keywords: ["40(4)(ฌ)", "FIFO"]
     tags: ["investment", "crypto", "tax", "cross_domain", "hard"]

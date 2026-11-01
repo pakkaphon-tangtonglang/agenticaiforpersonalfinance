@@ -8,13 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css?v=10" />
+<link rel="stylesheet" href="styles.css?v=11" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
-<script src="config.js?v=10" defer></script>
-<script src="app.js?v=10" defer></script>
-<script src="guru.js?v=10" defer></script>
+<script src="config.js?v=11" defer></script>
+<script src="citations.js?v=11" defer></script>
+<script src="app.js?v=11" defer></script>
+<script src="guru.js?v=11" defer></script>
 </head>
 <body>
 <a href="#main" class="skip-link">ข้ามไปยังเนื้อหาหลัก</a>
@@ -47,7 +48,7 @@
     </nav>
 
     <div class="conv-section">
-      <h2 class="conv-heading">ประวัติแชท</h2>
+      <h2 class="conv-heading" id="convHeading">ประวัติแชท</h2>
       <button class="conv-new" id="newChatBtn" type="button">+ แชทใหม่</button>
       <ul class="conv-list" id="convList" aria-label="รายการบทสนทนา"></ul>
     </div>
@@ -131,8 +132,6 @@
             <button class="guru-mode-btn is-active" type="button" role="tab" data-mode="single" aria-selected="true">คุยกับกูรู</button>
             <button class="guru-mode-btn" type="button" role="tab" data-mode="panel" aria-selected="false">ถามทั้งวง</button>
           </div>
-          <label class="sr-only" for="guruHistory">ประวัติแชทกูรู</label>
-          <select class="guru-history" id="guruHistory"></select>
         </div>
         <p class="guru-disclaimer">AI จำลองแนวคิดจากแหล่งข้อมูลสาธารณะ ไม่ใช่คำพูดหรือคำแนะนำจากบุคคลจริง และไม่ใช่คำแนะนำการลงทุน</p>
         <div class="guru-cards" id="guruCards" aria-label="เลือกกูรู"></div>

@@ -211,6 +211,7 @@ class MessageOut(BaseModel):
     role: str
     content: str
     intent: str = ""
+    sources: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class CreateConversationRequest(BaseModel):
@@ -493,6 +494,7 @@ def _relay_events_and_save(
     """
     full_response = ""
     intent = "unknown"
+    sources: list[dict[str, Any]] = []
     for event in events:
         sse_data = _format_sse_event(event)
         if sse_data:
@@ -501,8 +503,10 @@ def _relay_events_and_save(
             intent = event.intent
         if event.event_type == "token":
             full_response += event.content
+        if event.event_type == "sources":
+            sources = [source.model_dump() for source in event.sources]
 
-    save_assistant_message(session, conversation_id, full_response, intent)
+    save_assistant_message(session, conversation_id, full_response, intent, sources)
 
 
 def _format_sse_event(event: StreamEvent) -> str | None:
@@ -521,6 +525,8 @@ def _format_sse_event(event: StreamEvent) -> str | None:
         return f"data: {json.dumps(event.content, ensure_ascii=False)}\n\n"
     if event.event_type == "complete":
         return "event: complete\n" f"data: {json.dumps(event.intent, ensure_ascii=False)}\n\n"
+    if event.event_type == "sources":
+        return _sse("sources", [source.model_dump() for source in event.sources])
     return None
 
 
@@ -708,6 +714,7 @@ def get_messages(conversation_id: str, session: Session = Depends(get_session)) 
             role=msg.get("role", "user"),
             content=msg.get("content", ""),
             intent=msg.get("intent", ""),
+            sources=msg.get("sources", []),
         )
         for msg in messages
     ]
@@ -842,7 +849,10 @@ def _format_panel_event(event: PanelEvent) -> str:
     """
     if event.event_type == "synthesis" and event.synthesis is not None:
         return _sse("synthesis", event.synthesis.model_dump())
-    return _sse(event.event_type, {"guru_id": event.guru_id, "content": event.content})
+    sources = [source.model_dump() for source in event.sources]
+    return _sse(
+        event.event_type, {"guru_id": event.guru_id, "content": event.content, "sources": sources}
+    )
 
 
 def _panel_stream_generator(
@@ -864,7 +874,11 @@ def _panel_stream_generator(
         yield _format_panel_event(event)
         if event.event_type == "guru_answer":
             save_assistant_message(
-                session, conversation_id, event.content, guru_intent(event.guru_id or "")
+                session,
+                conversation_id,
+                event.content,
+                guru_intent(event.guru_id or ""),
+                [source.model_dump() for source in event.sources],
             )
         if event.event_type == "synthesis" and event.synthesis is not None:
             markdown = synthesis_to_markdown(event.synthesis)

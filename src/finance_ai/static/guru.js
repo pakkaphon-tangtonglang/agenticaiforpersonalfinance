@@ -26,6 +26,7 @@
     selectedId: "",
     panelIds: new Set(),
     conversationId: "",
+    history: [], // guru conversations shown in the sidebar
     streaming: false,
   };
 
@@ -39,17 +40,6 @@
   function guruName(guruId) {
     if (guruId === PANEL_ID) return "ถามทั้งวง";
     return guru.byId[guruId] ? guru.byId[guruId].display_name : guruId;
-  }
-
-  function sourceLinks(text) {
-    const urls = [...new Set(text.match(/https?:\/\/[^\s|\])>"']+/g) || [])];
-    if (!urls.length) return null;
-    const el = app().el;
-    return el("div", { class: "guru-sources" },
-      el("span", { class: "guru-sources-label" }, "แหล่งที่มา:"),
-      ...urls.map((url) => el("a", {
-        class: "guru-source", href: url, target: "_blank", rel: "noopener noreferrer",
-      }, new URL(url).hostname.replace(/^www\./, ""))));
   }
 
   function scrollThread() {
@@ -69,10 +59,9 @@
     return bubble;
   }
 
-  function finishAnswer(bubble, text) {
+  function finishAnswer(bubble, text, sources) {
     bubble.classList.remove("msg-cursor");
-    const links = sourceLinks(text);
-    if (links) bubble.closest(".msg").append(links);
+    if (text) app().attachSources(bubble, text, sources);
   }
 
   // ─── Cards / chips ───
@@ -139,23 +128,40 @@
   function startFresh() {
     guru.conversationId = "";
     $("guruThread").innerHTML = "";
-    $("guruHistory").value = "";
+    renderHistory();
   }
 
-  // ─── History ───
+  // ─── History (sidebar list, shared with the main chat) ───
+  function historyAvatar(conv) {
+    const label = conv.guru_id === PANEL_ID ? "วง" : initials(guruName(conv.guru_id));
+    return app().el("span", { class: "guru-avatar guru-avatar-sm conv-avatar", "aria-hidden": "true" }, label);
+  }
+
+  function renderHistory() {
+    if (!document.querySelector(".nav-item.is-active[data-view='guru']")) return;
+    app().renderConversationList(guru.history, {
+      activeId: guru.conversationId,
+      emptyText: "ยังไม่มีแชทกูรู",
+      onOpen: (conv) => openConversation(conv.id, conv.guru_id),
+      onDeleted: (conv) => { if (conv.id === guru.conversationId) startFresh(); },
+      leading: historyAvatar,
+      subtitle: (conv) => guruName(conv.guru_id),
+    });
+  }
+
   async function loadHistory() {
-    const select = $("guruHistory");
-    select.innerHTML = "";
-    select.append(new Option("ประวัติแชทกูรู…", ""));
     try {
-      const convs = await app().api("GET", "/conversations", {
+      guru.history = (await app().api("GET", "/conversations", {
         params: { user_id: app().getUserId(), kind: "guru" },
-      });
-      for (const conv of convs || []) {
-        select.append(new Option(`${guruName(conv.guru_id)} · ${conv.title}`, conv.id));
-        select.lastChild.dataset.guruId = conv.guru_id || "";
-      }
+      })) || [];
     } catch (e) { /* history is optional */ }
+    renderHistory();
+  }
+
+  function newChat() {
+    if (guru.streaming) return;
+    startFresh();
+    $("guruInput").focus();
   }
 
   async function openConversation(conversationId, guruId) {
@@ -163,7 +169,7 @@
     setMode(guruId === PANEL_ID ? "panel" : "single");
     if (guruId !== PANEL_ID) guru.selectedId = guruId;
     guru.conversationId = conversationId;
-    $("guruHistory").value = conversationId;
+    renderHistory();
     renderCards();
     renderChips();
     try {
@@ -173,7 +179,7 @@
         const msgGuru = (m.intent || "").replace(/^guru:/, "");
         const bubble = appendMessage(m.role, m.content, msgGuru === "synthesis" ? "" : msgGuru);
         if (msgGuru === "synthesis") bubble.closest(".msg").querySelector(".msg-role").textContent = "สรุปเปรียบเทียบ";
-        if (m.role === "assistant") finishAnswer(bubble, m.content);
+        if (m.role === "assistant") finishAnswer(bubble, m.content, m.sources);
       }
     } catch (e) {
       app().toast("โหลดประวัติแชทไม่สำเร็จ", true);
@@ -191,7 +197,7 @@
       },
     });
     guru.conversationId = conv.id;
-    loadHistory().then(() => { $("guruHistory").value = guru.conversationId; });
+    loadHistory();
   }
 
   // ─── Streaming: one guru ───
@@ -203,14 +209,18 @@
       guru_id: guru.selectedId, conversation_id: guru.conversationId,
     });
     let full = "";
+    let sources = [];
     return new Promise((resolve) => {
       const source = new EventSource(`${app().apiBase}/guru/chat/stream?${params}`);
+      source.addEventListener("sources", (ev) => {
+        try { sources = JSON.parse(ev.data) || []; } catch (_) { /* keep answer without cards */ }
+      });
       source.addEventListener("message", (ev) => {
         full += JSON.parse(ev.data);
         bubble.innerHTML = app().renderMarkdown(full);
         scrollThread();
       });
-      source.addEventListener("complete", () => { source.close(); finishAnswer(bubble, full); resolve(); });
+      source.addEventListener("complete", () => { source.close(); finishAnswer(bubble, full, sources); resolve(); });
       source.onerror = () => {
         source.close();
         finishAnswer(bubble, full);
@@ -233,10 +243,12 @@
   }
 
   function renderSynthesis(synthesis) {
+    const clean = (text) => (window.Citations ? window.Citations.stripMarkers(text) : text);
     const rows = synthesis.stances.map((s) =>
-      `| ${guruName(s.guru_id)} | ${s.stance} | ${s.key_reason} | ${s.risk} |`);
+      `| ${guruName(s.guru_id)} | ${clean(s.stance)} | ${clean(s.key_reason)} | ${clean(s.risk)} |`);
     const markdown = ["| กูรู | จุดยืน | เหตุผลหลัก | ความเสี่ยง |", "|---|---|---|---|", ...rows,
-      "", `**เห็นตรงกัน:** ${synthesis.consensus}`, `**เห็นต่าง:** ${synthesis.differences}`].join("\n");
+      "", `**เห็นตรงกัน:** ${clean(synthesis.consensus)}`,
+      `**เห็นต่าง:** ${clean(synthesis.differences)}`].join("\n");
     const bubble = appendMessage("assistant", markdown, "");
     bubble.closest(".msg").classList.add("guru-synthesis");
     bubble.closest(".msg").querySelector(".msg-role").textContent = "สรุปเปรียบเทียบ";
@@ -265,7 +277,7 @@
         if (!body) return;
         body.classList.remove("msg-cursor");
         body.innerHTML = failed ? "ตอบไม่สำเร็จ" : app().renderMarkdown(data.content);
-        if (!failed) { const links = sourceLinks(data.content); if (links) body.after(links); }
+        if (!failed) app().attachSources(body, data.content, data.sources, body.closest(".guru-panel-card"));
       };
       source.addEventListener("guru_answer", (ev) => settle(ev, false));
       source.addEventListener("guru_error", (ev) => settle(ev, true));
@@ -336,8 +348,6 @@
     wireComposer();
     document.querySelectorAll(".guru-mode-btn").forEach((b) =>
       b.addEventListener("click", () => setMode(b.dataset.mode)));
-    $("guruHistory").addEventListener("change", (e) =>
-      openConversation(e.target.value, e.target.selectedOptions[0].dataset.guruId));
   }
 
   async function open() {
@@ -356,8 +366,8 @@
     guru.panelIds = new Set(guru.gurus.map((g) => g.guru_id));
     renderCards();
     renderChips();
-    loadHistory();
+    renderHistory();
   }
 
-  window.GuruView = { open };
+  window.GuruView = { open, loadHistory, newChat };
 })();
