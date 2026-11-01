@@ -412,22 +412,91 @@
     };
   }
 
-  // options: { activeId, emptyText, onOpen(conv), onDeleted(conv), leading(conv), subtitle(conv) }
+  // options: { activeId, emptyText, onOpen(conv), onDeleted(conv), leading(conv), subtitle(conv),
+  //            searchText(conv) — extra words the sidebar search matches, e.g. a guru id }
+  const convSearch = { query: "", convs: [], options: null };
+
   function renderConversationList(convs, options) {
+    convSearch.convs = convs;
+    convSearch.options = options;
     const list = $("convList");
-    list.innerHTML = "";
+    list.replaceChildren(el("li", { class: "conv-glide", role: "presentation", "aria-hidden": "true" }));
     if (!convs.length) {
       list.append(el("li", { class: "notif-empty" }, options.emptyText));
       return;
     }
-    for (const conv of convs) list.append(conversationItem(conv, options));
+    const shown = convs.filter((conv) => window.ConvSearch.matches(searchableText(conv, options), convSearch.query));
+    if (!shown.length) {
+      list.append(el("li", { class: "notif-empty" }, `ไม่พบแชทที่ตรงกับ “${convSearch.query.trim()}”`));
+      return;
+    }
+    for (const conv of shown) list.append(conversationItem(conv, options));
+  }
+
+  function searchableText(conv, options) {
+    return [conv.title || DEFAULT_CONV_TITLE,
+      options.subtitle ? options.subtitle(conv) : "",
+      options.searchText ? options.searchText(conv) : ""].join(" ");
+  }
+
+  function markedTitle(title) {
+    const part = window.ConvSearch.splitMatch(title, convSearch.query);
+    return part ? [part.before, el("mark", { class: "conv-mark" }, part.match), part.after] : [title];
   }
 
   function conversationText(conv, options, rename) {
     const subtitle = options.subtitle ? options.subtitle(conv) : "";
     return el("button", { class: "conv-text", type: "button" },
-      el("span", { class: "conv-title", ondblclick: rename }, conv.title || DEFAULT_CONV_TITLE),
+      el("span", { class: "conv-title", ondblclick: rename }, ...markedTitle(conv.title || DEFAULT_CONV_TITLE)),
       subtitle ? el("span", { class: "conv-sub" }, subtitle) : null);
+  }
+
+  // ─── Sidebar search (grows open right → left) + glide highlight ───
+  function setConvSearchOpen(open) {
+    $("convHead").classList.toggle("is-searching", open);
+    $("convSearchOpen").setAttribute("aria-expanded", String(open));
+    $("convSearchInput").tabIndex = open ? 0 : -1;
+    $("convSearchClose").tabIndex = open ? 0 : -1;
+    if (open) { requestAnimationFrame(() => $("convSearchInput").focus()); return; }
+    $("convSearchInput").value = "";
+    setConvQuery("");
+  }
+
+  function setConvQuery(query) {
+    convSearch.query = query;
+    if (convSearch.options) renderConversationList(convSearch.convs, convSearch.options);
+  }
+
+  function closeConvSearch() {
+    setConvSearchOpen(false);
+    $("convSearchOpen").focus();
+  }
+
+  function setupConvSearch() {
+    $("convSearchOpen").addEventListener("click", () => setConvSearchOpen(true));
+    $("convSearchClose").addEventListener("click", closeConvSearch);
+    $("convSearchInput").addEventListener("input", (e) => setConvQuery(e.target.value));
+    $("convSearchInput").addEventListener("keydown", (e) => {
+      if (e.key === "Escape") { e.stopPropagation(); closeConvSearch(); }
+    });
+    setupConvGlide();
+  }
+
+  // One highlight slides between rows instead of each row lighting up.
+  function setupConvGlide() {
+    const list = $("convList");
+    list.addEventListener("pointerover", (e) => {
+      const row = e.target.closest(".conv-list > li:not(.conv-glide):not(.notif-empty)");
+      const glide = list.querySelector(".conv-glide");
+      if (!row || !glide) return;
+      const entering = !list.classList.contains("is-gliding");
+      glide.classList.toggle("no-slide", entering);
+      glide.style.transform = `translateY(${row.offsetTop}px)`;
+      glide.style.height = `${row.offsetHeight}px`;
+      list.classList.add("is-gliding");
+      if (entering) requestAnimationFrame(() => glide.classList.remove("no-slide"));
+    });
+    list.addEventListener("pointerleave", () => list.classList.remove("is-gliding"));
   }
 
   function conversationItem(conv, options) {
@@ -874,6 +943,25 @@
       renderExpenseChart(state.lastReport.expense_breakdown || {});
       renderPortfolio(state.lastReport.investment_portfolio || {});
     }
+    if (window.InsightCards) window.InsightCards.redraw();
+  }
+
+  // The new theme grows as a circle from the bottom-left corner until it covers
+  // the screen. Without View Transitions, or with reduced motion, it switches at once.
+  const THEME_REVEAL_MS = 560;
+
+  function revealTheme(next) {
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!document.startViewTransition || reduce) { applyTheme(next); return; }
+    const origin = `0px ${window.innerHeight}px`;
+    const radius = Math.hypot(window.innerWidth, window.innerHeight);
+    const transition = document.startViewTransition(() => applyTheme(next));
+    transition.ready.then(() => {
+      document.documentElement.animate(
+        { clipPath: [`circle(0px at ${origin})`, `circle(${radius}px at ${origin})`] },
+        { duration: THEME_REVEAL_MS, easing: "cubic-bezier(0.65, 0, 0.35, 1)",
+          pseudoElement: "::view-transition-new(root)" });
+    }).catch(() => { /* skipped transition: theme is already applied */ });
   }
 
   function setupThemeToggle() {
@@ -881,7 +969,7 @@
     $("themeToggle").addEventListener("click", () => {
       const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
       try { localStorage.setItem("pfai_theme", next); } catch (_) { /* storage blocked: this visit only */ }
-      applyTheme(next);
+      revealTheme(next);
     });
   }
 
@@ -918,6 +1006,7 @@
       $("dashEmpty").hidden = true;
       $("dashContent").hidden = false;
       if (window.HistoryView) window.HistoryView.load(year, month);
+      if (window.InsightCards) window.InsightCards.load(year, month);
     } catch (e) {
       toast("โหลดแดชบอร์ดไม่สำเร็จ: " + e.message, true);
     } finally {
@@ -2399,6 +2488,7 @@
     setupCategoryNav();
     setupHomeActions();
     setupThemeToggle();
+    setupConvSearch();
     setupSidebarCollapse();
     setupUpload();
     setupChatAttach();
@@ -2416,6 +2506,9 @@
   window.FinanceApp = {
     apiBase: API_BASE,
     api,
+    sendChat,
+    isStreaming: () => state.streaming,
+    askInChat(text) { switchView("chat"); sendChat(text); },
     el,
     renderMarkdown,
     attachSources,
