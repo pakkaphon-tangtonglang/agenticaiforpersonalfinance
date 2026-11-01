@@ -338,7 +338,8 @@ def _fetch_asset_summary(
 
     news_result = fetch_finance_news(symbol)
     if not news_result.has_news:
-        return price_text
+        # Say so explicitly: a daily news alert with no news line looks broken.
+        return f"{price_text}\n\n📰 {news_result.news_content}"
 
     if chat_model is not None:
         news_summary = _summarize_with_llm(

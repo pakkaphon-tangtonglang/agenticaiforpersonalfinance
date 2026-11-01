@@ -9,6 +9,7 @@ be the only candidate returned.
 from typing import Optional
 
 from finance_ai.core.logging import get_logger
+from finance_ai.tools.input_normalizer import clean_symbol_text
 from finance_ai.tools.market_data_models import AssetSymbolMatch
 from finance_ai.tools.symbol_search_service import search_asset_symbols
 
@@ -29,13 +30,15 @@ _AMBIGUOUS_TEMPLATE = (
     + "กรุณาระบุสัญลักษณ์ให้เฉพาะเจาะจงมากขึ้น"
 )
 
+_MAX_CANDIDATES = 5
 _SEARCH_FAILED_TEMPLATE = "ไม่สามารถค้นหาสัญลักษณ์ '{query}' ได้ในขณะนี้ กรุณาลองใหม่ภายหลัง"
 
 
 class SymbolResolutionError(ValueError):
     """Raised when input cannot be resolved to a canonical Yahoo symbol.
 
-    Subclasses ValueError so callers may catch either type.
+    Subclasses ValueError so callers may catch either type. When the input
+    was ambiguous, `candidates` holds the options to offer the user.
 
     Example:
         >>> try:
@@ -44,6 +47,15 @@ class SymbolResolutionError(ValueError):
         ...     print("rejected")
         rejected
     """
+
+    def __init__(self, message: str, candidates: Optional[list[AssetSymbolMatch]] = None) -> None:
+        """Store the message and any candidates to offer the user."""
+        super().__init__(message)
+        self.candidates: list[AssetSymbolMatch] = list(candidates or [])
+
+
+class SymbolSearchUnavailableError(SymbolResolutionError):
+    """The symbol search service failed: retry later, do not ask the user to retype."""
 
 
 def resolve_and_validate_symbol(symbol: str) -> str:
@@ -67,14 +79,14 @@ def resolve_and_validate_symbol(symbol: str) -> str:
         >>> resolve_and_validate_symbol("aapl")  # doctest: +SKIP
         'AAPL'
     """
-    query = symbol.strip()
+    query = clean_symbol_text(symbol)
     if not query:
         raise SymbolResolutionError(_EMPTY_INPUT_MESSAGE)
     try:
         matches = search_asset_symbols(query)
     except Exception as exc:  # noqa: BLE001
         logger.warning("Symbol search failed for %r: %s", query, exc)
-        raise SymbolResolutionError(_SEARCH_FAILED_TEMPLATE.format(query=query)) from exc
+        raise SymbolSearchUnavailableError(_SEARCH_FAILED_TEMPLATE.format(query=query)) from exc
     return _pick_canonical_symbol(query, matches)
 
 
@@ -99,7 +111,9 @@ def _pick_canonical_symbol(query: str, matches: list[AssetSymbolMatch]) -> str:
         return canonical
     if len(matches) == 1:
         return matches[0].symbol
-    raise SymbolResolutionError(_AMBIGUOUS_TEMPLATE.format(query=query))
+    raise SymbolResolutionError(
+        _AMBIGUOUS_TEMPLATE.format(query=query), candidates=matches[:_MAX_CANDIDATES]
+    )
 
 
 def _exact_symbol_match(query: str, matches: list[AssetSymbolMatch]) -> Optional[str]:

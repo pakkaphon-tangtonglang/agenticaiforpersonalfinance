@@ -150,3 +150,4 @@ class TestToolRegistry:
         tool_names = [tool.name for tool in ASSET_MONITORING_TOOLS]
         assert "get_portfolio_holdings" in tool_names
         assert "manage_watchlist" in tool_names
+        assert "add_portfolio_holding" in tool_names

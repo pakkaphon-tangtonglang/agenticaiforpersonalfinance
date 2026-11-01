@@ -6,7 +6,7 @@ provides user_id and db_session_factory from the agent graph state.
 """
 
 import calendar
-from datetime import date, datetime
+from datetime import date
 from typing import Annotated, Any
 
 from langchain_core.tools import tool
@@ -19,13 +19,17 @@ from finance_ai.tools.expense_calculator import (
     validate_expense_category,
 )
 from finance_ai.tools.expense_constants import EXPENSE_CATEGORIES, INCOME_TYPES
+from finance_ai.tools.input_normalizer import parse_flexible_date
 
 
 def parse_date_value(value: str, field_name: str) -> date:
-    """Parse a date string (YYYY-MM-DD) into a date object.
+    """Parse a date as people type it into a date object.
+
+    Accepts YYYY-MM-DD, DD/MM/YYYY and DD-MM-YYYY, Buddhist-era years
+    (2569 → 2026) and Thai digits.
 
     Args:
-        value: Date string in YYYY-MM-DD format.
+        value: Date as typed (e.g. "2026-02-24", "24/02/2569").
         field_name: Name of the field for error messages.
 
     Returns:
@@ -39,7 +43,7 @@ def parse_date_value(value: str, field_name: str) -> date:
         datetime.date(2026, 2, 24)
     """
     try:
-        return datetime.strptime(value.strip(), "%Y-%m-%d").date()
+        return parse_flexible_date(value)
     except ValueError as exc:
         raise ValueError(
             f"Cannot parse {field_name} as date (YYYY-MM-DD). Received: '{value}'"

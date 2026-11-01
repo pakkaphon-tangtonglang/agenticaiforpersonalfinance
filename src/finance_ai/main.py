@@ -15,7 +15,8 @@ from typing import Any, Literal
 
 import asyncio
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import (
     BackgroundTasks,
@@ -33,6 +34,7 @@ from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from finance_ai.agents.llm_factory import create_chat_model, create_ocr_chat_model
@@ -51,6 +53,7 @@ from finance_ai.core.bootstrap import start_guru_refresh_in_background
 from finance_ai.core.config import get_settings
 from finance_ai.core.logging import get_logger
 from finance_ai.database.crud.watched_asset_crud import WatchedAssetCRUD
+from finance_ai.database.models.watched_asset import WatchedAsset
 from finance_ai.database.session import create_database_engine, create_session_factory
 from finance_ai.line.link_command import unlink_web_user
 from finance_ai.line.line_bot_service import handle_line_document_event, handle_line_event
@@ -106,6 +109,13 @@ from finance_ai.tools.conversation_title_service import (
 )
 from finance_ai.tools.market_data_models import AssetFetchResult
 from finance_ai.tools.report_service import generate_financial_report
+from finance_ai.tools.background_scheduler import start_scheduler, stop_scheduler
+from finance_ai.tools.watchlist_alert_service import (
+    AlertTimeError,
+    clear_watchlist_alert,
+    get_watchlist_alert_times,
+    set_watchlist_alert,
+)
 from finance_ai.tools.scheduler_service import (
     fetch_asset_data_structured,
     get_unread_notifications,
@@ -134,7 +144,22 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     """
     if get_settings().guru_fetch_on_startup:
         start_guru_refresh_in_background()
+    _start_alert_scheduler()
     yield
+    stop_scheduler()
+
+
+def _start_alert_scheduler() -> None:
+    """Start the cron scheduler that fires watchlist news alerts.
+
+    A failure (e.g. database not reachable yet) is logged, not raised, so the
+    chat still starts; alerts then load on the next restart.
+    """
+    try:
+        count = start_scheduler(_session_factory)
+        logger.info("Alert scheduler started with %d schedules", count)
+    except SQLAlchemyError as exc:
+        logger.error("Alert scheduler failed to start: %s", exc)
 
 
 async def _request_user_id(request: Request) -> str | None:
@@ -367,6 +392,16 @@ class WatchlistItemOut(BaseModel):
     id: str = Field(..., description="Asset UUID used by DELETE /assets/watchlist/{id}")
     symbol: str = Field(..., description="Canonical Yahoo symbol (e.g. 'PTT.BK')")
     name: str = Field(default="", description="Display name")
+    alert_time: str | None = Field(
+        default=None, description="Daily news alert time 'HH:MM' (Bangkok), None when off"
+    )
+
+
+class WatchlistAlertRequest(BaseModel):
+    """Set (HH:MM) or clear (null) a watched asset's daily news alert."""
+
+    user_id: str = Field(..., description="User UUID")
+    alert_time: str | None = Field(default=None, description="'HH:MM' 24-hour, or null to turn off")
 
 
 class HoldingItemOut(BaseModel):
@@ -634,6 +669,8 @@ def _format_sse_event(event: StreamEvent) -> str | None:
         return "event: complete\n" f"data: {json.dumps(event.intent, ensure_ascii=False)}\n\n"
     if event.event_type == "sources":
         return _sse("sources", [source.model_dump() for source in event.sources])
+    if event.event_type == "tool" and event.tool is not None:
+        return _sse("tool", event.tool.model_dump())
     return None
 
 
@@ -1580,6 +1617,8 @@ def mark_notifications_read(
     return {"status": "ok"}
 
 
+_BANGKOK_TIMEZONE = ZoneInfo("Asia/Bangkok")
+
 _THAI_MONTH_ABBREVIATIONS: tuple[str, ...] = (
     "",
     "ม.ค.",
@@ -1603,18 +1642,23 @@ def _format_thai_datetime(value: datetime) -> str:
     Uses the Gregorian year with Thai month abbreviations, matching Thai
     UI conventions for notification timestamps.
 
+    Stored timestamps are UTC (naive on SQLite, aware on Postgres), so the
+    value is shown in Bangkok time.
+
     Args:
-        value: Datetime to format (naive or timezone-aware).
+        value: Datetime to format (naive values are taken as UTC).
 
     Returns:
-        Formatted string 'D MMM YYYY, HH:MM'.
+        Formatted string 'D MMM YYYY, HH:MM' in Asia/Bangkok time.
 
     Example:
-        >>> _format_thai_datetime(datetime(2026, 9, 13, 17, 45))
+        >>> _format_thai_datetime(datetime(2026, 9, 13, 10, 45))
         '13 ก.ย. 2026, 17:45'
     """
-    month = _THAI_MONTH_ABBREVIATIONS[value.month]
-    return f"{value.day} {month} {value.year}, {value.hour:02d}:{value.minute:02d}"
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=timezone.utc)
+    local = aware.astimezone(_BANGKOK_TIMEZONE)
+    month = _THAI_MONTH_ABBREVIATIONS[local.month]
+    return f"{local.day} {month} {local.year}, {local.hour:02d}:{local.minute:02d}"
 
 
 @app.get("/assets/watchlist", response_model=list[WatchlistItemOut])
@@ -1629,8 +1673,15 @@ def get_watchlist(user_id: str, session: Session = Depends(get_session)) -> list
         List of watched assets, oldest first.
     """
     assets = WatchedAssetCRUD().list_for_user(session, user_id)
+    alert_times = get_watchlist_alert_times(session, user_id)
     return [
-        WatchlistItemOut(id=str(asset.id), symbol=asset.symbol, name=asset.name) for asset in assets
+        WatchlistItemOut(
+            id=str(asset.id),
+            symbol=asset.symbol,
+            name=asset.name,
+            alert_time=alert_times.get(asset.symbol),
+        )
+        for asset in assets
     ]
 
 
@@ -1699,33 +1750,75 @@ def delete_watchlist_asset(
     Raises:
         HTTPException: 404 when the asset is not in the user's watchlist.
     """
-    if _delete_watchlist_asset(session, WatchedAssetCRUD(), asset_id, user_id):
-        session.commit()
-        return {"status": "ok"}
-    raise HTTPException(
+    crud = WatchedAssetCRUD()
+    asset = _find_watched_asset(session, crud, asset_id, user_id)
+    if asset is None:
+        raise _watchlist_not_found(asset_id)
+    clear_watchlist_alert(session, user_id, asset.symbol)
+    crud.delete(session, asset.id, user_id)
+    session.commit()
+    return {"status": "ok"}
+
+
+@app.put("/assets/watchlist/{asset_id}/alert")
+def set_watchlist_asset_alert(
+    asset_id: str, req: WatchlistAlertRequest, session: Session = Depends(get_session)
+) -> dict[str, str | None]:
+    """Set or turn off the daily news alert time of a watched asset.
+
+    Args:
+        asset_id: Canonical symbol or asset UUID.
+        req: user_id and alert_time ('HH:MM', or null to turn off).
+        session: Database session.
+
+    Returns:
+        {"symbol", "alert_time"} — alert_time is None when turned off.
+
+    Raises:
+        HTTPException: 404 when not watched, 422 for an invalid time.
+    """
+    asset = _find_watched_asset(session, WatchedAssetCRUD(), asset_id, req.user_id)
+    if asset is None:
+        raise _watchlist_not_found(asset_id)
+    if not req.alert_time:
+        clear_watchlist_alert(session, req.user_id, asset.symbol)
+        return {"symbol": asset.symbol, "alert_time": None}
+    try:
+        saved = set_watchlist_alert(
+            session, req.user_id, asset.symbol, req.alert_time, _session_factory
+        )
+    except AlertTimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"symbol": asset.symbol, "alert_time": saved}
+
+
+def _watchlist_not_found(asset_id: str) -> HTTPException:
+    """404 for an asset that is not on the user's watchlist."""
+    return HTTPException(
         status_code=404,
         detail=f"ไม่พบ '{asset_id}' ในรายการสินทรัพย์ที่ติดตามของผู้ใช้",
     )
 
 
-def _delete_watchlist_asset(
+def _find_watched_asset(
     session: Session, crud: WatchedAssetCRUD, asset_id: str, user_id: str
-) -> bool:
-    """Delete a watched asset matched by symbol first, then by asset id.
+) -> WatchedAsset | None:
+    """Find a user's watched asset by symbol (typed any way, e.g. "ptt"), then by UUID.
 
     Args:
         session: Database session.
         crud: WatchedAssetCRUD instance.
-        asset_id: Canonical symbol or asset UUID from the request path.
-        user_id: UUID of the requesting user.
+        asset_id: Canonical symbol (e.g. "PTT.BK") or asset UUID.
+        user_id: Owner's UUID.
 
     Returns:
-        True when a row owned by the user was deleted.
+        The asset, or None when the user does not watch it.
     """
-    asset = crud.get_by_symbol(session, user_id, asset_id)
+    asset = crud.find_by_user_input(session, user_id, asset_id)
     if asset is not None:
-        return crud.delete(session, asset.id, user_id)
-    return crud.delete(session, asset_id, user_id)
+        return asset
+    by_id = crud.get_by_id(session, asset_id)
+    return by_id if by_id is not None and by_id.user_id == user_id else None
 
 
 # ──────────────────────── Risk Assessment ────────────────────────

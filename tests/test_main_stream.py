@@ -103,3 +103,25 @@ class TestSourcesEvent:
         assert sse.count("\n") == 3
         payload = json.loads(sse.split("data: ", 1)[1])
         assert payload[0]["title"] == "คู่มือภาษี\nบรรทัด"
+
+
+class TestToolEvent:
+    """Finished tool calls are sent as a named SSE event."""
+
+    def test_tool_event_carries_trace(self) -> None:
+        """The payload is the tool trace, JSON-encoded on one line."""
+        from finance_ai.agents.tool_trace import ToolTrace
+
+        trace = ToolTrace(call_id="c1", name="add_expense", args={"note": "ข้าว"}, preview=["a\nb"])
+        sse = _format_sse_event(StreamEvent(event_type="tool", tool=trace))
+
+        assert sse is not None
+        assert sse.startswith("event: tool\ndata: ")
+        assert sse.count("\n") == 3
+        payload = json.loads(sse.split("data: ", 1)[1])
+        assert payload["name"] == "add_expense"
+        assert payload["args"] == {"note": "ข้าว"}
+
+    def test_tool_event_without_trace_returns_none(self) -> None:
+        """A tool event missing its trace is skipped."""
+        assert _format_sse_event(StreamEvent(event_type="tool")) is None

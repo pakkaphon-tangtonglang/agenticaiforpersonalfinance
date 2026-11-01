@@ -491,7 +491,7 @@ class TestNotificationsThaiDate:
     def test_created_at_is_thai_formatted(
         self, client: TestClient, temp_db: sessionmaker[Session]
     ) -> None:
-        """created_at renders as e.g. '13 ก.ย. 2026, 17:45'."""
+        """created_at (stored UTC) renders in Bangkok time, e.g. '13 ก.ย. 2026, 17:45'."""
         session = temp_db()
         user = session.query(User).first()
         assert user is not None
@@ -500,7 +500,7 @@ class TestNotificationsThaiDate:
             symbol="GC=F",
             content="ราคาทอง: 2,350 USD",
             is_read=False,
-            created_at=datetime(2026, 9, 13, 17, 45),
+            created_at=datetime(2026, 9, 13, 10, 45),
         )
         session.add(notification)
         session.commit()
@@ -558,3 +558,114 @@ class TestHoldingsEndpoint:
                 "unrealized_gain_loss": "650.00",
             }
         ]
+
+
+def _watch_ptt(client: TestClient, user_id: str, monkeypatch: pytest.MonkeyPatch) -> str:
+    """Put PTT.BK on the user's watchlist; return its asset id."""
+    monkeypatch.setattr(
+        "finance_ai.tools.symbol_guard.search_asset_symbols",
+        lambda query: [
+            AssetSymbolMatch(symbol="PTT.BK", name="PTT", exchange="SET", quote_type="EQUITY")
+        ],
+    )
+    client.post("/assets/watchlist", json={"user_id": user_id, "symbol": "PTT.BK", "name": "PTT"})
+    listed = client.get("/assets/watchlist", params={"user_id": user_id}).json()
+    return str(listed[0]["id"])
+
+
+class TestWatchlistAlertEndpoint:
+    """PUT /assets/watchlist/{id}/alert sets or clears the daily news time."""
+
+    def test_set_alert_shows_in_list(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A set time comes back normalized and in GET /assets/watchlist."""
+        user_id = _first_user_id(temp_db)
+        asset_id = _watch_ptt(client, user_id, monkeypatch)
+
+        response = client.put(
+            f"/assets/watchlist/{asset_id}/alert",
+            json={"user_id": user_id, "alert_time": "8.30"},
+        )
+
+        assert response.json() == {"symbol": "PTT.BK", "alert_time": "08:30"}
+        listed = client.get("/assets/watchlist", params={"user_id": user_id}).json()
+        assert listed[0]["alert_time"] == "08:30"
+
+    def test_null_clears_alert(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """alert_time null turns the alert off."""
+        user_id = _first_user_id(temp_db)
+        _watch_ptt(client, user_id, monkeypatch)
+        url = "/assets/watchlist/PTT.BK/alert"
+        client.put(url, json={"user_id": user_id, "alert_time": "08:30"})
+
+        response = client.put(url, json={"user_id": user_id, "alert_time": None})
+
+        assert response.json() == {"symbol": "PTT.BK", "alert_time": None}
+        listed = client.get("/assets/watchlist", params={"user_id": user_id}).json()
+        assert listed[0]["alert_time"] is None
+
+    def test_invalid_time_returns_422(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A time outside 00:00-23:59 is rejected."""
+        user_id = _first_user_id(temp_db)
+        _watch_ptt(client, user_id, monkeypatch)
+
+        response = client.put(
+            "/assets/watchlist/PTT.BK/alert", json={"user_id": user_id, "alert_time": "25:00"}
+        )
+
+        assert response.status_code == 422
+        assert "24-hour" in response.json()["detail"]
+
+    def test_unwatched_asset_returns_404(
+        self, client: TestClient, temp_db: sessionmaker[Session]
+    ) -> None:
+        """Only watched assets can get an alert."""
+        user_id = _first_user_id(temp_db)
+
+        response = client.put(
+            "/assets/watchlist/AOT.BK/alert", json={"user_id": user_id, "alert_time": "08:00"}
+        )
+
+        assert response.status_code == 404
+
+    def test_delete_by_id_turns_off_alert(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Deleting by UUID removes the asset and its alert."""
+        user_id = _first_user_id(temp_db)
+        asset_id = _watch_ptt(client, user_id, monkeypatch)
+        client.put(
+            f"/assets/watchlist/{asset_id}/alert",
+            json={"user_id": user_id, "alert_time": "08:30"},
+        )
+
+        response = client.delete(f"/assets/watchlist/{asset_id}", params={"user_id": user_id})
+
+        assert response.status_code == 200
+        _watch_ptt(client, user_id, monkeypatch)
+        listed = client.get("/assets/watchlist", params={"user_id": user_id}).json()
+        assert listed[0]["alert_time"] is None
+
+
+class TestWatchlistSymbolTypedAnyWay:
+    """The web API finds watched Thai stocks without the .BK suffix."""
+
+    def test_alert_and_delete_by_plain_ticker(
+        self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """'ptt' works for both the alert and the delete endpoint."""
+        user_id = _first_user_id(temp_db)
+        _watch_ptt(client, user_id, monkeypatch)
+
+        alert = client.put(
+            "/assets/watchlist/ptt/alert", json={"user_id": user_id, "alert_time": "8:30 pm"}
+        )
+        deleted = client.delete("/assets/watchlist/ptt", params={"user_id": user_id})
+
+        assert alert.json() == {"symbol": "PTT.BK", "alert_time": "20:30"}
+        assert deleted.status_code == 200

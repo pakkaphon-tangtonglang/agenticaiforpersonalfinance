@@ -169,10 +169,30 @@ class TestValidateMutualFundSymbol:
         """Normalizes to uppercase."""
         assert validate_mutual_fund_symbol("k-equity") == "K-EQUITY"
 
-    def test_invalid_prefix_raises(self) -> None:
-        """Raises ValueError for invalid prefix."""
-        with pytest.raises(ValueError, match="must start with"):
-            validate_mutual_fund_symbol("TISCO-FUND")
+    @pytest.mark.parametrize(
+        ("code", "expected"),
+        [
+            ("TISCO-FUND", "TISCO-FUND"),
+            ("KFSDIV", "KFSDIV"),
+            ("SCBSET50", "SCBSET50"),
+            ("k-usa-a(a)", "K-USA-A(A)"),
+            ("scb s&p500", "SCBS&P500"),
+        ],
+    )
+    def test_accepts_any_fund_house(self, code: str, expected: str) -> None:
+        """Codes from any fund house are accepted and normalized."""
+        assert validate_mutual_fund_symbol(code) == expected
+
+    def test_stock_symbol_rejected(self) -> None:
+        """A .BK symbol is a stock, not a fund."""
+        with pytest.raises(ValueError, match="looks like a stock"):
+            validate_mutual_fund_symbol("PTT.BK")
+
+    @pytest.mark.parametrize("code", ["K", "?!", "-FUND"])
+    def test_invalid_format_raises(self, code: str) -> None:
+        """Too short or odd characters are rejected with examples."""
+        with pytest.raises(ValueError, match="Examples"):
+            validate_mutual_fund_symbol(code)
 
     def test_empty_raises(self) -> None:
         """Raises ValueError for empty string."""

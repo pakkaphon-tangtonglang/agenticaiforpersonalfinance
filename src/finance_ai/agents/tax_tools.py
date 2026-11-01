@@ -1,11 +1,16 @@
 """LangGraph tool wrappers for Thai personal income tax calculation."""
 
+import re
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from langchain_core.tools import tool
 
+from finance_ai.tools.input_normalizer import clean_number_text
 from finance_ai.tools.tax_calculator import TaxCalculationResult, calculate_tax
+
+# Units and separators people type around numbers: "1,000", "35 บาท", "฿35.50"
+_NUMBER_NOISE = re.compile(r"[,\s]|฿|บาท|THB|หุ้น|หน่วย", re.IGNORECASE)
 
 
 def parse_decimal_value(value: Any, field_name: str) -> Decimal:
@@ -21,12 +26,16 @@ def parse_decimal_value(value: Any, field_name: str) -> Decimal:
     Raises:
         ValueError: If the value cannot be parsed.
 
+    Thousands separators, spaces and units (บาท, ฿, THB, หุ้น, หน่วย) are
+    removed first, so "1,200,000 บาท" parses.
+
     Example:
-        >>> parse_decimal_value("1200000", "gross_income")
+        >>> parse_decimal_value("1,200,000 บาท", "gross_income")
         Decimal('1200000')
     """
+    cleaned = _NUMBER_NOISE.sub("", clean_number_text(str(value)))
     try:
-        return Decimal(str(value))
+        return Decimal(cleaned)
     except (InvalidOperation, ValueError) as exc:
         raise ValueError(f"Cannot parse {field_name} as Decimal. Received: {value}") from exc
 

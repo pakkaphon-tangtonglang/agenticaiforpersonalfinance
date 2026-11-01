@@ -217,3 +217,39 @@ class TestDeleteByUser:
     ) -> None:
         """Deleting a non-existent asset id returns False."""
         assert crud.delete(test_session, "missing-id", sample_user.id) is False
+
+
+class TestFindByUserInput:
+    """find_by_user_input ignores case and the .BK suffix."""
+
+    @pytest.mark.parametrize("typed", ["PTT.BK", "ptt.bk", "ptt", " PTT "])
+    def test_finds_thai_stock_however_typed(
+        self, crud: WatchedAssetCRUD, test_session: Session, sample_user: User, typed: str
+    ) -> None:
+        """All spellings find PTT.BK."""
+        crud.add(test_session, sample_user.id, "PTT.BK", "PTT")
+        found = crud.find_by_user_input(test_session, sample_user.id, typed)
+        assert found is not None and found.symbol == "PTT.BK"
+
+    def test_bk_typed_for_foreign_symbol(
+        self, crud: WatchedAssetCRUD, test_session: Session, sample_user: User
+    ) -> None:
+        """'AAPL.BK' still finds a stored AAPL."""
+        crud.add(test_session, sample_user.id, "AAPL", "Apple")
+        found = crud.find_by_user_input(test_session, sample_user.id, "AAPL.BK")
+        assert found is not None and found.symbol == "AAPL"
+
+    def test_not_found_and_blank(
+        self, crud: WatchedAssetCRUD, test_session: Session, sample_user: User
+    ) -> None:
+        """Unknown or blank input finds nothing."""
+        crud.add(test_session, sample_user.id, "PTT.BK", "PTT")
+        assert crud.find_by_user_input(test_session, sample_user.id, "AOT") is None
+        assert crud.find_by_user_input(test_session, sample_user.id, "  ") is None
+
+    def test_other_users_asset_not_found(
+        self, crud: WatchedAssetCRUD, test_session: Session, sample_user: User
+    ) -> None:
+        """Lookups stay inside the user's own list."""
+        crud.add(test_session, sample_user.id, "PTT.BK", "PTT")
+        assert crud.find_by_user_input(test_session, "someone-else", "PTT") is None

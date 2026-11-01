@@ -18,8 +18,11 @@ VALID_ASSET_TYPES: list[str] = list(ASSET_TYPES.keys())
 # Stock symbol format: SET/MAI listed stocks end with .BK
 STOCK_SYMBOL_SUFFIX: str = ".BK"
 
-# Mutual fund symbol prefixes (Thai fund houses)
-MUTUAL_FUND_PREFIXES: tuple[str, ...] = ("K-", "KT-", "SCB-")
+# Mutual fund codes differ per fund house (K-USA-A(A), KFSDIV, SCBSET50,
+# B-INNOTECH ...), so only the shape is checked: 2-30 characters, starting
+# with a letter or digit, then letters, digits or - ( ) & . + /
+MUTUAL_FUND_CODE_PATTERN: str = r"^[A-Z0-9][A-Z0-9\-()&.+/]{1,29}$"
+MUTUAL_FUND_CODE_EXAMPLES: str = "K-USA-A(A), KFSDIV, SCBSET50"
 
 # Transaction types for investment operations
 INVESTMENT_BUY_TRANSACTION_TYPE: str = "buy"
