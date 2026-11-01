@@ -51,3 +51,37 @@ class TestEnsureUserExists:
         user = UserCRUD().get_by_id(test_session, "line-existing-id")
         assert user is not None
         assert user.email == "line-abc@line.users.finance-ai.local"
+
+
+class TestRaceSafeInsert:
+    """Two first requests for the same new user must not crash each other."""
+
+    def test_insert_when_row_appeared_meanwhile_is_ignored(self, test_session: Session) -> None:
+        """If another request created the user after our check, the insert is a no-op."""
+        from finance_ai.tools.user_provisioning_service import insert_user_if_missing
+
+        insert_user_if_missing(test_session, NEW_USER_ID)
+        insert_user_if_missing(test_session, NEW_USER_ID)
+        test_session.commit()
+
+        assert UserCRUD().get_by_id(test_session, NEW_USER_ID) is not None
+
+
+class TestValidUserId:
+    """Client-supplied user ids are checked before they reach the database."""
+
+    def test_accepts_uuid_and_simple_ids(self) -> None:
+        """UUIDs and short ids made of letters, digits and dashes are fine."""
+        from finance_ai.tools.user_provisioning_service import is_valid_user_id
+
+        assert is_valid_user_id(NEW_USER_ID)
+        assert is_valid_user_id("demo-user-01")
+
+    def test_rejects_long_or_unsafe_ids(self) -> None:
+        """Ids longer than the 36-char column or with odd characters are rejected."""
+        from finance_ai.tools.user_provisioning_service import is_valid_user_id
+
+        assert not is_valid_user_id("x" * 37)
+        assert not is_valid_user_id("")
+        assert not is_valid_user_id("abc def")
+        assert not is_valid_user_id("abc;drop")

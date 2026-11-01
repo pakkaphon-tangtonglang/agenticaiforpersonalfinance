@@ -37,16 +37,10 @@ def bulk_insert_transactions(
     from finance_ai.database.models.income import Income  # noqa: PLC0415
     from finance_ai.database.models.transaction import Transaction  # noqa: PLC0415
 
-    from finance_ai.tools.user_provisioning_service import (  # noqa: PLC0415
-        ensure_user_exists,
-    )
-
     session = db_session_factory()
     count = 0
 
     try:
-        # Postgres enforces the users FK: a web user may upload before ever chatting.
-        ensure_user_exists(session, user_id)
         for txn in transactions:
             inserted = _insert_single_transaction(
                 session,

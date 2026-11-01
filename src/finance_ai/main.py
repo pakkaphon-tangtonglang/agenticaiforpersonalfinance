@@ -18,6 +18,7 @@ import asyncio
 from datetime import date, datetime
 
 from fastapi import BackgroundTasks, Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
@@ -51,7 +52,7 @@ from finance_ai.tools.receipt_ocr import (
     extract_document_fields,
 )
 from finance_ai.tools.receipt_ocr_service import confirm_receipt_transactions
-from finance_ai.tools.user_provisioning_service import ensure_user_exists
+from finance_ai.tools.user_provisioning_service import ensure_user_exists, is_valid_user_id
 from finance_ai.tools.expense_constants import VALID_EXPENSE_CATEGORIES
 from finance_ai.tools.conversation_service import (
     create_conversation,
@@ -103,11 +104,64 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
+async def _request_user_id(request: Request) -> str | None:
+    """Read user_id from the query string, else from a JSON object body.
+
+    Args:
+        request: Incoming request (its body is cached for the endpoint).
+
+    Returns:
+        The user id as sent, or None when the request names no user.
+    """
+    if "user_id" in request.query_params:
+        return request.query_params["user_id"]
+    if "application/json" not in request.headers.get("content-type", ""):
+        return None
+    try:
+        body = await request.json()
+    except ValueError:
+        return None  # the endpoint reports the malformed body itself
+    user_id = body.get("user_id") if isinstance(body, dict) else None
+    return user_id if isinstance(user_id, str) else None
+
+
+def _ensure_user_committed(user_id: str) -> None:
+    """Create the user row (if missing) in its own short transaction."""
+    with _session_factory() as session:
+        ensure_user_exists(session, user_id)
+        session.commit()
+
+
+async def provision_request_user(request: Request) -> None:
+    """Make sure the requesting user exists before any endpoint runs.
+
+    The web client generates its own user id, and Postgres enforces the
+    users foreign key, so every request naming a user gets its row here —
+    in one place, so no endpoint can forget it.
+
+    Args:
+        request: Incoming request.
+
+    Raises:
+        HTTPException: 422 when user_id cannot be stored (too long or odd characters).
+    """
+    user_id = await _request_user_id(request)
+    if user_id is None:
+        return
+    if not is_valid_user_id(user_id):
+        raise HTTPException(
+            status_code=422,
+            detail=f"user_id must be 1-36 letters, digits, '-' or '_'. Received: {user_id[:40]!r}",
+        )
+    await run_in_threadpool(_ensure_user_committed, user_id)
+
+
 app = FastAPI(
     title="Personal Finance AI",
     description="Multi-Agent AI system for personal finance management",
     version="0.1.0",
     lifespan=lifespan,
+    dependencies=[Depends(provision_request_user)],
 )
 
 # No CORS middleware: FastAPI serves the web UI itself (same origin on Render
@@ -1374,8 +1428,6 @@ def add_watchlist_asset(
         canonical_symbol = resolve_and_validate_symbol(req.symbol)
     except SymbolResolutionError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    # Postgres enforces the users FK: a web user may add a symbol before ever chatting.
-    ensure_user_exists(session, req.user_id)
     record = WatchedAssetCRUD().add(session, req.user_id, canonical_symbol, req.name)
     session.commit()
     status = "already_exists" if record is None else "added"
@@ -1527,7 +1579,6 @@ def _save_risk_assessment(
         RiskAssessment,
     )
 
-    ensure_user_exists(session, req.user_id)
     assessment = RiskAssessment(
         user_id=req.user_id,
         answers=req.answers,
