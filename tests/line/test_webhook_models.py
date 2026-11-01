@@ -57,3 +57,34 @@ class TestParseLineWebhookBody:
         """Malformed JSON is rejected with a validation error."""
         with pytest.raises(ValueError):
             parse_line_webhook_body("not-json")
+
+
+DOCUMENT_BODY = """
+{
+  "events": [
+    {"type": "message", "replyToken": "t1", "source": {"userId": "U1"},
+     "message": {"type": "image", "id": "m-img"}},
+    {"type": "message", "replyToken": "t2", "source": {"userId": "U1"},
+     "message": {"type": "file", "id": "m-file", "fileName": "statement.pdf", "fileSize": 2048}},
+    {"type": "message", "replyToken": "t3", "source": {"userId": "U1"},
+     "message": {"type": "text", "id": "m-text", "text": "สวัสดี"}},
+    {"type": "message", "replyToken": "t4", "source": {"userId": "U1"},
+     "message": {"type": "video", "id": "m-video"}}
+  ]
+}
+"""
+
+
+class TestDocumentMessageEvents:
+    """Image and file messages are picked up for the document import."""
+
+    def test_returns_image_and_file_only(self) -> None:
+        """Text, video and other types are not document events."""
+        events = parse_line_webhook_body(DOCUMENT_BODY).document_message_events()
+        assert [event.message.id for event in events] == ["m-img", "m-file"]
+
+    def test_file_fields_parsed(self) -> None:
+        """fileName and fileSize are read from the camelCase payload."""
+        file_event = parse_line_webhook_body(DOCUMENT_BODY).document_message_events()[1]
+        assert file_event.message.file_name == "statement.pdf"
+        assert file_event.message.file_size == 2048

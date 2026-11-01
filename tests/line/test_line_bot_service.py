@@ -6,8 +6,12 @@ from unittest.mock import MagicMock, patch
 from sqlalchemy.orm import Session, sessionmaker
 
 from finance_ai.database.models.user import User
+from finance_ai.line.import_conversation import LineReply
 from finance_ai.line.line_bot_service import (
+    DOCUMENT_NOTICE,
+    LINE_ERROR_REPLY,
     PROCESSING_NOTICE,
+    handle_line_document_event,
     handle_line_event,
     process_line_message,
 )
@@ -248,3 +252,105 @@ class TestHandleLineEvent:
                 reply_token="reply-token-1",
             )
         assert mock_push.call_args[0][2] == "คำตอบ"
+
+
+SERVICE = "finance_ai.line.line_bot_service"
+
+
+class TestPendingImportText:
+    """Text that answers a waiting import never reaches the agent or chat history."""
+
+    def test_pending_reply_pushed_instead_of_agent(self) -> None:
+        """A password/confirm reply is pushed with its buttons; no notice, no agent."""
+        reply = LineReply("📄 อ่านได้ 1 รายการ", ("บันทึก", "ยกเลิก"))
+        with (
+            patch(f"{SERVICE}.continue_pending_import", return_value=reply),
+            patch(f"{SERVICE}.process_line_message") as mock_process,
+            patch(f"{SERVICE}.send_line_push") as mock_push,
+            patch(f"{SERVICE}.send_line_reply") as mock_notice,
+            patch(f"{SERVICE}.show_line_loading"),
+        ):
+            handle_line_event(
+                line_user_id=LINE_USER_ID,
+                text="19900101",
+                session_factory=MagicMock(),
+                chat_model_provider=None,
+                access_token="token-123",
+                reply_token="rt",
+            )
+        mock_process.assert_not_called()
+        mock_notice.assert_not_called()
+        mock_push.assert_called_once_with(
+            "token-123",
+            LINE_USER_ID,
+            "📄 อ่านได้ 1 รายการ",
+            quick_reply_labels=("บันทึก", "ยกเลิก"),
+        )
+
+    def test_pending_failure_gives_error_reply(self) -> None:
+        """A crash while handling the import still answers the user."""
+        with (
+            patch(f"{SERVICE}.continue_pending_import", side_effect=RuntimeError("boom")),
+            patch(f"{SERVICE}.process_line_message") as mock_process,
+            patch(f"{SERVICE}.send_line_push") as mock_push,
+            patch(f"{SERVICE}.show_line_loading"),
+        ):
+            handle_line_event(
+                line_user_id=LINE_USER_ID,
+                text="บันทึก",
+                session_factory=MagicMock(),
+                chat_model_provider=None,
+                access_token="token-123",
+            )
+        mock_process.assert_not_called()
+        assert mock_push.call_args[0][2] == LINE_ERROR_REPLY
+
+
+class TestHandleLineDocumentEvent:
+    """Images and files sent in LINE."""
+
+    def _run(self, file_size: int = 1000, **patches: Any) -> dict[str, MagicMock]:
+        mocks = {name: MagicMock(**kwargs) for name, kwargs in patches.items()}
+        targets = ("send_line_reply", "show_line_loading", "download_line_content",
+                   "start_document_import", "send_line_push")  # fmt: skip
+        for target in targets:
+            mocks.setdefault(target, MagicMock())
+        with patch.multiple(SERVICE, **{target: mocks[target] for target in targets}):
+            handle_line_document_event(
+                line_user_id=LINE_USER_ID,
+                message_id="m-1",
+                file_size=file_size,
+                ocr_model_provider=lambda: "ocr",
+                chat_model_provider=lambda: "chat",
+                access_token="token-123",
+                reply_token="rt",
+            )
+        return mocks
+
+    def test_reads_document_and_pushes_summary(self) -> None:
+        """Notice, loading, download, read, then the summary with its buttons."""
+        reply = LineReply("📄 อ่านได้ 2 รายการ", ("บันทึก", "ยกเลิก"))
+        mocks = self._run(
+            download_line_content={"return_value": b"%PDF"},
+            start_document_import={"return_value": reply},
+        )
+        mocks["send_line_reply"].assert_called_once_with("token-123", "rt", DOCUMENT_NOTICE)
+        mocks["download_line_content"].assert_called_once_with("token-123", "m-1")
+        assert mocks["start_document_import"].call_args.args[:2] == (LINE_USER_ID, b"%PDF")
+        mocks["send_line_push"].assert_called_once_with(
+            "token-123",
+            LINE_USER_ID,
+            "📄 อ่านได้ 2 รายการ",
+            quick_reply_labels=("บันทึก", "ยกเลิก"),
+        )
+
+    def test_too_large_is_refused_without_download(self) -> None:
+        """Files over the limit are refused before downloading."""
+        mocks = self._run(file_size=11 * 1024 * 1024)
+        mocks["download_line_content"].assert_not_called()
+        assert "10 MB" in mocks["send_line_push"].call_args[0][2]
+
+    def test_failure_gives_error_reply(self) -> None:
+        """Download or read failures still answer the user."""
+        mocks = self._run(download_line_content={"side_effect": ConnectionError("down")})
+        assert mocks["send_line_push"].call_args[0][2] == LINE_ERROR_REPLY

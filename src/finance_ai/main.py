@@ -52,7 +52,7 @@ from finance_ai.core.logging import get_logger
 from finance_ai.database.crud.watched_asset_crud import WatchedAssetCRUD
 from finance_ai.database.session import create_database_engine, create_session_factory
 from finance_ai.line.link_command import unlink_web_user
-from finance_ai.line.line_bot_service import handle_line_event
+from finance_ai.line.line_bot_service import handle_line_document_event, handle_line_event
 from finance_ai.line.signature import verify_line_signature
 from finance_ai.line.webhook_models import parse_line_webhook_body
 from finance_ai.tools.bank_statement_parser import parse_bank_statement
@@ -1869,6 +1869,18 @@ async def line_webhook(request: Request, background_tasks: BackgroundTasks) -> d
             text=event.message.text,
             session_factory=_session_factory,
             chat_model_provider=get_chat_model,
+            access_token=settings.line_channel_access_token,
+            reply_token=event.reply_token,
+            ocr_model_provider=get_ocr_chat_model,
+        )
+    for event in webhook_body.document_message_events():
+        background_tasks.add_task(
+            handle_line_document_event,
+            line_user_id=event.source.user_id,
+            message_id=event.message.id,
+            file_size=event.message.file_size,
+            ocr_model_provider=get_ocr_chat_model,
+            chat_model_provider=_optional_chat_model,
             access_token=settings.line_channel_access_token,
             reply_token=event.reply_token,
         )

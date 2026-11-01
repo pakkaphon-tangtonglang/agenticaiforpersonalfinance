@@ -133,3 +133,43 @@ class TestLineWebhookEndpoint:
         )
         assert response.status_code == 200
         assert FakeMessagingApi.calls == []
+
+    def test_image_message_gets_import_summary(self, test_engine: Engine, monkeypatch: Any) -> None:
+        """An image is downloaded, read by OCR, and answered with a confirm summary."""
+        from datetime import date  # pylint: disable=import-outside-toplevel
+        from decimal import Decimal  # pylint: disable=import-outside-toplevel
+
+        from finance_ai.tools.receipt_ocr import (  # pylint: disable=import-outside-toplevel
+            ReceiptOcrResult,
+        )
+
+        client = _make_client(test_engine, monkeypatch)
+        monkeypatch.setattr(
+            "finance_ai.line.line_bot_service.download_line_content",
+            lambda token, message_id: b"\xff\xd8\xff\xe0jpeg",
+        )
+        draft = ReceiptOcrResult(
+            transaction_type="expense",
+            amount=Decimal("120"),
+            transaction_date=date(2026, 11, 1),
+            description="ข้าวมันไก่",
+        )
+        monkeypatch.setattr(
+            "finance_ai.line.document_import.extract_document_fields",
+            lambda content, mime, model: [draft],
+        )
+        monkeypatch.setattr("finance_ai.main.get_ocr_chat_model", lambda: "ocr-model")
+        body = (
+            '{"destination": "Udest", "events": [{"type": "message", "replyToken": "t", '
+            '"source": {"type": "user", "userId": "Uline-img"}, '
+            '"message": {"type": "image", "id": "m-1"}}]}'
+        )
+        response = client.post(
+            "/line/webhook",
+            content=body.encode(),
+            headers={"x-line-signature": _sign(body), "content-type": "application/json"},
+        )
+        assert response.status_code == 200
+        message = FakeMessagingApi.calls[-1]["push_message_request"].messages[0]
+        assert "อ่านได้ 1 รายการ" in message.text
+        assert [item.action.label for item in message.quick_reply.items] == ["บันทึก", "ยกเลิก"]

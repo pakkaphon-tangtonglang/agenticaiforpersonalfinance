@@ -8,6 +8,11 @@ from sqlalchemy.orm import Session, sessionmaker
 from finance_ai.agents.router_agent import orchestrate_query
 from finance_ai.core.logging import get_logger
 from finance_ai.database.models.line_user_mapping import LineUserMapping
+from finance_ai.line.import_conversation import (
+    LineReply,
+    continue_pending_import,
+    start_document_import,
+)
 from finance_ai.line.link_command import (
     link_line_user,
     parse_link_command,
@@ -16,7 +21,12 @@ from finance_ai.line.link_command import (
 )
 from finance_ai.line.mapping_service import get_or_create_line_mapping
 from finance_ai.line.markdown_to_text import markdown_to_line_text
-from finance_ai.line.messaging_client import send_line_push, send_line_reply, show_line_loading
+from finance_ai.line.messaging_client import (
+    download_line_content,
+    send_line_push,
+    send_line_reply,
+    show_line_loading,
+)
 from finance_ai.tools.conversation_service import (
     get_recent_history_as_tuples,
     save_assistant_message,
@@ -31,6 +41,9 @@ LINE_ERROR_REPLY: str = "ขออภัยครับ ระบบขัดข
 PROCESSING_NOTICE: str = (
     "⏳ ได้รับคำถามแล้วครับ กำลังวิเคราะห์ข้อมูลให้ รอสักครู่ประมาณ 10-15 วินาที"
 )
+DOCUMENT_NOTICE: str = "📄 ได้รับเอกสารแล้วครับ กำลังอ่านรายการให้ รอสักครู่"
+MAX_DOCUMENT_BYTES: int = 10 * 1024 * 1024
+DOCUMENT_TOO_LARGE: str = "ไฟล์ใหญ่เกิน 10 MB กรุณาส่งไฟล์ที่เล็กลง หรืออัปโหลดผ่านเว็บ"
 
 
 def process_line_message(
@@ -102,6 +115,7 @@ def handle_line_event(  # pylint: disable=too-many-arguments,too-many-positional
     chat_model_provider: Callable[[], Any] | None,
     access_token: str,
     reply_token: str = "",
+    ocr_model_provider: Callable[[], Any] | None = None,
 ) -> None:
     """Process one LINE text event end-to-end and push the answer back.
 
@@ -120,10 +134,14 @@ def handle_line_event(  # pylint: disable=too-many-arguments,too-many-positional
         chat_model_provider: Callable returning the chat model.
         access_token: LINE channel access token for the Push API.
         reply_token: Reply token of the event, used for the wait-time notice.
+        ocr_model_provider: Returns the OCR model (for a PDF unlocked by password).
 
     Example:
         >>> handle_line_event(uid, "ภาษีของฉัน", factory, get_chat_model, token, rtoken)
     """
+    providers = (ocr_model_provider or _no_model, chat_model_provider or _no_model)
+    if _answer_pending_import(line_user_id, text, session_factory, providers, access_token):
+        return
     _send_processing_notice(access_token, reply_token, text)
     show_line_loading(access_token, line_user_id)
     try:
@@ -145,12 +163,112 @@ def _send_processing_notice(access_token: str, reply_token: str, text: str) -> N
         reply_token: Reply token of the event ("" when unavailable).
         text: The user's message, used to detect link commands.
     """
-    if not reply_token or _is_link_command(text):
+    if _is_link_command(text):
+        return
+    _reply_notice(access_token, reply_token, PROCESSING_NOTICE)
+
+
+def _reply_notice(access_token: str, reply_token: str, notice: str) -> None:
+    """Send a free Reply-API notice; skipped without a token, failures only logged.
+
+    Args:
+        access_token: LINE channel access token.
+        reply_token: Reply token of the event ("" when unavailable).
+        notice: Text to send.
+    """
+    if not reply_token:
         return
     try:
-        send_line_reply(access_token, reply_token, PROCESSING_NOTICE)
+        send_line_reply(access_token, reply_token, notice)
     except Exception as error:  # pylint: disable=broad-exception-caught
         logger.warning("Failed to send LINE processing notice: %s", error)
+
+
+def _answer_pending_import(
+    line_user_id: str,
+    text: str,
+    session_factory: sessionmaker[Session],
+    providers: tuple[Callable[[], Any], Callable[[], Any]],
+    access_token: str,
+) -> bool:
+    """Answer text that belongs to a waiting import (confirm, cancel, PDF password).
+
+    The text may be a PDF password, so it is never logged or saved here.
+
+    Args:
+        line_user_id: LINE userId of the sender.
+        text: The user's message.
+        session_factory: Factory creating database sessions.
+        providers: (OCR model provider, chat model provider).
+        access_token: LINE channel access token.
+
+    Returns:
+        True when the text was handled (the agent must not run).
+    """
+    try:
+        reply = continue_pending_import(line_user_id, text, session_factory, *providers)
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.exception("LINE import step failed for %s", line_user_id)
+        reply = LineReply(LINE_ERROR_REPLY)
+    if reply is None:
+        return False
+    _push_reply(access_token, line_user_id, reply)
+    return True
+
+
+def handle_line_document_event(  # pylint: disable=too-many-arguments
+    *,
+    line_user_id: str,
+    message_id: str,
+    file_size: int,
+    ocr_model_provider: Callable[[], Any],
+    chat_model_provider: Callable[[], Any],
+    access_token: str,
+    reply_token: str = "",
+) -> None:
+    """Read a receipt/slip photo or statement PDF and ask the user to confirm.
+
+    Runs as a background task like handle_line_event. Nothing is saved
+    until the user taps "บันทึก".
+
+    Args:
+        line_user_id: LINE userId of the sender.
+        message_id: Id of the image/file message (to download its content).
+        file_size: Size LINE reported for files (0 for images).
+        ocr_model_provider: Returns the OCR vision model.
+        chat_model_provider: Returns the chat model (statement AI fallback).
+        access_token: LINE channel access token.
+        reply_token: Reply token, used for the "reading" notice.
+
+    Example:
+        >>> handle_line_document_event(line_user_id=uid, message_id=mid, file_size=0, ...)
+    """
+    if file_size > MAX_DOCUMENT_BYTES:
+        _push_reply(access_token, line_user_id, LineReply(DOCUMENT_TOO_LARGE))
+        return
+    _reply_notice(access_token, reply_token, DOCUMENT_NOTICE)
+    show_line_loading(access_token, line_user_id)
+    try:
+        content = download_line_content(access_token, message_id)
+        reply = start_document_import(
+            line_user_id, content, ocr_model_provider, chat_model_provider
+        )
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.exception("LINE document import failed for %s", line_user_id)
+        reply = LineReply(LINE_ERROR_REPLY)
+    _push_reply(access_token, line_user_id, reply)
+
+
+def _push_reply(access_token: str, line_user_id: str, reply: LineReply) -> None:
+    """Push an import reply with its own buttons (none means no menu)."""
+    send_line_push(
+        access_token, line_user_id, reply.text, quick_reply_labels=reply.quick_reply_labels
+    )
+
+
+def _no_model() -> Any:
+    """Model provider used when none is configured (tests, LINE-only setups)."""
+    return None
 
 
 def _is_link_command(text: str) -> bool:

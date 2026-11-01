@@ -12,11 +12,19 @@ class LineEventSource(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+DOCUMENT_MESSAGE_TYPES: tuple[str, ...] = ("image", "file")
+
+
 class LineEventMessage(BaseModel):
     """The `message` object of a LINE message event."""
 
+    id: str = ""
     type: str = ""
     text: str = ""
+    file_name: str = Field(default="", alias="fileName")
+    file_size: int = Field(default=0, alias="fileSize")
+
+    model_config = {"populate_by_name": True}
 
 
 class LineEvent(BaseModel):
@@ -38,6 +46,15 @@ class LineEvent(BaseModel):
         """
         return self.type == "message" and self.message.type == "text"
 
+    def is_document_message(self) -> bool:
+        """Return True for an image or file the user sent (receipt, slip, PDF).
+
+        Example:
+            >>> event.is_document_message()
+            False
+        """
+        return self.type == "message" and self.message.type in DOCUMENT_MESSAGE_TYPES
+
 
 class LineWebhookBody(BaseModel):
     """The full LINE webhook request body."""
@@ -53,6 +70,15 @@ class LineWebhookBody(BaseModel):
             [LineEvent(...)]
         """
         return [event for event in self.events if event.is_text_message()]
+
+    def document_message_events(self) -> list[LineEvent]:
+        """Return image and file events for the document import.
+
+        Example:
+            >>> body.document_message_events()
+            []
+        """
+        return [event for event in self.events if event.is_document_message()]
 
 
 def parse_line_webhook_body(raw_body: str) -> LineWebhookBody:
