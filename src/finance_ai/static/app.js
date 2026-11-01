@@ -952,9 +952,9 @@
  t.classList.toggle("is-active", active);
  t.setAttribute("aria-selected", active ? "true" : "false");
  });
- $("fileInput").accept = mode === "scan" ? "image/*,.pdf" : ".csv,.xlsx";
+ $("fileInput").accept = mode === "scan" ? "image/*,.pdf" : ".csv,.xlsx,.pdf";
  $("dropzoneHint").textContent =
- mode === "scan" ? "รองรับรูปภาพ (JPG/PNG) และ PDF" : "รองรับ .csv และ .xlsx";
+ mode === "scan" ? "รองรับรูปภาพ (JPG/PNG) และ PDF" : "รองรับ .csv .xlsx และ PDF รายการเดินบัญชี";
  clearRecheck();
  $("uploadResult").hidden = true;
   }
@@ -969,6 +969,7 @@
  dz.classList.add("is-loading");
  try {
  if (uploadMode === "scan" && isScanFile(file)) await scanReceipt(file);
+ else if (uploadMode === "bank" && isPdfFile(file)) await importBankPdf(file, "");
  else if (uploadMode === "bank" && !isScanFile(file)) await importBankStatement(file);
  else toast("ประเภทไฟล์ไม่ตรงกับโหมดที่เลือก", true);
  } catch (e) {
@@ -976,6 +977,55 @@
  } finally {
  dz.classList.remove("is-loading");
  }
+  }
+
+  function isPdfFile(file) {
+    return (file.type || "") === "application/pdf" || /\.pdf$/i.test(file.name || "");
+  }
+
+  // Bank statement PDF → rows for review. Locked PDFs ask for the password,
+  // which is sent once with the file and never stored.
+  async function importBankPdf(file, password) {
+    const form = new FormData();
+    form.append("file", file);
+    if (password) form.append("password", password);
+    const url = new URL("/upload/bank-statement/pdf", API_BASE);
+    url.searchParams.set("user_id", state.userId);
+    const res = await fetch(url, { method: "POST", body: form });
+    const body = await res.json().catch(() => ({}));
+    if (res.ok) { showStatementDrafts(body); return; }
+    const code = body.detail && body.detail.code;
+    if (code === "pdf_password_required" || code === "pdf_password_incorrect") {
+      askPdfPassword(file, code === "pdf_password_incorrect" ? body.detail.message : "");
+      return;
+    }
+    const message = (body.detail && body.detail.message) || body.detail || res.statusText;
+    toast("อ่านรายการเดินบัญชีไม่สำเร็จ: " + message, true);
+  }
+
+  function showStatementDrafts(body) {
+    $("uploadResult").hidden = true;
+    if (!body.drafts || !body.drafts.length) { toast("ไม่พบรายการในไฟล์นี้", true); return; }
+    renderRecheck(body.drafts);
+    const own = body.own_transfers ? ` (ไม่ติ๊ก ${body.own_transfers} รายการที่โอนเข้าบัญชีตัวเอง)` : "";
+    toast(`อ่านได้ ${body.total} รายการ — เช็กหมวดหมู่ก่อนบันทึก${own}`);
+  }
+
+  function askPdfPassword(file, error) {
+    const modal = $("pdfPasswordModal");
+    $("pdfPasswordError").textContent = error;
+    $("pdfPasswordError").hidden = !error;
+    $("pdfPasswordInput").value = "";
+    modal.hidden = false;
+    $("pdfPasswordInput").focus();
+    $("pdfPasswordForm").onsubmit = async (event) => {
+      event.preventDefault();
+      const password = $("pdfPasswordInput").value;
+      modal.hidden = true;
+      $("dropzone").classList.add("is-loading");
+      try { await importBankPdf(file, password); } finally { $("dropzone").classList.remove("is-loading"); }
+    };
+    $("pdfPasswordCancel").onclick = () => { modal.hidden = true; };
   }
 
   async function importBankStatement(file) {
@@ -1034,8 +1084,9 @@
   }
 
   function buildRecheckRow(draft) {
- const row = el("tr", { class: "recheck-row" });
+ const row = el("tr", { class: "recheck-row" + (draft.own_transfer ? " is-own-transfer" : "") });
  row.append(
+ buildIncludeCell(draft, row),
  buildTypeCell(draft.transaction_type),
  buildAmountCell(draft.amount),
  buildDateCell(draft.transaction_date),
@@ -1044,6 +1095,19 @@
  buildRemoveCell(row),
  );
  return row;
+  }
+
+  // Own-account transfers start unticked: moving money between your own
+  // accounts is not income or spending.
+  function buildIncludeCell(draft, row) {
+    const box = el("input", { type: "checkbox", class: "recheck-include",
+      "aria-label": "บันทึกรายการนี้" });
+    box.checked = !draft.own_transfer;
+    row.classList.toggle("is-excluded", !box.checked);
+    box.addEventListener("change", () => row.classList.toggle("is-excluded", !box.checked));
+    const note = draft.own_transfer
+      ? el("span", { class: "recheck-note" }, "โอนเข้าบัญชีตัวเอง") : null;
+    return el("td", { class: "recheck-include-cell" }, box, note);
   }
 
   function buildTypeCell(value) {
@@ -1091,7 +1155,9 @@
   }
 
   function collectRecheckRows(body = $("recheckBody")) {
- return Array.from(body.querySelectorAll(".recheck-row")).map(readRecheckRow);
+ return Array.from(body.querySelectorAll(".recheck-row"))
+   .filter((row) => { const box = row.querySelector(".recheck-include"); return !box || box.checked; })
+   .map(readRecheckRow);
   }
 
   function readRecheckRow(row) {

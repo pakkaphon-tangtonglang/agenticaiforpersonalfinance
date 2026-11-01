@@ -1224,6 +1224,12 @@ a.cite-card-title:hover { text-decoration: underline; }
   .history-actions { grid-area: actions; justify-content: flex-end; }
 }
 
+/* ─── Review table: include checkbox for statement rows ─── */
+.recheck-include-cell { white-space: nowrap; }
+.recheck-include { width: 18px; height: 18px; accent-color: var(--color-accent); }
+.recheck-note { display: block; font-size: var(--text-caption); color: var(--color-ash); }
+.recheck-row.is-excluded .recheck-input { opacity: 0.45; }
+
 /* ─── Attach a file in chat ─── */
 .attach-btn {
   flex: none; width: 40px; height: 40px; border-radius: var(--radius-md);

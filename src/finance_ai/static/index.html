@@ -8,14 +8,14 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="styles.css?v=12" />
+<link rel="stylesheet" href="styles.css?v=13" />
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js" defer></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.6/dist/purify.min.js" defer></script>
-<script src="citations.js?v=12" defer></script>
-<script src="app.js?v=12" defer></script>
-<script src="guru.js?v=12" defer></script>
-<script src="history.js?v=12" defer></script>
+<script src="citations.js?v=13" defer></script>
+<script src="app.js?v=13" defer></script>
+<script src="guru.js?v=13" defer></script>
+<script src="history.js?v=13" defer></script>
 </head>
 <body>
 <a href="#main" class="skip-link">ข้ามไปยังเนื้อหาหลัก</a>
@@ -297,6 +297,7 @@
               <table class="recheck-table">
                 <thead>
                   <tr>
+                    <th>บันทึก</th>
                     <th>ประเภท</th>
                     <th>จำนวนเงิน</th>
                     <th>วันที่</th>
@@ -368,6 +369,27 @@
 <div class="undo-toast" id="undoToast" role="status" aria-live="polite" hidden>
   <span id="undoToastText">ลบรายการแล้ว</span>
   <button type="button" class="undo-toast-btn" id="undoToastBtn">เลิกทำ (<span id="undoToastCount">10</span>)</button>
+</div>
+
+<!-- Password for a locked bank statement PDF (used once, never stored) -->
+<div class="modal-overlay" id="pdfPasswordModal" hidden>
+  <form class="modal" id="pdfPasswordForm" role="dialog" aria-modal="true" aria-labelledby="pdfPasswordTitle">
+    <div class="modal-head">
+      <h2 class="modal-title" id="pdfPasswordTitle">PDF นี้มีรหัสผ่าน</h2>
+      <p class="field-label" id="pdfPasswordHint">รายการเดินบัญชีส่วนใหญ่ใช้วันเกิดเป็นรหัสผ่าน (เช่น 01011990) — ระบบใช้เปิดไฟล์ครั้งเดียว ไม่บันทึกไว้</p>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span class="field-label">รหัสผ่าน PDF</span>
+        <input class="field-input" type="password" id="pdfPasswordInput" autocomplete="off" required />
+      </label>
+      <p class="history-form-error" id="pdfPasswordError" role="alert" hidden></p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="button" id="pdfPasswordCancel">ยกเลิก</button>
+      <button class="btn" type="submit">เปิดไฟล์</button>
+    </div>
+  </form>
 </div>
 
 <!-- Add / edit an income or expense entry -->

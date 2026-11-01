@@ -465,3 +465,24 @@ class TestDashboardHistory:
         """app.js asks HistoryView to load the same year and month."""
         js = self.client.get("/static/app.js").text
         assert "window.HistoryView.load(year, month)" in js
+
+
+class TestBankStatementPdfUpload:
+    """The bank tab accepts PDF statements and asks for a password when locked."""
+
+    client: TestClient = TestClient(app)
+
+    def test_password_dialog_and_include_column(self) -> None:
+        """The page has the password dialog and an include column in the review table."""
+        html = self.client.get("/").text
+        assert 'id="pdfPasswordModal"' in html
+        assert 'type="password" id="pdfPasswordInput"' in html
+        assert "<th>บันทึก</th>" in html
+
+    def test_app_js_routes_pdf_to_statement_reader(self) -> None:
+        """Bank-mode PDFs go to the statement endpoint; own transfers start unticked."""
+        js = self.client.get("/static/app.js").text
+        assert '".csv,.xlsx,.pdf"' in js
+        assert "/upload/bank-statement/pdf" in js
+        assert "pdf_password_required" in js
+        assert "box.checked = !draft.own_transfer;" in js

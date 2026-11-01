@@ -22,6 +22,7 @@ from fastapi import (
     Depends,
     FastAPI,
     File,
+    Form,
     HTTPException,
     Query,
     Request,
@@ -55,6 +56,15 @@ from finance_ai.line.line_bot_service import handle_line_event
 from finance_ai.line.signature import verify_line_signature
 from finance_ai.line.webhook_models import parse_line_webhook_body
 from finance_ai.tools.bank_statement_parser import parse_bank_statement
+from finance_ai.tools.bank_statement_pdf import (
+    PdfPasswordIncorrectError,
+    PdfPasswordRequiredError,
+    StatementDraft,
+    StatementTotalsMismatchError,
+    UnsupportedStatementError,
+    drafts_from_pages,
+    read_pdf_pages,
+)
 from finance_ai.tools.bank_statement_service import bulk_insert_transactions
 from finance_ai.tools.receipt_ocr import (
     SUPPORTED_MIME_TYPES,
@@ -393,6 +403,22 @@ class ReceiptScanResponse(BaseModel):
 
     drafts: list[ReceiptDraftOut] = Field(default_factory=list)
     total: int = Field(default=0, description="Number of drafts extracted")
+
+
+class StatementDraftOut(ReceiptDraftOut):
+    """A bank statement row for review."""
+
+    own_transfer: bool = Field(
+        default=False, description="Transfer to the account holder's own name (not spending)"
+    )
+
+
+class StatementScanResponse(BaseModel):
+    """Bank statement PDF rows for review (nothing is saved yet)."""
+
+    drafts: list[StatementDraftOut] = Field(default_factory=list)
+    total: int = Field(default=0, description="Number of rows read")
+    own_transfers: int = Field(default=0, description="Rows flagged as own-account transfers")
 
 
 class ConfirmTransactionInput(BaseModel):
@@ -1106,6 +1132,78 @@ def _draft_to_out(draft: ReceiptOcrResult) -> ReceiptDraftOut:
         employer_name=draft.employer_name,
         confidence=draft.confidence,
     )
+
+
+MAX_STATEMENT_BYTES = 10 * 1024 * 1024
+_STATEMENT_ERROR_CODES: dict[type[Exception], str] = {
+    PdfPasswordRequiredError: "pdf_password_required",
+    PdfPasswordIncorrectError: "pdf_password_incorrect",
+    StatementTotalsMismatchError: "statement_totals_mismatch",
+    UnsupportedStatementError: "statement_unsupported",
+}
+
+
+def _optional_chat_model() -> Any:
+    """Chat model for the AI fallback, or None when none is configured."""
+    try:
+        return get_chat_model()
+    except (ValueError, ImportError):
+        return None
+
+
+def _statement_drafts(content: bytes, password: str | None) -> list[StatementDraft]:
+    """Read a statement PDF into review drafts (runs in a worker thread)."""
+    return drafts_from_pages(read_pdf_pages(content, password), _optional_chat_model())
+
+
+def _to_statement_out(draft: StatementDraft) -> StatementDraftOut:
+    """Convert a statement draft for the review table."""
+    return StatementDraftOut(
+        transaction_type=draft.transaction_type,
+        amount=str(draft.amount),
+        transaction_date=draft.transaction_date.isoformat(),
+        description=draft.description,
+        category=draft.category,
+        income_type=draft.income_type,
+        confidence=1.0,
+        own_transfer=draft.own_transfer,
+    )
+
+
+@app.post("/upload/bank-statement/pdf", response_model=StatementScanResponse)
+async def upload_bank_statement_pdf(
+    user_id: str,  # pylint: disable=unused-argument
+    file: UploadFile = File(...),
+    password: str = Form(default=""),
+) -> StatementScanResponse:
+    """Read a bank statement PDF into rows for review (nothing is saved).
+
+    The password (for locked e-statements) is used in memory only and is
+    never stored or logged. Rows are saved later via /transactions/confirm.
+
+    Args:
+        user_id: User UUID (the user is provisioned app-wide).
+        file: Statement PDF.
+        password: PDF password, if the statement is locked.
+
+    Returns:
+        StatementScanResponse with drafts and the own-transfer count.
+
+    Raises:
+        HTTPException: 413 over the size limit; 422 with a code for password,
+            totals-mismatch or unsupported-layout problems.
+    """
+    content = await file.read()
+    if len(content) > MAX_STATEMENT_BYTES:
+        raise HTTPException(status_code=413, detail="ไฟล์ใหญ่เกิน 10 MB")
+    try:
+        drafts = await run_in_threadpool(_statement_drafts, content, password or None)
+    except tuple(_STATEMENT_ERROR_CODES) as error:
+        detail = {"code": _STATEMENT_ERROR_CODES[type(error)], "message": str(error)}
+        raise HTTPException(status_code=422, detail=detail) from error
+    outs = [_to_statement_out(draft) for draft in drafts]
+    own = sum(out.own_transfer for out in outs)
+    return StatementScanResponse(drafts=outs, total=len(outs), own_transfers=own)
 
 
 @app.post("/upload/receipt", response_model=ReceiptScanResponse)
