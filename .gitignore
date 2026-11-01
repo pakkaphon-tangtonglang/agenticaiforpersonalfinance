@@ -216,6 +216,7 @@ thesis-latex/
 thesis-latex.zip
 
 # Personal / private documents (job applications, cover letters, resumes)
+career/
 cover_letter*.md
 *.cover_letter
 resume*.md
@@ -244,6 +245,7 @@ tmp-upload/
 tmp-mermaid/
 
 # Internal docs (not part of the public project)
+docs/all_known_problem.md
 CLAUDE.md
 PROJECT_SPEC.md
 websitehosting.md
