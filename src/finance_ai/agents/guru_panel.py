@@ -19,7 +19,7 @@ from finance_ai.core.logging import get_logger
 
 logger = get_logger(__name__)
 
-PANEL_MAX_WORKERS = 2
+PANEL_MAX_WORKERS = 4
 GURU_ERROR_MESSAGE = "กูรูท่านนี้ตอบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง"
 PANEL_ANSWER_INSTRUCTION = (
     "\n\n(โหมดถามทั้งวง: ตอบสั้นไม่เกิน 150 คำ"

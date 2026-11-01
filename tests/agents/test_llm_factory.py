@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from langchain_google_genai import ChatGoogleGenerativeAI
 
 from finance_ai.agents.llm_factory import (
     create_chat_model,
@@ -13,6 +14,8 @@ from finance_ai.agents.llm_factory import (
     create_ocr_openrouter_chat_model,
     create_ollama_chat_model,
     create_openrouter_chat_model,
+    router_chat_model,
+    supports_thinking_level,
 )
 from finance_ai.core.config import Settings
 
@@ -43,6 +46,84 @@ class TestCreateGoogleChatModel:
         settings = Settings(_env_file=None, google_api_key=None)
         with pytest.raises(ValueError, match="google_api_key is required"):
             create_google_chat_model(settings)
+
+    @patch("finance_ai.agents.llm_factory.ChatGoogleGenerativeAI")
+    def test_gemini_3_passes_thinking_level(self, mock_cls: MagicMock) -> None:
+        """Gemini 3+ models get the configured thinking_level (default low)."""
+        settings = Settings(
+            _env_file=None, google_api_key="test-key", google_model="gemini-3.5-flash"
+        )
+        create_google_chat_model(settings)
+        assert mock_cls.call_args.kwargs["thinking_level"] == "low"
+
+    @patch("finance_ai.agents.llm_factory.ChatGoogleGenerativeAI")
+    def test_thinking_level_none_omits_kwarg(self, mock_cls: MagicMock) -> None:
+        """An unset thinking level leaves the model's own default."""
+        settings = Settings(
+            _env_file=None,
+            google_api_key="test-key",
+            google_model="gemini-3.5-flash",
+            llm_thinking_level=None,
+        )
+        create_google_chat_model(settings)
+        assert "thinking_level" not in mock_cls.call_args.kwargs
+
+
+class TestSupportsThinkingLevel:
+    """Tests for the Gemini thinking_level capability check."""
+
+    @pytest.mark.parametrize("model_name", ["gemini-3.5-flash", "gemini-3-pro-preview"])
+    def test_gemini_3_and_later_supported(self, model_name: str) -> None:
+        """Gemini 3+ accepts thinking_level."""
+        assert supports_thinking_level(model_name) is True
+
+    @pytest.mark.parametrize("model_name", ["gemini-2.5-flash", "gemini-1.5-pro"])
+    def test_older_gemini_not_supported(self, model_name: str) -> None:
+        """Gemini 1.x/2.x only know thinking_budget."""
+        assert supports_thinking_level(model_name) is False
+
+
+class TestRouterChatModel:
+    """Tests for the cheaper-thinking router model wrapper."""
+
+    @staticmethod
+    def _google_model(model_name: str) -> MagicMock:
+        model = MagicMock(spec=ChatGoogleGenerativeAI)
+        model.model = model_name
+        return model
+
+    def test_binds_router_thinking_level_for_gemini_3(self) -> None:
+        """Gemini 3+ router calls use router_thinking_level (default minimal)."""
+        model = self._google_model("gemini-3.5-flash")
+        result = router_chat_model(model, Settings(_env_file=None))
+        model.bind.assert_called_once_with(thinking_level="minimal")
+        assert result is model.bind.return_value
+
+    def test_older_gemini_returned_unchanged(self) -> None:
+        """Gemini 2.x has no thinking_level, so the model is used as is."""
+        model = self._google_model("gemini-2.5-flash")
+        assert router_chat_model(model, Settings(_env_file=None)) is model
+        model.bind.assert_not_called()
+
+    def test_router_level_none_returns_model(self) -> None:
+        """An unset router level keeps the shared model's own level."""
+        model = self._google_model("gemini-3.5-flash")
+        settings = Settings(_env_file=None, router_thinking_level=None)
+        assert router_chat_model(model, settings) is model
+
+    def test_non_google_model_returned_unchanged(self) -> None:
+        """Other providers (and test doubles) pass through untouched."""
+        model = MagicMock()
+        assert router_chat_model(model, Settings(_env_file=None)) is model
+        model.bind.assert_not_called()
+
+    @patch("finance_ai.agents.llm_factory.get_settings")
+    def test_uses_default_settings(self, mock_get_settings: MagicMock) -> None:
+        """Falls back to get_settings() when no settings are given."""
+        mock_get_settings.return_value = Settings(_env_file=None)
+        model = self._google_model("gemini-3.5-flash")
+        router_chat_model(model)
+        model.bind.assert_called_once_with(thinking_level="minimal")
 
 
 class TestCreateOllamaChatModel:
