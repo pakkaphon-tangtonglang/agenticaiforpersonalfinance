@@ -685,6 +685,7 @@
       renderDashboard(report);
       $("dashEmpty").hidden = true;
       $("dashContent").hidden = false;
+      if (window.HistoryView) window.HistoryView.load(year, month);
     } catch (e) {
       toast("โหลดแดชบอร์ดไม่สำเร็จ: " + e.message, true);
     } finally {
@@ -1824,6 +1825,8 @@
     renderMarkdown,
     attachSources,
     renderConversationList,
+    loadDashboard,
+    thb,
     toast,
     getUserId: () => state.userId,
   };

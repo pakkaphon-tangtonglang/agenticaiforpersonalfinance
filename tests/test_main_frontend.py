@@ -159,7 +159,7 @@ class TestAssetFetchCardsAndWatchlist:
         response = self.client.get("/")
         versions = {
             re.search(rf'{asset}\?v=(\d+)"', response.text).group(1)  # type: ignore[union-attr]
-            for asset in (r"styles\.css", r"citations\.js", r"app\.js", r"guru\.js")
+            for asset in (r"styles\.css", r"citations\.js", r"app\.js", r"guru\.js", r"history\.js")
         }
         assert len(versions) == 1, f"static assets use different versions: {versions}"
         assert "?v=4" not in response.text
@@ -420,3 +420,48 @@ class TestChatAttachment:
         assert "ไฟล์จากแอปธนาคาร" in html
         assert "เช็กให้ถูกก่อนบันทึก" in html
         assert "นำเข้าเอกสาร" not in html
+
+
+class TestDashboardHistory:
+    """The dashboard history card, form and undo toast are wired up."""
+
+    client: TestClient = TestClient(app)
+
+    def test_markup_present(self) -> None:
+        """Card, filters, form and undo toast exist in the page."""
+        html = self.client.get("/").text
+        for element_id in (
+            "historyCard",
+            "historyList",
+            "historyAdd",
+            "historyModal",
+            "historyForm",
+            "historyDate",
+            "historyCategory",
+            "undoToast",
+        ):
+            assert f'id="{element_id}"' in html, element_id
+        assert 'src="history.js?v=' in html
+
+    def test_history_js_served_with_ten_second_undo(self) -> None:
+        """history.js is served and waits 10 s before sending a delete."""
+        js = self.client.get("/static/history.js").text
+        assert "const UNDO_SECONDS = 10;" in js
+        assert "keepalive: true" in js
+        assert "window.HistoryView" in js
+
+    def test_category_keys_match_backend(self) -> None:
+        """The form offers exactly the categories the API accepts."""
+        import re
+
+        from finance_ai.tools.expense_constants import EXPENSE_CATEGORIES, INCOME_TYPES
+
+        js = self.client.get("/static/history.js").text
+        blocks = dict(re.findall(r"(expense|income): \{(.*?)\}", js, re.DOTALL))
+        assert set(re.findall(r"(\w+):", blocks["expense"])) == set(EXPENSE_CATEGORIES)
+        assert set(re.findall(r"(\w+):", blocks["income"])) == set(INCOME_TYPES)
+
+    def test_dashboard_loads_history_for_selected_month(self) -> None:
+        """app.js asks HistoryView to load the same year and month."""
+        js = self.client.get("/static/app.js").text
+        assert "window.HistoryView.load(year, month)" in js

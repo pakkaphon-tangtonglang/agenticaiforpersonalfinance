@@ -29,5 +29,13 @@ class Income(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     withholding_tax: Mapped[Decimal] = mapped_column(
         Numeric(16, 2), default=Decimal("0"), nullable=False
     )
+    # The dashboard transaction this tax copy mirrors (None for copies made
+    # before the link existed); deleting the transaction deletes the copy.
+    transaction_id: Mapped[Optional[str]] = mapped_column(
+        String(36),
+        ForeignKey("transactions.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
 
     user: Mapped["User"] = relationship(back_populates="incomes")

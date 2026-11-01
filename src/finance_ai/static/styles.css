@@ -1160,6 +1160,70 @@ a.cite-card-title:hover { text-decoration: underline; }
   .guru-cards { grid-template-columns: 1fr; }
 }
 
+/* ─── Dashboard: income / expense history ─── */
+.history-head { display: flex; justify-content: space-between; align-items: center; gap: var(--sp-3); flex-wrap: wrap; }
+.history-add { padding: var(--sp-1) var(--sp-4); font-size: var(--text-body-sm); }
+.history-filters { display: flex; gap: var(--sp-1); margin-top: var(--sp-3); flex-wrap: wrap; }
+.history-filter {
+  padding: var(--sp-1) var(--sp-3); border-radius: var(--radius-full);
+  border: 1px solid var(--color-warm-mist); background: var(--color-soft-paper);
+  font-size: var(--text-body-sm); color: var(--color-graphite);
+}
+.history-filter.is-active { background: var(--color-ink); color: var(--color-parchment); border-color: var(--color-ink); }
+.history-filter:focus-visible, .history-action:focus-visible, .undo-toast-btn:focus-visible {
+  outline: 2px solid var(--color-accent); outline-offset: 2px;
+}
+.history-totals { margin: var(--sp-2) 0 0; font-size: var(--text-body-sm); color: var(--color-graphite); }
+.history-list { list-style: none; margin: var(--sp-2) 0 0; padding: 0; }
+.history-row {
+  display: grid; grid-template-columns: 64px 1fr auto auto; align-items: center; gap: var(--sp-3);
+  padding: var(--sp-2) 0; border-top: 1px solid var(--color-warm-mist-soft);
+}
+.history-row[hidden] { display: none; }
+.history-date { font-size: var(--text-body-sm); color: var(--color-graphite); font-variant-numeric: tabular-nums; }
+.history-main { display: flex; align-items: baseline; gap: var(--sp-2); min-width: 0; }
+.history-category {
+  flex: none; font-size: var(--text-caption); padding: 1px var(--sp-2); border-radius: var(--radius-full);
+  background: var(--color-parchment-2); color: var(--color-graphite);
+}
+.history-desc { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-ink); }
+.history-amount { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; font-weight: var(--fw-medium); }
+.history-row.is-income .history-amount { color: var(--color-positive); }
+.history-row.is-expense .history-amount { color: var(--color-ink); }
+.history-actions { display: flex; gap: 2px; }
+.history-action {
+  width: 28px; height: 28px; border-radius: var(--radius-sm); color: var(--color-graphite);
+  display: inline-flex; align-items: center; justify-content: center; font-size: var(--text-body-sm);
+}
+.history-action:hover { background: var(--color-warm-mist-soft); color: var(--color-ink); }
+.history-action.is-danger:hover { background: rgba(168, 68, 44, 0.12); color: var(--color-negative); }
+.history-empty { margin: var(--sp-3) 0 0; font-size: var(--text-body-sm); color: var(--color-ash); }
+.history-type { display: flex; gap: var(--sp-2); }
+.history-type-option {
+  flex: 1; display: flex; align-items: center; justify-content: center; gap: var(--sp-1);
+  padding: var(--sp-2); border-radius: var(--radius-md); border: 1px solid var(--color-warm-mist);
+  cursor: pointer; font-size: var(--text-body);
+}
+.history-type-option:has(input:checked) { border-color: var(--color-accent); background: var(--color-accent-tint); }
+.history-form-error { margin: 0; font-size: var(--text-body-sm); color: var(--color-negative); }
+.modal-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); }
+.undo-toast {
+  position: fixed; left: 50%; bottom: var(--sp-6); transform: translateX(-50%); z-index: 95;
+  display: flex; align-items: center; gap: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4); border-radius: var(--radius-md);
+  background: var(--color-ink); color: var(--color-parchment); box-shadow: rgba(0, 0, 0, 0.2) 0 6px 20px;
+  font-size: var(--text-body-sm); max-width: calc(100vw - 32px);
+}
+.undo-toast[hidden] { display: none; }
+.undo-toast-btn { color: #9fd49a; font-weight: var(--fw-medium); white-space: nowrap; }
+@media (max-width: 480px) {
+  .history-row { grid-template-columns: 1fr auto; grid-template-areas: "main amount" "date actions"; row-gap: 2px; }
+  .history-main { grid-area: main; }
+  .history-amount { grid-area: amount; }
+  .history-date { grid-area: date; }
+  .history-actions { grid-area: actions; justify-content: flex-end; }
+}
+
 /* ─── Attach a file in chat ─── */
 .attach-btn {
   flex: none; width: 40px; height: 40px; border-radius: var(--radius-md);

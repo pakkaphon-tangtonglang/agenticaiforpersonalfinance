@@ -105,7 +105,8 @@ def _insert_single_transaction(
     session.add(record)
 
     if txn.transaction_type == "income":
-        _insert_income_record(session, txn, user_id, income_cls)
+        session.flush()  # assigns record.id for the tax copy's link
+        _insert_income_record(session, txn, user_id, income_cls, record.id)
 
     return True
 
@@ -115,14 +116,16 @@ def _insert_income_record(
     txn: ParsedTransaction,
     user_id: str,
     income_cls: Any,
+    transaction_id: str,
 ) -> None:
-    """Insert an income record if not a duplicate.
+    """Insert an income tax copy (linked to its transaction) if not a duplicate.
 
     Args:
         session: Database session.
         txn: Parsed transaction (must be income type).
         user_id: UUID of the user.
         income_cls: Income model class.
+        transaction_id: The transactions row this copy mirrors.
     """
     duplicate_income: Any = session.execute(
         select(income_cls).where(
@@ -141,5 +144,6 @@ def _insert_income_record(
                 amount=txn.amount,
                 tax_year=txn.transaction_date.year,
                 pay_period="monthly",
+                transaction_id=transaction_id,
             )
         )
