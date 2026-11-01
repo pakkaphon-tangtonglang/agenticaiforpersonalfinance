@@ -264,3 +264,222 @@ class TestManageWatchlistUnknownAction:
             }
         )
         assert "error" in result
+
+
+def _call(user: User, factory: Callable[[], Session], **arguments: str) -> dict[str, object]:
+    """Invoke manage_watchlist for a user."""
+    payload: dict[str, object] = {"user_id": user.id, "db_session_factory": factory, **arguments}
+    result: dict[str, object] = manage_watchlist.invoke(payload)
+    return result
+
+
+class TestWatchlistAlerts:
+    """Daily news alert times through manage_watchlist."""
+
+    def test_add_without_time_asks_for_one(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Adding with no time tells the agent to ask the user."""
+        result = _call(sample_user, db_session_factory, action="add", symbol="PTT.BK")
+        assert result["alert_time"] is None
+        assert "HH:MM" in str(result["next_step"])
+
+    def test_add_with_time_sets_alert(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """A time given with the add is saved and shown by list."""
+        result = _call(
+            sample_user, db_session_factory, action="add", symbol="PTT.BK", alert_time="8.30"
+        )
+        assert result["alert_time"] == "08:30"
+        listed = _call(sample_user, db_session_factory, action="list")
+        assert listed["watchlist"] == [{"symbol": "PTT.BK", "name": "", "alert_time": "08:30"}]
+
+    def test_add_with_bad_time_reports_error(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """The asset is still added; the bad time is reported."""
+        result = _call(
+            sample_user, db_session_factory, action="add", symbol="PTT.BK", alert_time="25:00"
+        )
+        assert result["status"] == "added"
+        assert "24-hour" in str(result["alert_error"])
+
+    def test_set_alert_requires_watched_asset(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Only watched assets can get an alert."""
+        result = _call(
+            sample_user, db_session_factory, action="set_alert", symbol="AOT.BK", alert_time="09:00"
+        )
+        assert "not on the watchlist" in str(result["error"])
+
+    def test_set_alert_requires_time(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """set_alert without a time is an error."""
+        result = _call(sample_user, db_session_factory, action="set_alert", symbol="PTT.BK")
+        assert "alert_time" in str(result["error"])
+
+    def test_set_alert_invalid_time(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """An invalid time comes back as an error."""
+        _call(sample_user, db_session_factory, action="add", symbol="PTT.BK")
+        result = _call(
+            sample_user, db_session_factory, action="set_alert", symbol="PTT.BK", alert_time="noon"
+        )
+        assert "24-hour" in str(result["error"])
+
+    def test_set_then_clear_alert(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """set_alert saves the time; clear_alert turns it off."""
+        _call(sample_user, db_session_factory, action="add", symbol="PTT.BK")
+        result = _call(
+            sample_user, db_session_factory, action="set_alert", symbol="ptt.bk", alert_time="20:00"
+        )
+        assert result == {"action": "set_alert", "symbol": "PTT.BK", "alert_time": "20:00"}
+        cleared = _call(sample_user, db_session_factory, action="clear_alert", symbol="PTT.BK")
+        assert cleared["status"] == "cleared"
+        again = _call(sample_user, db_session_factory, action="clear_alert", symbol="PTT.BK")
+        assert again["status"] == "no_alert"
+
+    def test_clear_alert_requires_symbol(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """clear_alert without a symbol is an error."""
+        assert "error" in _call(sample_user, db_session_factory, action="clear_alert")
+
+    def test_remove_turns_off_alert(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Removing the asset also clears its alert."""
+        _call(sample_user, db_session_factory, action="add", symbol="PTT.BK", alert_time="07:00")
+        _call(sample_user, db_session_factory, action="remove", symbol="PTT.BK")
+        _call(sample_user, db_session_factory, action="add", symbol="PTT.BK")
+        listed = _call(sample_user, db_session_factory, action="list")
+        assert listed["watchlist"][0]["alert_time"] is None  # type: ignore[index]
+
+
+class TestWatchlistInputEdgeCases:
+    """Symbols and times typed the way people type them."""
+
+    def test_remove_without_bk_suffix(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """'ptt' removes PTT.BK."""
+        _call(sample_user, db_session_factory, action="add", symbol="PTT.BK")
+        result = _call(sample_user, db_session_factory, action="remove", symbol="ptt")
+        assert result == {"action": "remove", "symbol": "PTT.BK", "status": "removed"}
+
+    def test_set_alert_without_bk_and_with_pm(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """'ptt' + '8:30 pm' sets PTT.BK at 20:30."""
+        _call(sample_user, db_session_factory, action="add", symbol="PTT.BK")
+        result = _call(
+            sample_user, db_session_factory, action="set_alert", symbol="ptt", alert_time="8:30 pm"
+        )
+        assert result == {"action": "set_alert", "symbol": "PTT.BK", "alert_time": "20:30"}
+
+    def test_set_alert_thai_time_suffix(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """'20.00 น.' is accepted."""
+        _call(sample_user, db_session_factory, action="add", symbol="PTT.BK")
+        result = _call(
+            sample_user, db_session_factory, action="set_alert", symbol="PTT", alert_time="20.00 น."
+        )
+        assert result["alert_time"] == "20:00"
+
+    def test_unknown_asset_offers_watched_options(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """An asset not on the list asks which watched one was meant."""
+        _call(sample_user, db_session_factory, action="add", symbol="PTT.BK")
+        result = _call(
+            sample_user, db_session_factory, action="set_alert", symbol="AOT", alert_time="08:00"
+        )
+        assert result["needs_clarification"] is True
+        assert result["options"] == ["PTT.BK"]
+
+    def test_missing_symbol_for_set_alert_asks(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """No symbol: ask which watched asset, listing them."""
+        _call(sample_user, db_session_factory, action="add", symbol="PTT.BK")
+        result = _call(sample_user, db_session_factory, action="set_alert", alert_time="08:00")
+        assert result["options"] == ["PTT.BK"]
+
+    def test_ambiguous_time_asks(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """A bare hour like '8' is ambiguous: ask for a 24-hour time."""
+        _call(sample_user, db_session_factory, action="add", symbol="PTT.BK")
+        result = _call(
+            sample_user, db_session_factory, action="set_alert", symbol="PTT", alert_time="8"
+        )
+        assert result["needs_clarification"] is True
+        assert "24" in str(result["ask_user"])
+
+    def test_add_bad_time_passes_question_on(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Add succeeds; the unclear time comes back as a question."""
+        result = _call(
+            sample_user, db_session_factory, action="add", symbol="PTT.BK", alert_time="8"
+        )
+        assert result["status"] == "added"
+        assert result["needs_clarification"] is True
+
+    def test_add_empty_symbol_asks(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Blank symbol asks which asset to add."""
+        result = _call(sample_user, db_session_factory, action="add", symbol="  ")
+        assert result["needs_clarification"] is True
+
+    def test_add_ambiguous_symbol_offers_candidates(
+        self,
+        sample_user: User,
+        db_session_factory: Callable[[], Session],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Several close matches become options."""
+        monkeypatch.setattr(
+            "finance_ai.tools.symbol_guard.search_asset_symbols",
+            lambda query: [
+                AssetSymbolMatch(
+                    symbol="PTTEP.BK", name="PTTEP", exchange="SET", quote_type="EQUITY"
+                ),
+                AssetSymbolMatch(
+                    symbol="PTTGC.BK", name="PTTGC", exchange="SET", quote_type="EQUITY"
+                ),
+            ],
+        )
+        result = _call(sample_user, db_session_factory, action="add", symbol="ปตท")
+        assert result["options"] == ["PTTEP.BK — PTTEP", "PTTGC.BK — PTTGC"]
+
+    def test_search_outage_says_retry(
+        self,
+        sample_user: User,
+        db_session_factory: Callable[[], Session],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A search failure is reported as retry-later, not as a question."""
+
+        def broken(query: str) -> list[AssetSymbolMatch]:
+            raise ConnectionError("offline")
+
+        monkeypatch.setattr("finance_ai.tools.symbol_guard.search_asset_symbols", broken)
+        result = _call(sample_user, db_session_factory, action="add", symbol="PTT")
+        assert result["retry_later"] is True
+
+    def test_remove_from_empty_watchlist(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Nothing to choose from: plain not-found, no options."""
+        result = _call(sample_user, db_session_factory, action="remove", symbol="PTT")
+        assert result["status"] == "not_found"
+        assert "options" not in result

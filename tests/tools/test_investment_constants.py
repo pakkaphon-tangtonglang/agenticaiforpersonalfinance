@@ -1,5 +1,6 @@
 """Tests for investment tracking constants."""
 
+import re
 from decimal import Decimal
 
 from finance_ai.tools.investment_constants import (
@@ -10,7 +11,7 @@ from finance_ai.tools.investment_constants import (
     MAX_PRICE_PER_UNIT,
     MIN_PRICE_PER_UNIT,
     MIN_QUANTITY,
-    MUTUAL_FUND_PREFIXES,
+    MUTUAL_FUND_CODE_PATTERN,
     STOCK_SYMBOL_SUFFIX,
     VALID_ASSET_TYPES,
 )
@@ -41,15 +42,10 @@ class TestSymbolConstants:
         """Stock suffix is .BK for SET/MAI."""
         assert STOCK_SYMBOL_SUFFIX == ".BK"
 
-    def test_mutual_fund_prefixes(self) -> None:
-        """Mutual fund prefixes include K-, KT-, SCB-."""
-        assert "K-" in MUTUAL_FUND_PREFIXES
-        assert "KT-" in MUTUAL_FUND_PREFIXES
-        assert "SCB-" in MUTUAL_FUND_PREFIXES
-
-    def test_mutual_fund_prefixes_is_tuple(self) -> None:
-        """Prefixes stored as tuple for startswith compatibility."""
-        assert isinstance(MUTUAL_FUND_PREFIXES, tuple)
+    def test_mutual_fund_code_pattern(self) -> None:
+        """Fund codes from different fund houses fit the pattern."""
+        for code in ("K-USA-A(A)", "KFSDIV", "SCBSET50", "B-INNOTECH"):
+            assert re.fullmatch(MUTUAL_FUND_CODE_PATTERN, code)
 
 
 class TestTransactionTypes:

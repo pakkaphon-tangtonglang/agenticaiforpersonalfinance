@@ -91,6 +91,8 @@
   };
 
   // ─── DOM helpers ───
+  // Thai stocks are stored as Yahoo symbols ("PTT.BK"); people know them as "PTT".
+  const displaySymbol = (symbol) => (symbol ? String(symbol).replace(/\.BK$/i, "") : "—");
   const $ = (id) => document.getElementById(id);
   const el = (tag, attrs = {}, ...children) => {
     const node = document.createElement(tag);
@@ -645,10 +647,23 @@
         el("span", { "aria-hidden": "true" }, "↳"), q)));
   }
 
+  // A run that used tools settles into its tool chips; otherwise into the plain trace.
+  function settleTrace(live) {
+    if (!live.chips.count) {
+      live.chips.node.remove();
+      live.thinking.settle(traceDetails(live.seconds, live.intent, live.sources.length));
+      return;
+    }
+    const cfg = INTENT_CONFIG[live.intent];
+    const agentLabel = cfg && live.intent !== "unknown" ? `ผู้ช่วยด้าน${cfg.label}` : "";
+    live.chips.finish({ seconds: live.seconds, agentLabel });
+    live.thinking.settle(live.chips.node);
+  }
+
   // Live answers get the trace (which names the agent) instead of the intent badge.
   function finishLiveAnswer(bubble, live) {
     const msg = bubble.closest(".msg");
-    live.thinking.settle(traceDetails(live.seconds, live.intent, live.sources.length));
+    settleTrace(live);
     appendIntentExtras(msg, live.intent, { badge: false });
     msg.append(answerActions(() => bubble.innerText));
     const more = followUps(live.intent);
@@ -663,7 +678,8 @@
     appendMessage("user", text);
     const assistantBubble = appendMessage("assistant", "");
     const thinking = thinkingRow();
-    assistantBubble.before(thinking.row);
+    const chips = window.ToolChips.create();
+    assistantBubble.before(thinking.row, chips.node);
     state.streaming = true;
     setComposerDisabled(true);
     try { await ensureConversation(); } catch (e) { /* server falls back to the latest chat */ }
@@ -678,9 +694,13 @@
 
       await new Promise((resolve, reject) => {
         source.addEventListener("message", (ev) => {
-          if (!full) { thinking.answering(); assistantBubble.classList.add("msg-cursor"); }
+          if (!full) { thinking.answering(); chips.collapse(); assistantBubble.classList.add("msg-cursor"); }
           full += JSON.parse(ev.data);
           assistantBubble.innerHTML = renderMarkdown(full);
+          $("chatThread").scrollTop = $("chatThread").scrollHeight;
+        });
+        source.addEventListener("tool", (ev) => {
+          try { chips.add(JSON.parse(ev.data)); } catch (_) { return; }
           $("chatThread").scrollTop = $("chatThread").scrollHeight;
         });
         source.addEventListener("sources", (ev) => {
@@ -696,10 +716,11 @@
 
       assistantBubble.classList.remove("msg-cursor");
       attachSources(assistantBubble, full, sources);
-      finishLiveAnswer(assistantBubble, { intent, sources, thinking, seconds: (performance.now() - thinking.started) / 1000 });
+      finishLiveAnswer(assistantBubble, { intent, sources, thinking, chips, seconds: (performance.now() - thinking.started) / 1000 });
       maybeAutoTitle();
     } catch (e) {
       thinking.stop();
+      chips.node.remove();
       assistantBubble.classList.remove("msg-cursor");
       assistantBubble.textContent = "เชื่อมต่อสตรีมไม่สำเร็จ กำลังลองใหม่แบบไม่สตรีม…";
       try {
@@ -1023,7 +1044,7 @@
       const gl = Number(h.gain_loss || 0);
       const glClass = gl >= 0 ? "gain" : "loss";
       tbody.append(el("tr", {},
-        el("td", {}, h.symbol || "—"),
+        el("td", {}, displaySymbol(h.symbol)),
         el("td", {}, String(h.quantity ?? "—")),
         el("td", {}, thb(h.average_cost)),
         el("td", {}, thb(h.current_value ?? h.total_value)),
@@ -1035,7 +1056,7 @@
       state.charts.portfolio = new Chart($("portfolioChart"), {
         type: "bar",
         data: {
-          labels: p.holdings.map((h) => h.symbol),
+          labels: p.holdings.map((h) => displaySymbol(h.symbol)),
           datasets: [{
             label: "มูลค่า",
             data: p.holdings.map((h) => Number(h.current_value ?? h.total_value ?? 0)),
@@ -1704,7 +1725,7 @@
       }
       for (const n of notifs) {
         list.append(el("li", { class: "notif-item" },
-          el("span", { class: "notif-symbol" }, n.symbol || "—"),
+          el("span", { class: "notif-symbol" }, displaySymbol(n.symbol)),
           el("span", { class: "notif-text" }, n.message || ""),
           el("span", { class: "notif-time" }, formatThaiDateTime(n.created_at)),
         ));
@@ -1749,7 +1770,7 @@
         title: "ดึงราคาและข่าวล่าสุด",
         onclick: () => fetchAssetData(row.symbol, row.name),
       },
-        el("span", { class: "watchlist-symbol" }, row.symbol || "—"),
+        el("span", { class: "watchlist-symbol", title: row.symbol || "" }, displaySymbol(row.symbol)),
         el("span", { class: "watchlist-name" }, `${row.name || ""} · ${row.quantity ?? "—"} หน่วย`),
         el("span", { class: "holding-value" }, row.current_value == null ? "" : thb(row.current_value)),
         el("span", { class: gainClass }, gainText)),
@@ -1780,8 +1801,9 @@
         title: "ดึงราคาและข่าวล่าสุด",
         onclick: () => fetchAssetData(row.symbol, row.name),
       },
-        el("span", { class: "watchlist-symbol" }, row.symbol || "—"),
+        el("span", { class: "watchlist-symbol", title: row.symbol || "" }, displaySymbol(row.symbol)),
         el("span", { class: "watchlist-name" }, row.name || "")),
+      window.WatchlistAlerts ? window.WatchlistAlerts.timeControl(row) : null,
       el("button", {
         type: "button", class: "watchlist-remove",
         "aria-label": `ตัด ${row.name || row.symbol} ออกจากรายการ`,
@@ -2201,6 +2223,8 @@
     thb,
     toast,
     getUserId: () => state.userId,
+    displaySymbol,
+    loadNotifications,
   };
 
   document.addEventListener("DOMContentLoaded", init);

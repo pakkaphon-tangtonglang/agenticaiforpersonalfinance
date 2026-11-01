@@ -7,7 +7,8 @@ Tools (4):
   - search_finance_news   : News Search Tool
   - get_stock_price       : Stock Price Tool
   - search_finance_knowledge : RAG News Summarization Tool
-  - manage_watchlist      : Asset Tracking Database Tool
+  - manage_watchlist      : Asset Tracking Database Tool (+ daily news alert time)
+  - get_portfolio_holdings / add_portfolio_holding : Portfolio read / add
 """
 
 from typing import Any
@@ -21,7 +22,7 @@ from langgraph.prebuilt import ToolNode
 from finance_ai.agents.asset_monitoring_tools import manage_watchlist
 from finance_ai.agents.graph_utils import should_continue
 from finance_ai.agents.market_data_tools import MARKET_DATA_TOOLS
-from finance_ai.agents.portfolio_tools import get_portfolio_holdings
+from finance_ai.agents.portfolio_tools import add_portfolio_holding, get_portfolio_holdings
 from finance_ai.agents.prompts import ASSET_MONITORING_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.schemas import AssetMonitoringAgentState
@@ -32,6 +33,7 @@ logger = get_logger(__name__)
 ASSET_MONITORING_TOOLS = [
     manage_watchlist,
     get_portfolio_holdings,
+    add_portfolio_holding,
     search_finance_knowledge,
 ] + MARKET_DATA_TOOLS  # [get_stock_price, search_finance_news]
 

@@ -25,6 +25,7 @@ from finance_ai.agents.router_agent import (
     classify_query,
     execute_general_chat,
 )
+from finance_ai.agents.tool_trace import ToolCallTracker, ToolTrace
 from finance_ai.core.logging import get_logger
 
 logger = get_logger(__name__)
@@ -34,19 +35,21 @@ class StreamEvent(BaseModel):
     """A single event in the agent response stream.
 
     Attributes:
-        event_type: Type of event (status, token, sources, or complete).
+        event_type: Type of event (status, token, tool, sources, or complete).
         content: Text content of the event.
         intent: The classified intent (set on 'complete' event).
         sources: Numbered citation sources (set on 'sources' event).
+        tool: Finished tool call summary (set on 'tool' event).
 
     Example:
         >>> e = StreamEvent(event_type="token", content="สวัสดี")
     """
 
-    event_type: Literal["status", "token", "sources", "complete"] = "token"
+    event_type: Literal["status", "token", "tool", "sources", "complete"] = "token"
     content: str = ""
     intent: str = Field(default="")
     sources: list[CitationSource] = Field(default_factory=list)
+    tool: ToolTrace | None = None
 
 
 @dataclass
@@ -109,12 +112,15 @@ def _stream_graph(
         result: Accumulator filled with text and tool messages.
 
     Yields:
-        Status and token events.
+        Status, tool and token events.
     """
+    tracker = ToolCallTracker()
     try:
         for chunk, _metadata in graph.stream(input_state, stream_mode="messages"):
+            tracker.observe(chunk)
             if isinstance(chunk, ToolMessage):
                 result.tool_messages.append(chunk)
+                yield StreamEvent(event_type="tool", tool=tracker.trace_for(chunk))
             event = _process_chunk(chunk)
             if event is not None:
                 if event.event_type == "token":

@@ -58,6 +58,28 @@ class AssetScheduleCRUD(BaseCRUD[AssetSchedule]):
         )
         return list(session.execute(stmt).scalars().all())
 
+    def get_for_symbol(
+        self, session: Session, user_id: str, symbol: str, description: str
+    ) -> AssetSchedule | None:
+        """Get the user's schedule of one kind (description) for one symbol."""
+        stmt = select(AssetSchedule).where(
+            AssetSchedule.user_id == user_id,
+            AssetSchedule.symbol == symbol.strip().upper(),
+            AssetSchedule.description == description,
+        )
+        return session.execute(stmt).scalars().first()
+
+    def get_active_by_description(
+        self, session: Session, user_id: str, description: str
+    ) -> list[AssetSchedule]:
+        """Get the user's active schedules of one kind (description)."""
+        stmt = select(AssetSchedule).where(
+            AssetSchedule.user_id == user_id,
+            AssetSchedule.description == description,
+            AssetSchedule.is_active.is_(True),
+        )
+        return list(session.execute(stmt).scalars().all())
+
     def get_all_active(self, session: Session) -> list[AssetSchedule]:
         """Get all active schedules across all users."""
         stmt = select(AssetSchedule).where(AssetSchedule.is_active.is_(True))

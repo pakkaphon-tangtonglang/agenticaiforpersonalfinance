@@ -80,6 +80,7 @@ def _execute_job(
             return
 
         notification = execute_scheduled_fetch(session, schedule)
+        _deliver_outside_app(session, schedule.user_id, schedule.symbol, notification.content)
         logger.info(
             "Scheduled fetch completed: %s → %s",
             schedule.symbol,
@@ -89,6 +90,15 @@ def _execute_job(
         logger.error("Scheduled job failed for %s: %s", schedule_id, exc)
     finally:
         session.close()
+
+
+def _deliver_outside_app(session: Any, user_id: str, symbol: str, content: str) -> None:
+    """Push a fired alert to the user's linked LINE account (if any)."""
+    from finance_ai.tools.alert_delivery import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        push_alert_to_line,
+    )
+
+    push_alert_to_line(session, user_id, symbol, content)
 
 
 def get_scheduler() -> BackgroundScheduler:

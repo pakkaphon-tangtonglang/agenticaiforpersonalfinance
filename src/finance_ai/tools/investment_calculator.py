@@ -4,6 +4,7 @@ All functions accept typed values directly with no database dependency,
 making them easy to test and reuse across different contexts.
 """
 
+import re
 from decimal import Decimal
 
 from pydantic import BaseModel, Field
@@ -13,7 +14,8 @@ from finance_ai.tools.investment_constants import (
     MAX_PRICE_PER_UNIT,
     MIN_PRICE_PER_UNIT,
     MIN_QUANTITY,
-    MUTUAL_FUND_PREFIXES,
+    MUTUAL_FUND_CODE_EXAMPLES,
+    MUTUAL_FUND_CODE_PATTERN,
     STOCK_SYMBOL_SUFFIX,
     VALID_ASSET_TYPES,
 )
@@ -175,25 +177,31 @@ def validate_mutual_fund_symbol(symbol: str) -> str:
     """Validate a Thai mutual fund symbol format.
 
     Args:
-        symbol: Fund symbol to validate (must start with K-, KT-, or SCB-).
+        symbol: Fund code to validate (any fund house, e.g. "KFSDIV").
 
     Returns:
-        Normalized (uppercase, stripped) symbol.
+        Normalized (uppercase, no spaces) code.
 
     Raises:
-        ValueError: If symbol is empty or missing valid prefix.
+        ValueError: If the code is empty, has invalid characters, or is a
+            stock symbol (ends with .BK).
 
     Example:
         >>> validate_mutual_fund_symbol("k-equity")
         'K-EQUITY'
     """
-    normalized = symbol.strip().upper()
+    normalized = "".join(symbol.split()).upper()
     if not normalized:
-        raise ValueError("Mutual fund symbol cannot be empty.")
-    if not normalized.startswith(MUTUAL_FUND_PREFIXES):
+        raise ValueError("Mutual fund code cannot be empty.")
+    if normalized.endswith(STOCK_SYMBOL_SUFFIX):
         raise ValueError(
-            f"Mutual fund symbol must start with one of {MUTUAL_FUND_PREFIXES}. "
-            f"Received: '{symbol}'"
+            f"'{symbol}' looks like a stock (ends with {STOCK_SYMBOL_SUFFIX}); "
+            "use asset_type='stock' instead."
+        )
+    if not re.fullmatch(MUTUAL_FUND_CODE_PATTERN, normalized):
+        raise ValueError(
+            f"Mutual fund code has an invalid format. Received: '{symbol}'. "
+            f"Examples: {MUTUAL_FUND_CODE_EXAMPLES}"
         )
     return normalized
 

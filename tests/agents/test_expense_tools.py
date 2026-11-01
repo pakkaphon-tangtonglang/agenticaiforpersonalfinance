@@ -33,10 +33,17 @@ class TestParseDateValue:
         result = parse_date_value("  2026-02-24  ", "transaction_date")
         assert result == date(2026, 2, 24)
 
-    def test_invalid_format_raises(self) -> None:
-        """Rejects invalid date format."""
+    @pytest.mark.parametrize(
+        "typed", ["24/02/2026", "24-02-2026", "2569-02-24", "24/02/2569", "๒๔/๐๒/๒๕๖๙"]
+    )
+    def test_accepts_thai_ways_of_writing_dates(self, typed: str) -> None:
+        """Day-first, Buddhist-era and Thai-digit dates all mean 24 Feb 2026."""
+        assert parse_date_value(typed, "transaction_date") == date(2026, 2, 24)
+
+    def test_impossible_date_raises(self) -> None:
+        """A date that does not exist names the field."""
         with pytest.raises(ValueError, match="Cannot parse transaction_date"):
-            parse_date_value("24/02/2026", "transaction_date")
+            parse_date_value("31/02/2026", "transaction_date")
 
     def test_empty_string_raises(self) -> None:
         """Rejects empty string."""

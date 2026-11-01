@@ -215,3 +215,43 @@ class TestStartStopScheduler:
         new_scheduler = get_scheduler()
         assert new_scheduler.running is False
         stop_scheduler()
+
+
+class TestExecuteJob:
+    """_execute_job runs the fetch and hands the alert to LINE."""
+
+    def test_fetches_then_delivers(self) -> None:
+        """The saved notification is pushed outside the app."""
+        from finance_ai.tools.background_scheduler import _execute_job
+
+        schedule = MagicMock(user_id="u1", symbol="PTT.BK")
+        notification = MagicMock(content="ราคา 35 บาท")
+        session = MagicMock()
+        with (
+            patch(
+                "finance_ai.database.crud.schedule_crud.AssetScheduleCRUD.get_by_id",
+                return_value=schedule,
+            ),
+            patch(
+                "finance_ai.tools.scheduler_service.execute_scheduled_fetch",
+                return_value=notification,
+            ),
+            patch("finance_ai.tools.alert_delivery.push_alert_to_line") as push,
+        ):
+            _execute_job("s1", lambda: session)
+        push.assert_called_once_with(session, "u1", "PTT.BK", "ราคา 35 บาท")
+        session.close.assert_called_once()
+
+    def test_missing_schedule_skips(self) -> None:
+        """A deleted schedule fetches nothing."""
+        from finance_ai.tools.background_scheduler import _execute_job
+
+        with (
+            patch(
+                "finance_ai.database.crud.schedule_crud.AssetScheduleCRUD.get_by_id",
+                return_value=None,
+            ),
+            patch("finance_ai.tools.scheduler_service.execute_scheduled_fetch") as fetch,
+        ):
+            _execute_job("gone", MagicMock)
+        fetch.assert_not_called()

@@ -204,3 +204,27 @@ class TestCalculateThaiTaxNumericInput:
             }
         )
         assert "tax_due_or_refund" in result
+
+
+@pytest.mark.parametrize(
+    ("typed", "expected"),
+    [
+        ("1,200,000", Decimal("1200000")),
+        ("1,200,000 บาท", Decimal("1200000")),
+        ("฿35.50", Decimal("35.50")),
+        ("12 THB", Decimal("12")),
+        ("100 หุ้น", Decimal("100")),
+        ("๓๕.-", Decimal("35")),
+        (" 7 ", Decimal("7")),
+    ],
+)
+def test_parse_decimal_value_accepts_typed_money(typed: str, expected: Decimal) -> None:
+    """Separators, units and Thai digits are cleaned before parsing."""
+    assert parse_decimal_value(typed, "amount") == expected
+
+
+@pytest.mark.parametrize("typed", ["1.2.3", "สามสิบ", "1,2,3x"])
+def test_parse_decimal_value_rejects_words(typed: str) -> None:
+    """Text that is not a number still fails with the field name."""
+    with pytest.raises(ValueError, match="Cannot parse amount"):
+        parse_decimal_value(typed, "amount")

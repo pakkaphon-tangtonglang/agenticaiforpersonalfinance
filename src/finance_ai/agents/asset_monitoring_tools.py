@@ -1,158 +1,211 @@
 """LangGraph tool wrapper for the user asset watchlist.
 
-Provides a single manage_watchlist tool that lets the LLM
-add, remove, or list the user's tracked asset symbols.
+Provides a single manage_watchlist tool that lets the LLM add, remove or
+list tracked symbols, and set or clear each symbol's daily news alert time.
 """
 
+from collections.abc import Callable
 from typing import Annotated, Any
 
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
+from finance_ai.agents.clarification import clarification, symbol_problem
 from finance_ai.agents.session_helper import get_tool_session
+from finance_ai.database.crud.watched_asset_crud import WatchedAssetCRUD
 from finance_ai.tools.symbol_guard import (
     SymbolResolutionError,
     resolve_and_validate_symbol,
 )
+from finance_ai.tools.watchlist_alert_service import (
+    AlertTimeError,
+    clear_watchlist_alert,
+    get_watchlist_alert_times,
+    set_watchlist_alert,
+)
+
+ASK_ALERT_TIME_HINT = (
+    "Ask the user what time each day (24-hour HH:MM) they want a news alert"
+    " for this asset, then call manage_watchlist(action='set_alert')."
+)
+ASK_TIME = "อยากให้แจ้งข่าวทุกวันกี่โมง (แบบ 24 ชม. เช่น 08:30 หรือ 20:00)"
+ASK_WHICH_ASSET_TO_ADD = "อยากเพิ่มสินทรัพย์ตัวไหนเข้ารายการติดตาม"
+ASK_WHICH_WATCHED_ASSET = "หมายถึงสินทรัพย์ตัวไหนในรายการติดตาม"
+_ACTIONS = "'add', 'remove', 'list', 'set_alert' or 'clear_alert'"
 
 
 @tool
-def manage_watchlist(
+def manage_watchlist(  # pylint: disable=too-many-arguments,too-many-positional-arguments
     action: str,
     symbol: str = "",
     name: str = "",
+    alert_time: str = "",
     user_id: Annotated[str, InjectedState("user_id")] = "",
     db_session_factory: Annotated[Any, InjectedState("db_session_factory")] = None,
 ) -> dict[str, Any]:
-    """จัดการรายการสินทรัพย์ที่ต้องการติดตาม (Watchlist).
+    """จัดการรายการสินทรัพย์ที่ติดตาม (Watchlist) และเวลาแจ้งเตือนข่าวรายวัน.
 
     ใช้ tool นี้เมื่อผู้ใช้ต้องการ:
-    - เพิ่มสินทรัพย์เข้ารายการติดตาม (action="add")
+    - เพิ่มสินทรัพย์เข้ารายการติดตาม (action="add") — ใส่ alert_time ถ้าผู้ใช้บอกเวลามาแล้ว
     - ลบสินทรัพย์ออกจากรายการ (action="remove")
-    - ดูรายการสินทรัพย์ที่ติดตามอยู่ (action="list")
+    - ดูรายการที่ติดตามพร้อมเวลาแจ้งเตือน (action="list")
+    - ตั้ง/เปลี่ยนเวลาแจ้งข่าวรายวันของสินทรัพย์ (action="set_alert")
+    - ปิดการแจ้งข่าวรายวัน (action="clear_alert")
 
     Args:
-        action: "add", "remove", หรือ "list"
+        action: "add", "remove", "list", "set_alert" หรือ "clear_alert"
         symbol: สัญลักษณ์สินทรัพย์ เช่น "PTT.BK", "BTC-USD", "GC=F"
-                (ต้องระบุสำหรับ action="add" และ "remove")
-        name: ชื่อที่แสดง เช่น "PTT", "Bitcoin", "ทองคำ"
-              (ใช้กับ action="add" เท่านั้น)
+        name: ชื่อที่แสดง เช่น "PTT", "Bitcoin" (ใช้กับ action="add")
+        alert_time: เวลาแจ้งข่าวทุกวันแบบ 24 ชม. "HH:MM" เช่น "08:30", "20:00"
+            (2 ทุ่ม = "20:00", 7 โมงเช้า = "07:00")
         user_id: UUID ของผู้ใช้ (injected จาก graph state).
         db_session_factory: Session factory (injected จาก graph state).
 
     Returns:
-        Dict with action result.
+        Dict with the action result, or {"error": ...}.
 
     Example:
         >>> manage_watchlist(action="add", symbol="PTT.BK", name="PTT")
-        >>> manage_watchlist(action="list")
-        >>> manage_watchlist(action="remove", symbol="PTT.BK")
+        >>> manage_watchlist(action="set_alert", symbol="PTT.BK", alert_time="08:30")
     """
-    from finance_ai.database.crud.watched_asset_crud import (  # noqa: PLC0415
-        WatchedAssetCRUD,
-    )
-
-    crud = WatchedAssetCRUD()
-    normalized_action = action.strip().lower()
-
-    if normalized_action == "add":
-        return _handle_add(crud, db_session_factory, user_id, symbol, name)
-    if normalized_action == "remove":
-        return _handle_remove(crud, db_session_factory, user_id, symbol)
-    if normalized_action == "list":
-        return _handle_list(crud, db_session_factory, user_id)
-
-    return {"error": f"Unknown action '{action}'. Use 'add', 'remove', or 'list'."}
+    handlers: dict[str, Callable[[], dict[str, Any]]] = {
+        "add": lambda: _handle_add(db_session_factory, user_id, symbol, name, alert_time),
+        "remove": lambda: _handle_remove(db_session_factory, user_id, symbol),
+        "list": lambda: _handle_list(db_session_factory, user_id),
+        "set_alert": lambda: _handle_set_alert(db_session_factory, user_id, symbol, alert_time),
+        "clear_alert": lambda: _handle_clear_alert(db_session_factory, user_id, symbol),
+    }
+    handler = handlers.get(action.strip().lower())
+    if handler is None:
+        return {"error": f"Unknown action '{action}'. Use {_ACTIONS}."}
+    return handler()
 
 
 def _handle_add(
-    crud: Any,
     db_session_factory: Any,
     user_id: str,
     symbol: str,
     name: str,
+    alert_time: str,
 ) -> dict[str, Any]:
-    """Add a symbol to the watchlist after validating it via the guard.
-
-    The raw input is resolved to a canonical Yahoo symbol; input that does
-    not match a real search candidate is rejected with a Thai message.
-
-    Args:
-        crud: WatchedAssetCRUD instance.
-        db_session_factory: Session factory callable.
-        user_id: UUID of the user.
-        symbol: Raw user-provided symbol (e.g., "ptt", "PTT.BK").
-        name: Display name.
+    """Add a symbol (validated by the guard), then set its alert if a time was given.
 
     Returns:
-        Dict with add result, or {"error": ...} when the symbol cannot
-        be resolved.
+        Add result; without a time it carries next_step asking for one.
+        Unknown or ambiguous symbols return a clarification instead.
     """
-    if not symbol:
-        return {"error": "symbol is required for action='add'"}
+    if not symbol.strip():
+        return clarification("symbol is required for action='add'", ASK_WHICH_ASSET_TO_ADD)
     try:
         canonical_symbol = resolve_and_validate_symbol(symbol)
     except SymbolResolutionError as exc:
-        return {"error": str(exc)}
+        return symbol_problem(exc)
     with get_tool_session(db_session_factory) as session:
-        record = crud.add(session, user_id, canonical_symbol, name)
+        record = WatchedAssetCRUD().add(session, user_id, canonical_symbol, name)
         session.commit()
-        if record is None:
-            return {
-                "action": "add",
-                "symbol": canonical_symbol,
-                "status": "already_exists",
-            }
-        return {
-            "action": "add",
-            "symbol": record.symbol,
-            "name": record.name,
-            "status": "added",
-        }
+        added_name = None if record is None else record.name
+    result: dict[str, Any] = {
+        "action": "add",
+        "symbol": canonical_symbol,
+        "status": "already_exists" if added_name is None else "added",
+    }
+    if added_name is not None:
+        result["name"] = added_name
+    return {**result, **_alert_after_add(db_session_factory, user_id, canonical_symbol, alert_time)}
 
 
-def _handle_remove(
-    crud: Any,
-    db_session_factory: Any,
-    user_id: str,
-    symbol: str,
+def _alert_after_add(
+    db_session_factory: Any, user_id: str, symbol: str, alert_time: str
 ) -> dict[str, Any]:
-    """Remove a symbol from the watchlist.
+    """Set the alert when a time came with the add; otherwise ask for one."""
+    if not alert_time:
+        return {"alert_time": None, "next_step": ASK_ALERT_TIME_HINT}
+    alert = _handle_set_alert(db_session_factory, user_id, symbol, alert_time)
+    return {"alert_time": alert.get("alert_time"), **_only_error(alert)}
 
-    Args:
-        crud: WatchedAssetCRUD instance.
-        db_session_factory: Session factory callable.
-        user_id: UUID of the user.
-        symbol: Ticker symbol to remove.
 
-    Returns:
-        Dict with remove result.
-    """
-    if not symbol:
+def _only_error(result: dict[str, Any]) -> dict[str, Any]:
+    """Keep the error (and any question) of a failed result; empty when it succeeded."""
+    if "error" not in result:
+        return {}
+    question: dict[str, Any] = {
+        key: result[key] for key in ("needs_clarification", "ask_user") if key in result
+    }
+    return {"alert_error": result["error"], **question}
+
+
+def _find_watched_symbol(session: Any, user_id: str, typed: str) -> str | None:
+    """Canonical symbol of a watched asset however it was typed ("ptt", "ปตท", "PTT.BK")."""
+    crud = WatchedAssetCRUD()
+    asset = crud.find_by_user_input(session, user_id, typed)
+    if asset is None:
+        try:
+            asset = crud.find_by_user_input(session, user_id, resolve_and_validate_symbol(typed))
+        except SymbolResolutionError:
+            return None
+    return None if asset is None else asset.symbol
+
+
+def _not_watched(session: Any, user_id: str, typed: str) -> dict[str, Any]:
+    """Ask which watched asset the user meant, listing what they watch."""
+    watched = [asset.symbol for asset in WatchedAssetCRUD().get_by_user(session, user_id)]
+    problem = f"'{typed}' is not on the watchlist."
+    if not watched:
+        return {"error": f"{problem} The watchlist is empty."}
+    return clarification(problem, ASK_WHICH_WATCHED_ASSET, watched)
+
+
+def _handle_remove(db_session_factory: Any, user_id: str, symbol: str) -> dict[str, Any]:
+    """Remove a watched asset (typed any way) and turn off its alert."""
+    if not symbol.strip():
         return {"error": "symbol is required for action='remove'"}
     with get_tool_session(db_session_factory) as session:
-        deleted = crud.remove(session, user_id, symbol)
+        watched_symbol = _find_watched_symbol(session, user_id, symbol)
+        if watched_symbol is None:
+            question = _not_watched(session, user_id, symbol)
+            return {"action": "remove", "symbol": symbol.upper(), "status": "not_found", **question}
+        WatchedAssetCRUD().remove(session, user_id, watched_symbol)
         session.commit()
-    status = "removed" if deleted else "not_found"
-    return {"action": "remove", "symbol": symbol.upper(), "status": status}
+        clear_watchlist_alert(session, user_id, watched_symbol)
+    return {"action": "remove", "symbol": watched_symbol, "status": "removed"}
 
 
-def _handle_list(
-    crud: Any,
-    db_session_factory: Any,
-    user_id: str,
-) -> dict[str, Any]:
-    """List all watched assets for the user.
-
-    Args:
-        crud: WatchedAssetCRUD instance.
-        db_session_factory: Session factory callable.
-        user_id: UUID of the user.
-
-    Returns:
-        Dict with watchlist items.
-    """
+def _handle_list(db_session_factory: Any, user_id: str) -> dict[str, Any]:
+    """List watched assets with each one's daily alert time (None = off)."""
     with get_tool_session(db_session_factory) as session:
-        assets = crud.get_by_user(session, user_id)
-        items = [{"symbol": a.symbol, "name": a.name} for a in assets]
+        assets = WatchedAssetCRUD().get_by_user(session, user_id)
+        times = get_watchlist_alert_times(session, user_id)
+        items = [
+            {"symbol": a.symbol, "name": a.name, "alert_time": times.get(a.symbol)} for a in assets
+        ]
     return {"action": "list", "count": len(items), "watchlist": items}
+
+
+def _handle_set_alert(
+    db_session_factory: Any, user_id: str, symbol: str, alert_time: str
+) -> dict[str, Any]:
+    """Set the daily news time for a watched asset; ask when something is missing."""
+    if not alert_time.strip():
+        return clarification("alert_time (HH:MM) is required for action='set_alert'", ASK_TIME)
+    with get_tool_session(db_session_factory) as session:
+        watched_symbol = _find_watched_symbol(session, user_id, symbol) if symbol.strip() else None
+        if watched_symbol is None:
+            return _not_watched(session, user_id, symbol)
+        try:
+            saved = set_watchlist_alert(
+                session, user_id, watched_symbol, alert_time, db_session_factory
+            )
+        except AlertTimeError as exc:
+            return clarification(str(exc), ASK_TIME)
+    return {"action": "set_alert", "symbol": watched_symbol, "alert_time": saved}
+
+
+def _handle_clear_alert(db_session_factory: Any, user_id: str, symbol: str) -> dict[str, Any]:
+    """Turn off the daily news alert for a watched asset (typed any way)."""
+    if not symbol.strip():
+        return {"error": "symbol is required for action='clear_alert'"}
+    with get_tool_session(db_session_factory) as session:
+        watched_symbol = _find_watched_symbol(session, user_id, symbol) or symbol.strip().upper()
+        cleared = clear_watchlist_alert(session, user_id, watched_symbol)
+    status = "cleared" if cleared else "no_alert"
+    return {"action": "clear_alert", "symbol": watched_symbol, "status": status}

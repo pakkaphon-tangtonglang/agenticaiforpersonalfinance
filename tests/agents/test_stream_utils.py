@@ -193,6 +193,27 @@ class TestStreamAgentResponse:
         assert events[-1].event_type == "complete"
         assert events[-1].intent == "expense"
 
+    def test_yields_tool_event_for_tool_message(self) -> None:
+        """A tool reply becomes a tool event with the call's args."""
+        from langchain_core.messages import AIMessage, ToolMessage
+
+        call = AIMessage(
+            content="",
+            tool_calls=[{"name": "get_stock_price", "args": {"symbol": "PTT.BK"}, "id": "c1"}],
+        )
+        reply = ToolMessage(content="35.50 บาท", tool_call_id="c1")
+        mock_graph = MagicMock()
+        mock_graph.stream.return_value = iter([(call, {}), (reply, {})])
+        mock_graph.invoke.return_value = {"messages": []}
+
+        events = list(stream_agent_response(mock_graph, {}, "asset"))
+        tool_events = [e for e in events if e.event_type == "tool"]
+        assert len(tool_events) == 1
+        assert tool_events[0].tool is not None
+        assert tool_events[0].tool.name == "get_stock_price"
+        assert tool_events[0].tool.args == {"symbol": "PTT.BK"}
+        assert tool_events[0].tool.preview == ["35.50 บาท"]
+
     def test_handles_stream_error(self) -> None:
         """Stream error yields error token then complete."""
         mock_graph = MagicMock()

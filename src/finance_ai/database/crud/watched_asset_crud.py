@@ -76,6 +76,31 @@ class WatchedAssetCRUD(BaseCRUD[WatchedAsset]):
         )
         return session.execute(stmt).scalar_one_or_none()
 
+    def find_by_user_input(self, session: Session, user_id: str, text: str) -> WatchedAsset | None:
+        """Find a watched asset from how a user typed it ("ptt", "PTT", "PTT.BK").
+
+        Tries the text as typed, then with ".BK" added, then with ".BK" removed,
+        so the SET suffix never decides whether an asset is found.
+
+        Args:
+            session: Database session.
+            user_id: UUID of the user.
+            text: Symbol as the user (or LLM) wrote it.
+
+        Returns:
+            The matching watched asset, or None.
+
+        Example:
+            >>> crud.find_by_user_input(session, uid, "ptt").symbol
+            'PTT.BK'
+        """
+        typed = text.strip().upper()
+        for candidate in dict.fromkeys([typed, f"{typed}.BK", typed.removesuffix(".BK")]):
+            asset = self.get_by_symbol(session, user_id, candidate) if candidate else None
+            if asset is not None:
+                return asset
+        return None
+
     def list_for_user(self, session: Session, user_id: str) -> list[WatchedAsset]:
         """Get all watched assets for a user, oldest first.
 

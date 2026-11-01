@@ -5,11 +5,13 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+import pytest
 from sqlalchemy.orm import Session
 
-from finance_ai.agents.portfolio_tools import get_portfolio_holdings
+from finance_ai.agents.portfolio_tools import add_portfolio_holding, get_portfolio_holdings
 from finance_ai.database.models.investment_holding import InvestmentHolding
 from finance_ai.database.models.user import User
+from finance_ai.tools.market_data_models import AssetSymbolMatch
 
 
 def _invoke(user: User, factory: Callable[[], Session]) -> dict[str, Any]:
@@ -79,3 +81,221 @@ class TestGetPortfolioHoldings:
         holding = _invoke(sample_user, db_session_factory)["holdings"][0]
         assert holding["current_value"] is None
         assert holding["unrealized_gain_loss"] is None
+
+
+@pytest.fixture
+def mock_symbol_search(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Resolve symbols offline: 'ptt' -> 'PTT.BK', anything else echoed."""
+
+    def fake_search(query: str) -> list[AssetSymbolMatch]:
+        upper = query.strip().upper()
+        symbol = "PTT.BK" if upper == "PTT" else upper
+        return [AssetSymbolMatch(symbol=symbol, name=upper, exchange="MOCK", quote_type="EQUITY")]
+
+    monkeypatch.setattr("finance_ai.tools.symbol_guard.search_asset_symbols", fake_search)
+
+
+def _add(user: User, factory: Callable[[], Session], **arguments: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {"user_id": user.id, "db_session_factory": factory, **arguments}
+    result: dict[str, Any] = add_portfolio_holding.invoke(payload)
+    return result
+
+
+@pytest.mark.usefixtures("mock_symbol_search")
+class TestAddPortfolioHolding:
+    """add_portfolio_holding records what the user bought."""
+
+    def test_adds_thai_stock_by_name(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """'ptt' resolves to PTT.BK and shows up in the portfolio."""
+        result = _add(
+            sample_user,
+            db_session_factory,
+            symbol="ptt",
+            quantity="100",
+            price_per_unit="35.5",
+            purchase_date="2026-10-01",
+        )
+        assert result == {"status": "added", "symbol": "PTT.BK", "total_cost": "3550.00"}
+        holdings = _invoke(sample_user, db_session_factory)["holdings"]
+        assert [h["symbol"] for h in holdings] == ["PTT.BK"]
+
+    def test_adds_mutual_fund(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Funds keep their own code and default to today's date."""
+        result = _add(
+            sample_user,
+            db_session_factory,
+            symbol="k-usa-a(a)",
+            quantity="10",
+            price_per_unit="12",
+            asset_type="mutual_fund",
+        )
+        assert result["symbol"] == "K-USA-A(A)"
+
+    def test_foreign_stock_rejected(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Only Thai (.BK) stocks fit the portfolio."""
+        result = _add(
+            sample_user, db_session_factory, symbol="AAPL", quantity="1", price_per_unit="200"
+        )
+        assert ".BK" in result["error"]
+
+    def test_bad_quantity_rejected(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Non-numeric quantity returns an error and saves nothing."""
+        result = _add(
+            sample_user, db_session_factory, symbol="PTT", quantity="lots", price_per_unit="35"
+        )
+        assert "quantity" in result["error"]
+        assert _invoke(sample_user, db_session_factory)["holding_count"] == 0
+
+    def test_zero_price_rejected(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Price must be positive."""
+        result = _add(
+            sample_user, db_session_factory, symbol="PTT", quantity="10", price_per_unit="0"
+        )
+        assert "error" in result
+
+
+@pytest.mark.usefixtures("mock_symbol_search")
+class TestAddPortfolioHoldingEdgeCases:
+    """Unclear input becomes a question; obvious formatting is fixed."""
+
+    def test_thai_digits_commas_and_buddhist_year(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """'๑,๐๐๐' units at '35 บาท' bought '1/10/2569' are understood."""
+        result = _add(
+            sample_user,
+            db_session_factory,
+            symbol="$ptt",
+            quantity="๑,๐๐๐",
+            price_per_unit="35 บาท",
+            purchase_date="1/10/2569",
+        )
+        assert result == {"status": "added", "symbol": "PTT.BK", "total_cost": "35000.00"}
+
+    def test_thai_asset_type_alias(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """asset_type 'กองทุน' means mutual_fund."""
+        result = _add(
+            sample_user,
+            db_session_factory,
+            symbol="KFSDIV",
+            quantity="10",
+            price_per_unit="12",
+            asset_type="กองทุน",
+        )
+        assert result["symbol"] == "KFSDIV"
+
+    def test_fund_code_sent_as_stock_asks_if_fund(
+        self,
+        sample_user: User,
+        db_session_factory: Callable[[], Session],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A stock search miss on a fund-shaped code asks 'is it a fund?'."""
+        monkeypatch.setattr("finance_ai.tools.symbol_guard.search_asset_symbols", lambda q: [])
+        result = _add(
+            sample_user, db_session_factory, symbol="K-USA-A(A)", quantity="1", price_per_unit="10"
+        )
+        assert result["needs_clarification"] is True
+        assert "K-USA-A(A)" in result["ask_user"]
+        assert result["options"] == ["หุ้นไทย", "กองทุนรวม"]
+
+    def test_unknown_stock_asks_for_name(
+        self,
+        sample_user: User,
+        db_session_factory: Callable[[], Session],
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A miss on something that is not fund-shaped asks for the name again."""
+        monkeypatch.setattr("finance_ai.tools.symbol_guard.search_asset_symbols", lambda q: [])
+        result = _add(
+            sample_user, db_session_factory, symbol="???", quantity="1", price_per_unit="10"
+        )
+        assert result["needs_clarification"] is True
+        assert "options" not in result
+
+    def test_unknown_asset_type_asks(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """An unknown type offers stock or fund."""
+        result = _add(
+            sample_user,
+            db_session_factory,
+            symbol="PTT",
+            quantity="1",
+            price_per_unit="10",
+            asset_type="crypto",
+        )
+        assert result["options"] == ["หุ้นไทย", "กองทุนรวม"]
+
+    def test_bad_fund_code_asks(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """A malformed fund code asks for it again with examples."""
+        result = _add(
+            sample_user,
+            db_session_factory,
+            symbol="?",
+            quantity="1",
+            price_per_unit="10",
+            asset_type="mutual_fund",
+        )
+        assert "KFSDIV" in result["ask_user"]
+
+    def test_future_date_asks(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """A purchase date after today is questioned, not saved."""
+        result = _add(
+            sample_user,
+            db_session_factory,
+            symbol="PTT",
+            quantity="1",
+            price_per_unit="10",
+            purchase_date="2999-01-01",
+        )
+        assert result["needs_clarification"] is True
+        assert _invoke(sample_user, db_session_factory)["holding_count"] == 0
+
+    def test_unreadable_date_asks(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """'last week' cannot be parsed: ask for the date."""
+        result = _add(
+            sample_user,
+            db_session_factory,
+            symbol="PTT",
+            quantity="1",
+            price_per_unit="10",
+            purchase_date="last week",
+        )
+        assert "วัน" in result["ask_user"]
+
+    def test_bad_price_asks_for_price(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """The question names the unclear value."""
+        result = _add(
+            sample_user, db_session_factory, symbol="PTT", quantity="1", price_per_unit="cheap"
+        )
+        assert "ราคา" in result["ask_user"]
+
+    def test_negative_quantity_asks(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Validation failures ask for positive values."""
+        result = _add(
+            sample_user, db_session_factory, symbol="PTT", quantity="-5", price_per_unit="10"
+        )
+        assert result["needs_clarification"] is True

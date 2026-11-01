@@ -10,6 +10,7 @@ import pytest
 from finance_ai.tools.market_data_models import AssetSymbolMatch
 from finance_ai.tools.symbol_guard import (
     SymbolResolutionError,
+    SymbolSearchUnavailableError,
     resolve_and_validate_symbol,
 )
 
@@ -134,3 +135,38 @@ class TestUnresolvableInput:
     def test_error_is_value_error_subclass(self) -> None:
         """SymbolResolutionError is a ValueError so callers can catch broadly."""
         assert issubclass(SymbolResolutionError, ValueError)
+
+
+class TestInputCleanupAndClarification:
+    """Ticker decorations are removed; ambiguity and outages are reported distinctly."""
+
+    @pytest.mark.parametrize("typed", ["$PTT", "SET:PTT", " ptt "])
+    def test_decorations_removed_before_search(
+        self, monkeypatch: pytest.MonkeyPatch, typed: str
+    ) -> None:
+        """The search sees the bare ticker."""
+        capture: dict[str, str] = {}
+        stub_search(monkeypatch, [make_match("PTT.BK")], capture=capture)
+        assert resolve_and_validate_symbol(typed) == "PTT.BK"
+        assert capture["query"].upper() == "PTT"
+
+    def test_ambiguous_carries_candidates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Ambiguous input keeps up to five candidates for the question."""
+        matches = [make_match(f"PTT{i}.BK") for i in range(7)]
+        stub_search(monkeypatch, matches)
+        with pytest.raises(SymbolResolutionError) as caught:
+            resolve_and_validate_symbol("ปตท")
+        assert [m.symbol for m in caught.value.candidates] == [f"PTT{i}.BK" for i in range(5)]
+
+    def test_not_found_has_no_candidates(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Nothing found: no candidates."""
+        stub_search(monkeypatch, [])
+        with pytest.raises(SymbolResolutionError) as caught:
+            resolve_and_validate_symbol("ZZZZ")
+        assert not caught.value.candidates
+
+    def test_outage_raises_unavailable(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A search failure is the retry-later subclass."""
+        stub_search(monkeypatch, raises=ConnectionError("offline"))
+        with pytest.raises(SymbolSearchUnavailableError):
+            resolve_and_validate_symbol("PTT")
