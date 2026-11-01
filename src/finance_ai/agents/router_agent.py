@@ -16,6 +16,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from sqlalchemy.orm import Session
 
 from finance_ai.agents.llm_error_messages import describe_llm_error
+from finance_ai.agents.llm_factory import router_chat_model
 from finance_ai.agents.prompts import (
     GENERAL_CHAT_SYSTEM_PROMPT,
     ORCHESTRATOR_HISTORY_INSTRUCTION,
@@ -189,7 +190,7 @@ def classify_query(
     settings = config or DEFAULT_ABLATION_CONFIG
     asset_hint = _resolve_asset_hint(query) if settings.resolve_asset_hint else None
     messages = _build_router_messages(query, chat_history, asset_hint, settings)
-    response = chat_model.invoke(messages)
+    response = router_chat_model(chat_model).invoke(messages)
     decision = parse_orchestrator_response(response.content)
     return _apply_confidence_threshold(decision, settings)
 

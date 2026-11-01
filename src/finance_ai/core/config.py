@@ -8,6 +8,8 @@ from typing import Literal, Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+ThinkingLevel = Literal["minimal", "low", "medium", "high"]
+
 
 class Settings(BaseSettings):
     """Application configuration settings with multi-provider LLM support."""
@@ -157,6 +159,17 @@ class Settings(BaseSettings):
         ge=0.0,
         le=1.0,
         description="Temperature for the Recommendation Agent (conservative advice).",
+    )
+    llm_thinking_level: Optional[ThinkingLevel] = Field(
+        default="low",
+        description=(
+            "Gemini 3+ thinking level for agent calls (the model default thinks hard on"
+            " every call, which dominated answer latency). None = model default."
+        ),
+    )
+    router_thinking_level: Optional[ThinkingLevel] = Field(
+        default="minimal",
+        description="Gemini 3+ thinking level for the one-label intent classification.",
     )
 
     # RAG Configuration

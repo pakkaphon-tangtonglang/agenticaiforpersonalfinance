@@ -136,6 +136,19 @@ class TestClassifyQuery:
         result = classify_query("test", chat_model=mock_chat_model)
         assert result.intent == "unknown"
 
+    @patch("finance_ai.agents.router_agent.router_chat_model")
+    def test_invokes_router_thinking_model(
+        self, mock_router_model: MagicMock, mock_chat_model: MagicMock
+    ) -> None:
+        """Classification runs on the low-thinking router binding of the model."""
+        mock_router_model.return_value.invoke.return_value = AIMessage(
+            content='{"intent": "tax", "confidence": 0.9}'
+        )
+        result = classify_query("คำนวณภาษี", chat_model=mock_chat_model)
+        mock_router_model.assert_called_once_with(mock_chat_model)
+        mock_chat_model.invoke.assert_not_called()
+        assert result.intent == "tax"
+
 
 class TestRouteQuery:
     """Tests for the main routing function."""
