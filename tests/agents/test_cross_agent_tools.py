@@ -45,9 +45,24 @@ class TestToolLists:
         tool_names = [t.name for t in EXPENSE_CROSS_TOOLS]
         assert "get_goals_summary_cross" in tool_names
 
-    def test_asset_monitoring_cross_tools_is_empty(self) -> None:
-        """Asset monitoring agent has no cross-tools."""
-        assert ASSET_MONITORING_CROSS_TOOLS == []
+    def test_asset_monitoring_cross_tools_record_fund_deductions(self) -> None:
+        """Asset monitoring agent records RMF purchases as deductions."""
+        tool_names = [t.name for t in ASSET_MONITORING_CROSS_TOOLS]
+        assert tool_names == ["record_tax_deduction_cross", "undo_tax_deduction_cross"]
+
+    def test_expense_cross_tools_record_deductions(self) -> None:
+        """Expense agent records deductible payments and social security."""
+        tool_names = {t.name for t in EXPENSE_CROSS_TOOLS}
+        assert {
+            "record_tax_deduction_cross",
+            "record_social_security_cross",
+            "undo_tax_deduction_cross",
+        } <= tool_names
+
+    def test_tax_cross_tools_calculate_from_records(self) -> None:
+        """Tax agent can calculate from saved records and record deductions."""
+        tool_names = {t.name for t in TAX_CROSS_TOOLS}
+        assert {"calculate_tax_from_records", "record_tax_deduction_cross"} <= tool_names
 
 
 class TestGetExpenseSummaryCross:

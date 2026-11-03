@@ -117,7 +117,12 @@ class TestAddPortfolioHolding:
             price_per_unit="35.5",
             purchase_date="2026-10-01",
         )
-        assert result == {"status": "added", "symbol": "PTT.BK", "total_cost": "3550.00"}
+        assert result == {
+            "status": "added",
+            "symbol": "PTT.BK",
+            "total_cost": "3550.00",
+            "watchlist_hint": {"symbol": "PTT.BK", "name": "PTT.BK"},
+        }
         holdings = _invoke(sample_user, db_session_factory)["holdings"]
         assert [h["symbol"] for h in holdings] == ["PTT.BK"]
 
@@ -134,6 +139,23 @@ class TestAddPortfolioHolding:
             asset_type="mutual_fund",
         )
         assert result["symbol"] == "K-USA-A(A)"
+        assert "tax_deduction_hint" not in result
+        assert "watchlist_hint" not in result
+
+    def test_rmf_purchase_hints_tax_deduction(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """An RMF (named เพื่อการเลี้ยงชีพ) hints the deduction to record."""
+        result = _add(
+            sample_user,
+            db_session_factory,
+            symbol="SCBRMS&P500",
+            quantity="1000",
+            price_per_unit="12.5",
+            asset_type="mutual_fund",
+            name="กองทุนเปิดไทยพาณิชย์ S&P500 เพื่อการเลี้ยงชีพ",
+        )
+        assert result["tax_deduction_hint"] == {"deduction_type": "rmf", "amount": "12500.00"}
 
     def test_foreign_stock_rejected(
         self, sample_user: User, db_session_factory: Callable[[], Session]
@@ -180,7 +202,9 @@ class TestAddPortfolioHoldingEdgeCases:
             price_per_unit="35 บาท",
             purchase_date="1/10/2569",
         )
-        assert result == {"status": "added", "symbol": "PTT.BK", "total_cost": "35000.00"}
+        assert result["status"] == "added"
+        assert result["symbol"] == "PTT.BK"
+        assert result["total_cost"] == "35000.00"
 
     def test_thai_asset_type_alias(
         self, sample_user: User, db_session_factory: Callable[[], Session]

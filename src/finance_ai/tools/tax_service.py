@@ -154,9 +154,65 @@ def store_tax_filing_result(
     session.commit()
 
 
+def collect_deductions_for_user(
+    session: Session, user_id: str, tax_year: int
+) -> dict[str, Decimal]:
+    """
+    Recorded deductions merged with the profile's automatic allowances.
+
+    Args:
+        session: Database session.
+        user_id: UUID of the user.
+        tax_year: Tax year to collect.
+
+    Returns:
+        Dict mapping deduction type to claimed amount.
+
+    Raises:
+        ValueError: If user is not found.
+
+    Example:
+        >>> collect_deductions_for_user(session, user_id, 2026)["personal_allowance"]
+        Decimal('60000')
+    """
+    user = UserCRUD().get_by_id(session, user_id)
+    if user is None:
+        raise ValueError(f"User not found. User ID: {user_id}")
+    user_deductions = aggregate_deductions_by_type(
+        DeductionCRUD().get_by_user_and_year(session, user_id, tax_year)
+    )
+    return merge_deductions(build_auto_allowances(user), user_deductions)
+
+
+def calculate_tax_from_saved_records(
+    session: Session, user_id: str, tax_year: int
+) -> tuple[TaxCalculationResult, dict[str, Decimal]]:
+    """
+    Calculate tax from recorded income, deductions and withholding (nothing is stored).
+
+    Args:
+        session: Database session.
+        user_id: UUID of the user.
+        tax_year: Tax year to calculate.
+
+    Returns:
+        Tuple of (tax result, deductions used by type).
+
+    Raises:
+        ValueError: If user is not found.
+
+    Example:
+        >>> result, deductions = calculate_tax_from_saved_records(session, user_id, 2026)
+    """
+    deductions = collect_deductions_for_user(session, user_id, tax_year)
+    gross_income = IncomeCRUD().get_total_income_for_year(session, user_id, tax_year)
+    withholding = calculate_total_withholding_tax(session, user_id, tax_year)
+    return calculate_tax(gross_income, deductions, withholding), deductions
+
+
 def calculate_tax_for_user(session: Session, user_id: str, tax_year: int) -> TaxCalculationResult:
     """
-    Calculate tax for a user by querying their financial data.
+    Calculate tax for a user by querying their financial data, then store the filing.
 
     Args:
         session: Database session.
@@ -174,16 +230,6 @@ def calculate_tax_for_user(session: Session, user_id: str, tax_year: int) -> Tax
         >>> result.total_tax
         Decimal('75000.00')
     """
-    user = UserCRUD().get_by_id(session, user_id)
-    if user is None:
-        raise ValueError(f"User not found. User ID: {user_id}")
-    gross_income = IncomeCRUD().get_total_income_for_year(session, user_id, tax_year)
-    user_deductions = aggregate_deductions_by_type(
-        DeductionCRUD().get_by_user_and_year(session, user_id, tax_year)
-    )
-    auto_allowances = build_auto_allowances(user)
-    all_deductions = merge_deductions(auto_allowances, user_deductions)
-    withholding = calculate_total_withholding_tax(session, user_id, tax_year)
-    result = calculate_tax(gross_income, all_deductions, withholding)
+    result, _ = calculate_tax_from_saved_records(session, user_id, tax_year)
     store_tax_filing_result(session, user_id, tax_year, result)
     return result

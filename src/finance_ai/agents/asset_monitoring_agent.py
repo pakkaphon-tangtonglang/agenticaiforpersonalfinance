@@ -10,6 +10,7 @@ Tools (4):
   - manage_watchlist      : Asset Tracking Database Tool (+ daily news alert time)
   - get_portfolio_holdings / add_portfolio_holding : Portfolio read / add
   - search_thai_funds     : Thai mutual fund search by name/fund house (SEC)
+  - record/undo_tax_deduction_cross : RMF purchases counted as tax deductions
 """
 
 from typing import Any
@@ -20,6 +21,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
 from finance_ai.agents.asset_monitoring_tools import manage_watchlist
+from finance_ai.agents.cross_agent_tools import ASSET_MONITORING_CROSS_TOOLS
 from finance_ai.agents.fund_search_tools import search_thai_funds
 from finance_ai.agents.graph_utils import build_tool_node, should_continue
 from finance_ai.agents.market_data_tools import MARKET_DATA_TOOLS
@@ -37,7 +39,9 @@ ASSET_MONITORING_TOOLS = [
     add_portfolio_holding,
     search_thai_funds,
     search_finance_knowledge,
-] + MARKET_DATA_TOOLS  # [get_stock_price, search_finance_news]
+    *MARKET_DATA_TOOLS,  # get_stock_price, search_finance_news
+    *ASSET_MONITORING_CROSS_TOOLS,  # record/undo tax deduction (RMF purchases)
+]
 
 
 def create_llm_node(

@@ -395,7 +395,38 @@ def add_income(  # pylint: disable=too-many-arguments,too-many-positional-argume
         "tax_year": parsed_year,
         "pay_period": pay_period,
         "withholding_tax": str(parsed_wht),
+        **_social_security_follow_up(db_session_factory, user_id, normalized_type, parsed_year),
     }
+
+
+ASK_SOCIAL_SECURITY: str = (
+    "ถามผู้ใช้ก่อนว่าเป็นพนักงานที่มีประกันสังคม (หักจากเงินเดือน) หรือเป็นฟรีแลนซ์"
+    " ถ้ามีประกันสังคม ให้เรียก record_social_security_cross ด้วยเงินเดือนต่อเดือน"
+)
+
+
+def _social_security_follow_up(
+    db_session_factory: Any, user_id: str, income_type: str, tax_year: int
+) -> dict[str, str]:
+    """Ask about social security after a salary, unless it is saved for the year.
+
+    Args:
+        db_session_factory: Session factory or None.
+        user_id: UUID of the user.
+        income_type: Normalized income type.
+        tax_year: Tax year of the income.
+
+    Returns:
+        {"next_step": ...} for a salary without social security, else {}.
+    """
+    from finance_ai.tools.deduction_service import has_deduction_for_year  # noqa: PLC0415
+
+    if income_type != "salary":
+        return {}
+    with get_tool_session(db_session_factory) as session:
+        if has_deduction_for_year(session, user_id, "social_security", tax_year):
+            return {}
+    return {"next_step": ASK_SOCIAL_SECURITY}
 
 
 def _persist_income(  # pylint: disable=too-many-arguments,too-many-positional-arguments
