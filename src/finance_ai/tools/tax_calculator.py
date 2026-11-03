@@ -13,6 +13,7 @@ from finance_ai.tools.tax_constants import (
     DONATION_CAP_PERCENTAGE,
     EXPENSE_DEDUCTION_MAX,
     EXPENSE_DEDUCTION_RATE,
+    MAX_PERSONS_PER_ALLOWANCE,
     PERCENTAGE_CAPPED_DEDUCTIONS,
     TAX_BRACKETS,
 )
@@ -134,6 +135,29 @@ def calculate_total_tax_from_breakdown(
     return sum((result.tax_in_bracket for result in breakdown), Decimal("0"))
 
 
+def get_absolute_limit(deduction_type: str, claimed_amount: Decimal) -> Decimal:
+    """
+    Legal THB limit for a deduction type; per-person allowances scale with people.
+
+    Args:
+        deduction_type: Type of deduction.
+        claimed_amount: Amount claimed (returned for types without a THB limit).
+
+    Returns:
+        The THB limit to cap at.
+
+    Example:
+        >>> get_absolute_limit("parent_allowance", Decimal("150000"))
+        Decimal('120000')
+    """
+    if deduction_type not in DEDUCTION_LIMITS:
+        return claimed_amount
+    if deduction_type not in MAX_PERSONS_PER_ALLOWANCE:
+        return DEDUCTION_LIMITS[deduction_type]
+    max_persons = MAX_PERSONS_PER_ALLOWANCE[deduction_type]
+    return claimed_amount if max_persons is None else DEDUCTION_LIMITS[deduction_type] * max_persons
+
+
 def cap_deduction_amount(
     deduction_type: str,
     claimed_amount: Decimal,
@@ -154,8 +178,7 @@ def cap_deduction_amount(
         >>> cap_deduction_amount("rmf", Decimal("600000"), Decimal("1000000"))
         Decimal('300000')
     """
-    absolute_limit = DEDUCTION_LIMITS.get(deduction_type, claimed_amount)
-    capped = min(claimed_amount, absolute_limit)
+    capped = min(claimed_amount, get_absolute_limit(deduction_type, claimed_amount))
     if deduction_type in PERCENTAGE_CAPPED_DEDUCTIONS:
         percentage_limit = gross_income * PERCENTAGE_CAPPED_DEDUCTIONS[deduction_type]
         capped = min(capped, percentage_limit)

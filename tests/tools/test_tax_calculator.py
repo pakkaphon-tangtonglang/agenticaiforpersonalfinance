@@ -188,6 +188,26 @@ class TestDeductionCaps:
         result = cap_deduction_amount("provident_fund", Decimal("500000"), Decimal("1000000"))
         assert result == Decimal("150000")
 
+    def test_parent_allowance_is_per_person(self) -> None:
+        """Two parents claim 60,000, not a single 30,000."""
+        result = cap_deduction_amount("parent_allowance", Decimal("60000"), Decimal("450000"))
+        assert result == Decimal("60000")
+
+    def test_parent_allowance_capped_at_four_people(self) -> None:
+        """More than 4 parents is capped at 120,000."""
+        result = cap_deduction_amount("parent_allowance", Decimal("150000"), Decimal("900000"))
+        assert result == Decimal("120000")
+
+    def test_child_allowance_has_no_people_limit(self) -> None:
+        """Three children (one born 2018+ at 60,000) claim 120,000."""
+        result = cap_deduction_amount("child_allowance", Decimal("120000"), Decimal("900000"))
+        assert result == Decimal("120000")
+
+    def test_social_security_capped_at_10500(self) -> None:
+        """Social security above 10,500 is capped."""
+        result = cap_deduction_amount("social_security", Decimal("12000"), Decimal("600000"))
+        assert result == Decimal("10500")
+
     def test_unknown_deduction_type_passthrough(self) -> None:
         """Test that unknown deduction types pass through uncapped."""
         result = cap_deduction_amount("other", Decimal("50000"), Decimal("1000000"))
