@@ -10,7 +10,7 @@ from typing import Iterator
 from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
-from pandas import DataFrame
+from pandas import DataFrame, Timestamp
 
 from finance_ai.tools.price_client import (
     _PRICE_CACHE,
@@ -261,3 +261,43 @@ class TestFetchCurrency:
         mock_ticker_cls.side_effect = RuntimeError("boom")
 
         assert fetch_currency("AAPL") is None
+
+
+class TestFetchCloseOn:
+    """fetch_close_on: the closing price on a past day (last trading day on or before it)."""
+
+    def test_weekend_uses_friday_close(self) -> None:
+        """Asking for Sunday returns Friday's close (the last row on or before that day)."""
+        from datetime import date
+
+        from finance_ai.tools.price_client import fetch_close_on
+
+        ticker = MagicMock()
+        ticker.history.return_value = DataFrame(
+            {"Close": [33.1, 33.4]},
+            index=[Timestamp("2026-10-01"), Timestamp("2026-10-02")],
+        )
+        with patch(YFINANCE_TICKER_PATH, return_value=ticker):
+            assert fetch_close_on("USDTHB=X", date(2026, 10, 4)) == Decimal("33.4")
+        kwargs = ticker.history.call_args.kwargs
+        assert (kwargs["start"], kwargs["end"]) == ("2026-09-27", "2026-10-05")
+
+    def test_no_rows_is_none(self) -> None:
+        """No data for the day → None."""
+        from datetime import date
+
+        from finance_ai.tools.price_client import fetch_close_on
+
+        ticker = MagicMock()
+        ticker.history.return_value = DataFrame({"Close": []})
+        with patch(YFINANCE_TICKER_PATH, return_value=ticker):
+            assert fetch_close_on("USDTHB=X", date(2026, 10, 4)) is None
+
+    def test_failure_is_none(self) -> None:
+        """A yfinance error → None, never raises."""
+        from datetime import date
+
+        from finance_ai.tools.price_client import fetch_close_on
+
+        with patch(YFINANCE_TICKER_PATH, side_effect=RuntimeError("down")):
+            assert fetch_close_on("USDTHB=X", date(2026, 10, 4)) is None

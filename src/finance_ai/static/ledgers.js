@@ -1,14 +1,16 @@
-/* Personal Finance AI — dashboard goals and debts
-   Lists the user's financial goals and open debts, and lets the user add,
-   edit and delete them (the chat can do the same). Reuses app.js helpers via
-   window.FinanceApp.
+/* Personal Finance AI — dashboard goals, monthly entries and debts
+   Lists the user's financial goals, monthly recurring income/expenses and open
+   debts, and lets the user add, edit and delete them (the chat can do the
+   same). Reuses app.js helpers via window.FinanceApp; categories come from
+   history.js.
 */
 (function () {
   "use strict";
 
   const app = () => window.FinanceApp;
   const $ = (id) => document.getElementById(id);
-  const editing = { goal: "", debt: "" };
+  const editing = { goal: "", debt: "", recurring: "" };
+  let openDebts = [];
   let wired = false;
 
   // ─── Helpers ───
@@ -91,18 +93,55 @@
       : [emptyRow('ไม่มีหนี้ค้าง — กด "+ เพิ่มหนี้" หรือบอกในแชท เช่น "ติดหนี้เพื่อน 2,000"')]));
   }
 
+  // ─── Monthly entries ───
+  function recurringRow(item) {
+    const el = app().el;
+    const name = item.description || item.category_label;
+    const sign = item.transaction_type === "income" ? "+" : "−";
+    const debt = item.debt_creditor ? ` · หักหนี้ ${item.debt_creditor}` : "";
+    return el("li", { class: `goal-item recurring-item is-${item.transaction_type}` },
+      el("div", { class: "ledger-head" },
+        el("span", { class: "goal-name", title: name }, name),
+        el("span", { class: "ledger-amount" }, `${sign}${app().thb(item.amount)}`),
+        rowActions("recurring", item, name)),
+      el("p", { class: "ledger-sub" }, `${item.category_label} · ทุกวันที่ ${item.day_of_month}${debt}`));
+  }
+
+  function renderRecurring(items) {
+    $("recurringCount").textContent = String(items.length);
+    $("recurringList").replaceChildren(...(items.length
+      ? items.map(recurringRow)
+      : [emptyRow('ยังไม่มี — เช่น เงินเดือน ค่าเช่า ค่าผ่อน กด "+ เพิ่มรายการประจำ" หรือบอกในแชท')]));
+  }
+
+  function recurringType() {
+    return document.querySelector("input[name='recurringType']:checked").value;
+  }
+
+  function fillRecurringChoices(type, category, debtId) {
+    const labels = window.HistoryView.categories[type];
+    $("recurringCategory").replaceChildren(...Object.entries(labels).map(([key, label]) =>
+      new Option(label, key, false, key === category)));
+    $("recurringDebt").replaceChildren(new Option("ไม่ผูกกับหนี้", ""),
+      ...openDebts.map((d) => new Option(`${d.creditor} (เหลือ ${app().thb(d.remaining_balance)})`, d.debt_id, false, d.debt_id === debtId)));
+    $("recurringDebtField").hidden = type !== "expense" || !openDebts.length;
+  }
+
   async function load() {
     wireOnce();
     const params = { user_id: app().getUserId() };
     try {
-      const [goals, debts] = await Promise.all([
+      const [goals, debts, recurring] = await Promise.all([
         app().api("GET", "/goals", { params }),
         app().api("GET", "/debts", { params }),
+        app().api("GET", "/recurring", { params }),
       ]);
+      openDebts = debts.debts;
       renderGoals(goals);
       renderDebts(debts);
+      renderRecurring(recurring);
     } catch (e) {
-      app().toast("โหลดเป้าหมาย/หนี้สินไม่สำเร็จ", true);
+      app().toast("โหลดเป้าหมาย/รายการประจำ/หนี้สินไม่สำเร็จ", true);
     }
   }
 
@@ -159,6 +198,33 @@
       idOf: (debt) => debt.debt_id,
       path: "/debts",
     },
+    recurring: {
+      title: ["เพิ่มรายการประจำ", "แก้ไขรายการประจำ"],
+      fill(item) {
+        const type = item ? item.transaction_type : "expense";
+        document.querySelector(`input[name='recurringType'][value='${type}']`).checked = true;
+        fillRecurringChoices(type, item ? item.category : "", item ? item.debt_id : "");
+        $("recurringAmount").value = item ? item.amount : "";
+        $("recurringDay").value = String(item ? item.day_of_month : new Date().getDate());
+        $("recurringDescription").value = item ? item.description : "";
+      },
+      body() {
+        const type = recurringType();
+        return {
+          transaction_type: type, category: $("recurringCategory").value,
+          amount: $("recurringAmount").value, day_of_month: Number($("recurringDay").value),
+          description: $("recurringDescription").value.trim(),
+          debt_id: type === "expense" ? ($("recurringDebt").value || null) : null,
+        };
+      },
+      problem(body) {
+        if (!(Number(body.amount) > 0)) return "จำนวนเงินต้องมากกว่า 0";
+        return "";
+      },
+      idOf: (item) => item.entry_id,
+      path: "/recurring",
+      deleteWord: "หยุด",
+    },
   };
 
   function openForm(kind, item) {
@@ -168,7 +234,7 @@
     $(`${kind}ModalTitle`).textContent = form.title[item ? 1 : 0];
     $(`${kind}FormError`).hidden = true;
     $(`${kind}Modal`).hidden = false;
-    $(`${kind}Form`).querySelector("input").focus();
+    $(`${kind}Form`).querySelector("input:not([type=radio])").focus();
   }
 
   function closeForm(kind) {
@@ -188,21 +254,32 @@
     const problem = form.problem(body);
     if (problem) { showFormError(kind, problem); return; }
     const id = editing[kind];
+    let saved;
     try {
-      await app().api(id ? "PATCH" : "POST", id ? `${form.path}/${id}` : form.path,
+      saved = await app().api(id ? "PATCH" : "POST", id ? `${form.path}/${id}` : form.path,
         { json: { ...body, user_id: app().getUserId() } });
     } catch (e) {
       showFormError(kind, "บันทึกไม่สำเร็จ: " + e.message.replace(/^\d+:\s*/, ""));
       return;
     }
     closeForm(kind);
-    app().toast(id ? "แก้ไขแล้ว" : "เพิ่มแล้ว");
-    app().loadDashboard();
+    const posted = saved && saved.posted_now > 0 ? " และบันทึกของเดือนนี้แล้ว" : "";
+    app().toast((id ? "แก้ไขแล้ว" : "เพิ่มแล้ว") + posted);
+    refreshAfterChange(Boolean(posted));
+  }
+
+  // Only these cards reload (3 requests); the whole dashboard reloads only when a
+  // save recorded a transaction, so quick edits stay under the server's rate limit.
+  function refreshAfterChange(transactionsChanged) {
+    if (transactionsChanged) app().loadDashboard();
+    else load();
   }
 
   // ─── Delete ───
   async function remove(kind, item, name) {
-    if (!window.confirm(`ลบ "${name}" ใช่ไหม?`)) return;
+    const word = FORMS[kind].deleteWord || "ลบ";
+    const note = kind === "recurring" ? " (รายการที่บันทึกไปแล้วยังอยู่)" : "";
+    if (!window.confirm(`${word} "${name}" ใช่ไหม?${note}`)) return;
     try {
       await app().api("DELETE", `${FORMS[kind].path}/${FORMS[kind].idOf(item)}`,
         { params: { user_id: app().getUserId() } });
@@ -210,8 +287,8 @@
       app().toast("ลบไม่สำเร็จ", true);
       return;
     }
-    app().toast(`ลบ "${name}" แล้ว`);
-    app().loadDashboard();
+    app().toast(`${word} "${name}" แล้ว`);
+    refreshAfterChange(false);
   }
 
   // ─── Wiring ───
@@ -224,6 +301,8 @@
       $(`${kind}Form`).addEventListener("submit", (e) => saveForm(kind, e));
       $(`${kind}Modal`).addEventListener("keydown", (e) => { if (e.key === "Escape") closeForm(kind); });
     }
+    document.querySelectorAll("input[name='recurringType']").forEach((radio) =>
+      radio.addEventListener("change", () => fillRecurringChoices(recurringType(), "", "")));
   }
 
   window.LedgerCards = { load };

@@ -107,3 +107,48 @@ class TestGoalEndpoints:
         edit = client.patch(f"/goals/{goal_id}", json=_goal("someone-else"))
         delete = client.delete(f"/goals/{goal_id}", params={"user_id": "someone-else"})
         assert (edit.status_code, delete.status_code) == (404, 404)
+
+
+class TestRecurringEndpoints:
+    """Add, list, edit and stop monthly entries."""
+
+    def test_full_cycle(self, client_and_user: tuple[TestClient, str]) -> None:
+        """POST → PATCH → GET → DELETE."""
+        client, user_id = client_and_user
+        body = {
+            "user_id": user_id, "transaction_type": "expense", "category": "housing",
+            "amount": "6500", "day_of_month": 28, "description": "ค่าหอ",
+        }  # fmt: skip
+        created = client.post("/recurring", json=body)
+        assert created.status_code == 201
+        entry_id = created.json()["entry_id"]
+
+        edited = client.patch(f"/recurring/{entry_id}", json=body | {"amount": "7000"})
+        assert edited.json()["amount"] == "7000.00"
+        [listed] = client.get("/recurring", params={"user_id": user_id}).json()
+        assert listed["category_label"] == "ที่พักอาศัย"
+
+        stop = client.delete(f"/recurring/{entry_id}", params={"user_id": user_id})
+        assert stop.status_code == 204
+        assert client.get("/recurring", params={"user_id": user_id}).json() == []
+
+    def test_foreign_debt_is_404(self, client_and_user: tuple[TestClient, str]) -> None:
+        """Linking someone else's debt is refused."""
+        client, user_id = client_and_user
+        body = {
+            "user_id": user_id, "transaction_type": "expense", "category": "debt",
+            "amount": "100", "day_of_month": 1, "debt_id": "not-mine",
+        }  # fmt: skip
+        assert client.post("/recurring", json=body).status_code == 404
+
+    def test_other_user_is_404(self, client_and_user: tuple[TestClient, str]) -> None:
+        """Another user's id cannot edit or stop."""
+        client, user_id = client_and_user
+        body = {
+            "user_id": user_id, "transaction_type": "income", "category": "rental",
+            "amount": "8000", "day_of_month": 28,
+        }  # fmt: skip
+        entry_id = client.post("/recurring", json=body).json()["entry_id"]
+        edit = client.patch(f"/recurring/{entry_id}", json=body | {"user_id": "someone-else"})
+        stop = client.delete(f"/recurring/{entry_id}", params={"user_id": "someone-else"})
+        assert (edit.status_code, stop.status_code) == (404, 404)

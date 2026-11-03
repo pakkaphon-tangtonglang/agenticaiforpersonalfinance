@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from finance_ai.agents.portfolio_tools import add_portfolio_holding, get_portfolio_holdings
 from finance_ai.database.models.investment_holding import InvestmentHolding
+from finance_ai.database.crud.watched_asset_crud import WatchedAssetCRUD
 from finance_ai.database.models.user import User
 from finance_ai.tools.market_data_models import AssetSymbolMatch
 
@@ -122,10 +123,28 @@ class TestAddPortfolioHolding:
             "status": "added",
             "symbol": "PTT.BK",
             "total_cost": "3550.00",
-            "watchlist_hint": {"symbol": "PTT.BK", "name": "PTT.BK"},
+            "watchlist": {"symbol": "PTT.BK", "status": "added"},
         }
         holdings = _invoke(sample_user, db_session_factory)["holdings"]
         assert [h["symbol"] for h in holdings] == ["PTT.BK"]
+
+    def test_bought_stock_is_watched_without_asking_alert_time(
+        self,
+        sample_user: User,
+        db_session_factory: Callable[[], Session],
+        test_session: Session,
+    ) -> None:
+        """Bought stock is watched with no follow-up question; buying again keeps one row."""
+        first = _add(
+            sample_user, db_session_factory, symbol="ptt", quantity="1", price_per_unit="35"
+        )
+        again = _add(
+            sample_user, db_session_factory, symbol="ptt", quantity="1", price_per_unit="36"
+        )
+        watched = WatchedAssetCRUD().get_by_user(test_session, sample_user.id)
+        assert [asset.symbol for asset in watched] == ["PTT.BK"]
+        assert "next_step" not in first and "next_step" not in again
+        assert again["watchlist"]["status"] == "already_exists"
 
     def test_adds_mutual_fund(
         self, sample_user: User, db_session_factory: Callable[[], Session]
@@ -141,7 +160,7 @@ class TestAddPortfolioHolding:
         )
         assert result["symbol"] == "K-USA-A(A)"
         assert "tax_deduction_hint" not in result
-        assert "watchlist_hint" not in result
+        assert "watchlist" not in result
 
     def test_rmf_purchase_hints_tax_deduction(
         self, sample_user: User, db_session_factory: Callable[[], Session]
@@ -173,9 +192,25 @@ class TestAddPortfolioHolding:
         assert result["status"] == "added"
         assert result["total_cost"] == "14000.00"
         assert (result["currency"], result["price_in_currency"]) == ("USD", "200.00")
-        assert result["watchlist_hint"]["symbol"] == "AAPL"
+        assert result["watchlist"]["symbol"] == "AAPL"
         holdings = _invoke(sample_user, db_session_factory)["holdings"]
         assert holdings[0]["asset_type"] == "หุ้นต่างประเทศ"
+
+    def test_past_foreign_purchase_uses_that_days_rate(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Bought on 1 Oct at 33 THB/USD (today's rate 35): cost uses 33."""
+        foreign = "finance_ai.tools.foreign_stock_service"
+        with (
+            patch(f"{foreign}.fetch_currency", return_value="USD"),
+            patch(f"{foreign}.fetch_current_price", return_value=Decimal("35")),
+            patch(f"{foreign}.fetch_close_on", return_value=Decimal("33")),
+        ):
+            result = _add(
+                sample_user, db_session_factory, symbol="AAPL", quantity="1",
+                price_per_unit="100", purchase_date="2026-10-01",
+            )  # fmt: skip
+        assert (result["total_cost"], result["rate_date"]) == ("3300.00", "2026-10-01")
 
     def test_foreign_stock_without_rate(
         self, sample_user: User, db_session_factory: Callable[[], Session]

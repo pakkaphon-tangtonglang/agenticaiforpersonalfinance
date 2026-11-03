@@ -95,6 +95,7 @@ class HoldingEntry(BaseModel):
     currency: str = "THB"
     price_in_currency: str | None = None
     exchange_rate: str | None = None
+    rate_date: str | None = None
 
 
 def add_holding_from_form(session: Session, user_id: str, form: HoldingForm) -> HoldingEntry:
@@ -120,7 +121,7 @@ def add_holding_from_form(session: Session, user_id: str, form: HoldingForm) -> 
     latest = latest_unit_price(asset_type, symbol)
     used_latest = not (form.price_per_unit or "").strip()
     price = _buy_price(form.price_per_unit, latest, symbol)
-    conversion = None if used_latest else _foreign_conversion(asset_type, symbol, price)
+    conversion = None if used_latest else _foreign_conversion(asset_type, symbol, price, bought_on)
     if conversion is not None:
         price = conversion.amount_thb
     holding = _save(session, user_id, asset_type, symbol, form.name, quantity, price, bought_on)
@@ -130,12 +131,14 @@ def add_holding_from_form(session: Session, user_id: str, form: HoldingForm) -> 
     return _with_conversion(entry, conversion)
 
 
-def _foreign_conversion(asset_type: str, symbol: str, typed_price: Decimal) -> ThbPrice | None:
-    """A foreign stock's typed price (USD...) in baht; None for Thai assets."""
+def _foreign_conversion(
+    asset_type: str, symbol: str, typed_price: Decimal, bought_on: date
+) -> ThbPrice | None:
+    """A foreign stock's typed price (USD...) in baht at the purchase day's rate."""
     if asset_type != FOREIGN_STOCK:
         return None
     try:
-        return price_in_thb(symbol, typed_price)
+        return price_in_thb(symbol, typed_price, bought_on)
     except ValueError as exc:
         raise HoldingEntryError(NO_EXCHANGE_RATE.format(symbol=symbol)) from exc
 
@@ -148,6 +151,7 @@ def _with_conversion(entry: HoldingEntry, conversion: ThbPrice | None) -> Holdin
             (conversion.amount_thb / conversion.exchange_rate).quantize(_PERCENT)
         )
         entry.exchange_rate = _plain(conversion.exchange_rate)
+        entry.rate_date = conversion.rate_date.isoformat() if conversion.rate_date else None
     return entry
 
 

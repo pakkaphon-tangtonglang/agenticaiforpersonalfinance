@@ -15,6 +15,7 @@ from finance_ai.agents.clarification import clarification, symbol_problem
 from finance_ai.agents.expense_tools import parse_date_value
 from finance_ai.agents.session_helper import get_tool_session
 from finance_ai.agents.tax_tools import parse_decimal_value
+from finance_ai.database.crud.watched_asset_crud import WatchedAssetCRUD
 from finance_ai.tools.deduction_service import detect_tax_saving_fund_type
 from finance_ai.tools.foreign_stock_service import (
     FOREIGN_STOCK,
@@ -119,7 +120,7 @@ def add_portfolio_holding(  # pylint: disable=too-many-arguments,too-many-positi
         symbol: สัญลักษณ์ เช่น "PTT", "PTT.BK", "K-USA-A(A)".
         quantity: จำนวนหน่วย/หุ้น เช่น "100" หรือ "1,000".
         price_per_unit: ราคาซื้อต่อหน่วย เช่น "35.50" (บาท; หุ้นต่างประเทศใช้สกุลเงินของหุ้น
-            เช่น USD แล้วระบบแปลงเป็นบาทตามอัตราวันนี้).
+            เช่น USD แล้วระบบแปลงเป็นบาทตามอัตราแลกเปลี่ยนของวันที่ซื้อ ดู rate_date).
         purchase_date: วันที่ซื้อ YYYY-MM-DD หรือ DD/MM/YYYY (พ.ศ. ได้) ค่าเริ่มต้น = วันนี้.
         asset_type: "stock" หรือ "mutual_fund".
         name: ชื่อที่แสดง เช่น "PTT".
@@ -155,6 +156,7 @@ def add_portfolio_holding(  # pylint: disable=too-many-arguments,too-many-positi
                 **_saved_holding(holding.symbol, holding.total_cost),
                 **conversion,
                 **_follow_up_after_add(normalized_type, holding_symbol, name, holding.total_cost),
+                **_watch_bought_stock(session, user_id, normalized_type, holding_symbol, name),
             }
     except ValueError as exc:
         return clarification(str(exc), ASK_POSITIVE_VALUES)
@@ -163,25 +165,42 @@ def add_portfolio_holding(  # pylint: disable=too-many-arguments,too-many-positi
 def _follow_up_after_add(
     asset_type: str, symbol: str, name: str, total_cost: Decimal
 ) -> dict[str, Any]:
-    """Related step after a purchase: record an RMF/SSF/ThaiESG deduction, or watch a stock's news.
+    """Related step after a fund purchase: the RMF/SSF/ThaiESG deduction to record.
 
     Args:
-        asset_type: "stock" or "mutual_fund".
+        asset_type: "stock", "foreign_stock" or "mutual_fund".
         symbol: Canonical holding symbol.
         name: Display name the agent passed (fund names reveal RMF/SSF/ThaiESG).
         total_cost: Purchase cost in THB.
 
     Returns:
-        {"tax_deduction_hint": {...}} for an RMF/SSF/ThaiESG, {"watchlist_hint": {...}}
-        for a stock, else {}.
+        {"tax_deduction_hint": {...}} for an RMF/SSF/ThaiESG, else {}.
     """
     if asset_type in ("stock", FOREIGN_STOCK):
-        return {"watchlist_hint": {"symbol": symbol, "name": name or symbol}}
+        return {}
     fund_type = detect_tax_saving_fund_type(symbol, name)
     if fund_type is None:
         return {}
     amount = _money(total_cost)
     return {"tax_deduction_hint": {"deduction_type": fund_type, "amount": amount}}
+
+
+def _watch_bought_stock(
+    session: Any, user_id: str, asset_type: str, symbol: str, name: str
+) -> dict[str, Any]:
+    """Put a bought stock on the watchlist for its news (no alert time is asked).
+
+    Returns:
+        {"watchlist": {"symbol", "status": "added" | "already_exists"}} for stocks, else {}.
+    """
+    if asset_type not in ("stock", FOREIGN_STOCK):
+        return {}
+    record = WatchedAssetCRUD().add(
+        session, user_id, symbol, clean_listing_name(symbol, name or symbol)
+    )
+    session.commit()
+    status = "already_exists" if record is None else "added"
+    return {"watchlist": {"symbol": symbol, "status": status}}
 
 
 def _fund_identity(symbol: str) -> tuple[str, str, dict[str, Any] | None]:
@@ -220,11 +239,11 @@ def _holding_identity(symbol: str, asset_type: str) -> tuple[str, str, dict[str,
 
 
 def _convert_foreign_price(asset_type: str, symbol: str, values: dict[str, Any]) -> dict[str, Any]:
-    """Turn a foreign stock's price (USD...) into baht in values; report the rate used."""
+    """Turn a foreign stock's price (USD...) into baht at the purchase day's rate."""
     if asset_type != FOREIGN_STOCK:
         return {}
     try:
-        converted = price_in_thb(symbol, values["price"])
+        converted = price_in_thb(symbol, values["price"], values["bought_on"])
     except ValueError as exc:
         return {"error": str(exc)}
     values["price"] = converted.amount_thb
@@ -232,6 +251,7 @@ def _convert_foreign_price(asset_type: str, symbol: str, values: dict[str, Any])
         "currency": converted.currency,
         "price_in_currency": str((values["price"] / converted.exchange_rate).quantize(_CENTS)),
         "exchange_rate": str(converted.exchange_rate),
+        "rate_date": converted.rate_date.isoformat() if converted.rate_date else None,
     }
 
 

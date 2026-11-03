@@ -680,6 +680,8 @@ svg.i {
 .goal-item.is-done .goal-fill { background: var(--positive); }
 .debt-item .goal-fill { background: var(--positive); }
 .debt-item .ledger-amount { color: var(--exp); }
+.recurring-item.is-income .ledger-amount { color: var(--positive); }
+.recurring-item.is-expense .ledger-amount { color: var(--exp); }
 
 /* Tax */
 .tax-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-4); }

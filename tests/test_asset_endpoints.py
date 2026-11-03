@@ -972,3 +972,17 @@ class TestExchangeRateEndpoint:
         response = client.get("/assets/exchange-rate", params={"symbol": "PTT.BK"})
 
         assert response.status_code == 422
+
+
+def test_exchange_rate_for_past_day(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A purchase date in the past gets that day's closing rate."""
+    _stub_fx(monkeypatch, Decimal("35"))
+    monkeypatch.setattr(
+        "finance_ai.tools.foreign_stock_service.fetch_close_on", lambda symbol, day: Decimal("33")
+    )
+
+    body = client.get(
+        "/assets/exchange-rate", params={"symbol": "NVDA", "on_date": "2026-10-01"}
+    ).json()
+
+    assert (body["rate_to_thb"], body["rate_date"]) == ("33.0000", "2026-10-01")
