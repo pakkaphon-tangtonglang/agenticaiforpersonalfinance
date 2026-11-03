@@ -14,11 +14,15 @@ from xml.etree import ElementTree
 import httpx
 
 from finance_ai.core.logging import get_logger
+from finance_ai.tools.investment_constants import STOCK_SYMBOL_SUFFIX
 from finance_ai.tools.market_data_constants import (
+    CRYPTO_NEWS_NAMES,
+    CRYPTO_SYMBOL_SUFFIX,
     CURRENCY_CODE_LENGTH,
     NEWS_MAX_AGE_DAYS,
     NEWS_MAX_ARTICLES,
     NEWS_NOT_FOUND_MESSAGE,
+    NEWS_QUERY_BY_SYMBOL,
     NEWS_SOURCE_DOMAINS,
     NEWS_SOURCE_NAMES,
 )
@@ -306,6 +310,30 @@ def fetch_finance_news(symbol: str) -> FinanceNewsResult:
     return FinanceNewsResult(symbol=symbol, news_content=content, has_news=True, articles=articles)
 
 
+def build_news_query(symbol: str) -> str:
+    """News search words for a symbol: names for gold, oil, indexes and crypto.
+
+    Args:
+        symbol: Ticker symbol (e.g. "GC=F", "BTC-USD", "PTT.BK", "NVDA").
+
+    Returns:
+        Query text for Google News.
+
+    Example:
+        >>> build_news_query("GC=F")
+        'ราคาทองคำ'
+    """
+    upper = symbol.strip().upper()
+    if upper in NEWS_QUERY_BY_SYMBOL:
+        return NEWS_QUERY_BY_SYMBOL[upper]
+    if upper.endswith(CRYPTO_SYMBOL_SUFFIX):
+        coin = upper.removesuffix(CRYPTO_SYMBOL_SUFFIX)
+        return CRYPTO_NEWS_NAMES.get(coin, f"{coin} crypto")
+    if upper.endswith(STOCK_SYMBOL_SUFFIX):
+        return f"หุ้น {upper.removesuffix(STOCK_SYMBOL_SUFFIX)}"
+    return f"{upper} stock"
+
+
 def _fetch_news_rss(symbol: str) -> str:
     """Fetch the raw Google News RSS feed for a symbol.
 
@@ -318,7 +346,7 @@ def _fetch_news_rss(symbol: str) -> str:
     Raises:
         httpx.HTTPError: On network or HTTP failure.
     """
-    params = {"q": f"{symbol} stock", "hl": "th", "gl": "TH", "ceid": "TH:th"}
+    params = {"q": build_news_query(symbol), "hl": "th", "gl": "TH", "ceid": "TH:th"}
     with httpx.Client(timeout=_REQUEST_TIMEOUT) as client:
         response = client.get(_GOOGLE_NEWS_RSS_URL, params=params)
         response.raise_for_status()
