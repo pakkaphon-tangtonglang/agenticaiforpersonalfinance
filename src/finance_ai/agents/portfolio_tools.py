@@ -15,6 +15,7 @@ from finance_ai.agents.clarification import clarification, symbol_problem
 from finance_ai.agents.expense_tools import parse_date_value
 from finance_ai.agents.session_helper import get_tool_session
 from finance_ai.agents.tax_tools import parse_decimal_value
+from finance_ai.tools.deduction_service import detect_tax_saving_fund_type
 from finance_ai.tools.investment_calculator import HoldingSummary
 from finance_ai.tools.investment_service import add_investment_holding, get_portfolio_summary
 from finance_ai.tools.investment_calculator import validate_mutual_fund_symbol
@@ -136,9 +137,37 @@ def add_portfolio_holding(  # pylint: disable=too-many-arguments,too-many-positi
                 session, user_id, normalized_type, holding_symbol, name or holding_symbol,
                 values["quantity"], values["price"], values["bought_on"],
             )  # fmt: skip
-            return {"status": "added", **_saved_holding(holding.symbol, holding.total_cost)}
+            return {
+                "status": "added",
+                **_saved_holding(holding.symbol, holding.total_cost),
+                **_follow_up_after_add(normalized_type, holding_symbol, name, holding.total_cost),
+            }
     except ValueError as exc:
         return clarification(str(exc), ASK_POSITIVE_VALUES)
+
+
+def _follow_up_after_add(
+    asset_type: str, symbol: str, name: str, total_cost: Decimal
+) -> dict[str, Any]:
+    """Related step after a purchase: record an RMF/SSF deduction, or watch a stock's news.
+
+    Args:
+        asset_type: "stock" or "mutual_fund".
+        symbol: Canonical holding symbol.
+        name: Display name the agent passed (fund names reveal RMF/SSF).
+        total_cost: Purchase cost in THB.
+
+    Returns:
+        {"tax_deduction_hint": {...}} for an RMF/SSF, {"watchlist_hint": {...}}
+        for a stock, else {}.
+    """
+    if asset_type == "stock":
+        return {"watchlist_hint": {"symbol": symbol, "name": name or symbol}}
+    fund_type = detect_tax_saving_fund_type(symbol, name)
+    if fund_type is None:
+        return {}
+    amount = _money(total_cost)
+    return {"tax_deduction_hint": {"deduction_type": fund_type, "amount": amount}}
 
 
 def _holding_symbol(symbol: str, asset_type: str) -> tuple[str, dict[str, Any] | None]:

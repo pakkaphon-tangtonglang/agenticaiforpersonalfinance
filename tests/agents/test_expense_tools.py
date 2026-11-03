@@ -9,7 +9,9 @@ import pytest
 from sqlalchemy.orm import Session
 
 from finance_ai.agents.expense_tools import (
+    ASK_SOCIAL_SECURITY,
     add_expense,
+    add_income,
     get_current_month_date_range,
     parse_date_value,
     query_expenses_by_category,
@@ -387,3 +389,54 @@ class TestQueryExpensesByCategory:
         )
         assert Decimal(result["total_amount"]) == Decimal("350")
         assert result["transaction_count"] == 2
+
+
+class TestAddIncomeSocialSecurityFollowUp:
+    """add_income asks about social security after a salary."""
+
+    @staticmethod
+    def _income(user: User, factory: Callable[[], Session], income_type: str) -> dict[str, object]:
+        result: dict[str, object] = add_income.invoke(
+            {
+                "amount": "50000",
+                "income_type": income_type,
+                "tax_year": "2026",
+                "user_id": user.id,
+                "db_session_factory": factory,
+            }
+        )
+        return result
+
+    def test_salary_asks_employee_or_freelance(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """First salary of the year asks before recording social security."""
+        result = self._income(sample_user, db_session_factory, "salary")
+        assert result["status"] == "recorded"
+        assert result["next_step"] == ASK_SOCIAL_SECURITY
+
+    def test_freelance_does_not_ask(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Freelance income has no social security question."""
+        result = self._income(sample_user, db_session_factory, "freelance")
+        assert "next_step" not in result
+
+    def test_no_question_once_recorded(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """After social security is saved for the year, salaries do not ask again."""
+        from finance_ai.agents.tax_deduction_tools import (  # noqa: PLC0415
+            record_social_security_cross,
+        )
+
+        record_social_security_cross.invoke(
+            {
+                "monthly_salary": "50000",
+                "tax_year": "2026",
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
+            }
+        )
+        result = self._income(sample_user, db_session_factory, "salary")
+        assert "next_step" not in result

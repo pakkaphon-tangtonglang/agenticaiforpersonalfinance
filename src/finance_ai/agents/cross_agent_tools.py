@@ -13,6 +13,12 @@ from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
 from finance_ai.agents.session_helper import get_tool_session
+from finance_ai.agents.tax_deduction_tools import (
+    calculate_tax_from_records,
+    record_social_security_cross,
+    record_tax_deduction_cross,
+    undo_tax_deduction_cross,
+)
 
 
 @tool
@@ -216,13 +222,24 @@ def _find_best_goal_match(goals: list[Any], search_term: str) -> Any:
 
 
 # Pre-grouped tool lists for each agent
-TAX_CROSS_TOOLS = [get_expense_summary_cross]
+TAX_CROSS_TOOLS = [
+    get_expense_summary_cross,
+    calculate_tax_from_records,
+    record_tax_deduction_cross,
+    undo_tax_deduction_cross,
+]
 
 PLANNING_CROSS_TOOLS = [
     get_expense_summary_cross,
     get_income_summary_cross,
 ]
 
-EXPENSE_CROSS_TOOLS = [get_goals_summary_cross, update_savings_goal_cross]
+EXPENSE_CROSS_TOOLS = [
+    get_goals_summary_cross,
+    update_savings_goal_cross,
+    record_tax_deduction_cross,
+    record_social_security_cross,
+    undo_tax_deduction_cross,
+]
 
-ASSET_MONITORING_CROSS_TOOLS: list[Any] = []
+ASSET_MONITORING_CROSS_TOOLS: list[Any] = [record_tax_deduction_cross, undo_tax_deduction_cross]
