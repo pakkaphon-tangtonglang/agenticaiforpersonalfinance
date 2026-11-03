@@ -1,6 +1,8 @@
 """Tests for LangGraph planning tool wrappers."""
 
 from collections.abc import Callable
+from decimal import Decimal
+
 import pytest
 from sqlalchemy.orm import Session
 
@@ -106,6 +108,32 @@ class TestViewFinancialGoals:
 class TestUpdateGoalProgress:
     """Tests for the update_goal_progress LangGraph tool."""
 
+    def test_added_amount_adds_to_saved_amount(
+        self,
+        sample_user: User,
+        db_session_factory: Callable[[], Session],
+    ) -> None:
+        """A deposit adds to what is already saved instead of replacing it."""
+        created = create_financial_goal.invoke(
+            {
+                "goal_type": "savings",
+                "name": "TestDeposit",
+                "target_amount": "100000",
+                "current_amount": "40000",
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
+            },
+        )
+        result = update_goal_progress.invoke(
+            {
+                "goal_id": created["goal_id"],
+                "added_amount": "10000",
+                "user_id": sample_user.id,
+                "db_session_factory": db_session_factory,
+            },
+        )
+        assert result["current_amount"] == "50000.00"
+
     def test_updates_amount(
         self,
         sample_user: User,
@@ -130,7 +158,7 @@ class TestUpdateGoalProgress:
             },
         )
         assert result["status"] == "updated"
-        assert result["current_amount"] == "50000"
+        assert Decimal(result["current_amount"]) == Decimal("50000")
 
     def test_auto_completes(
         self,

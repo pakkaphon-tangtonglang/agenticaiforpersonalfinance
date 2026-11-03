@@ -192,56 +192,66 @@ def _fetch_goals_summary(
 @tool
 def update_goal_progress(
     goal_id: str,
-    current_amount: str,
+    current_amount: str = "",
+    added_amount: str = "",
     user_id: Annotated[str, InjectedState("user_id")] = "",
     db_session_factory: Annotated[Any, InjectedState("db_session_factory")] = None,
 ) -> dict[str, Any]:
-    """Update the current saved amount for a financial goal.
+    """Update the saved amount of a financial goal.
 
-    Use this tool when the user reports saving progress toward a goal.
+    Give exactly one amount:
+    - current_amount: the NEW TOTAL saved, when the user states what they have now
+      (e.g. "ตอนนี้เก็บได้ 50,000 แล้ว").
+    - added_amount: a DEPOSIT added on top of what is saved, when the user saves more
+      (e.g. "เพิ่มอีก 10,000", "ฝากเพิ่ม 5,000"). Never pass a deposit as current_amount.
 
     Args:
         goal_id: UUID of the goal to update.
-        current_amount: New current amount in THB (e.g., "50000").
+        current_amount: New total saved in THB (e.g., "50000"), or "".
+        added_amount: Amount deposited in THB (e.g., "10000"), or "".
         user_id: UUID of the user (injected from graph state).
         db_session_factory: Session factory (injected from graph state).
 
     Returns:
-        Dict confirming the updated goal.
+        Dict confirming the goal's new saved amount.
     """
-    parsed_amount = parse_decimal_value(current_amount, "current_amount")
+    from finance_ai.tools.planning_service import resolve_goal_amount  # noqa: PLC0415
 
-    goal = _update_goal(db_session_factory, goal_id, parsed_amount)
-
+    mode, amount = resolve_goal_amount(current_amount, added_amount)
+    goal = _update_goal(db_session_factory, goal_id, amount, mode)
     return {
         "status": "updated",
         "goal_id": goal_id,
-        "current_amount": str(parsed_amount),
-        "is_completed": goal.is_completed if goal else False,
+        "current_amount": str(goal.current_amount),
+        "is_completed": goal.is_completed,
     }
 
 
 def _update_goal(
     db_session_factory: Any,
     goal_id: str,
-    new_amount: Any,
+    amount: Decimal,
+    mode: str,
 ) -> Any:
-    """Update goal progress in database.
+    """Set or add to a goal's saved amount in the database.
 
     Args:
         db_session_factory: Session factory or None.
         goal_id: UUID of the goal.
-        new_amount: New current amount (Decimal).
+        amount: New total ("set") or deposit ("add").
+        mode: "set" or "add".
 
     Returns:
         Updated FinancialGoal instance.
     """
     from finance_ai.tools.planning_service import (  # noqa: PLC0415
+        add_to_goal_progress,
         update_goal_progress as service_update,
     )
 
+    service = add_to_goal_progress if mode == "add" else service_update
     with get_tool_session(db_session_factory) as session:
-        return service_update(session, goal_id, new_amount)
+        return service(session, goal_id, amount)
 
 
 def _add_inflation_adjusted_plan(

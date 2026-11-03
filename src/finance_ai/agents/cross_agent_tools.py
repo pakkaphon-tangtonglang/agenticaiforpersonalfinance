@@ -123,55 +123,76 @@ def get_income_summary_cross(
 @tool
 def update_savings_goal_cross(
     search_term: str,
-    current_amount: str,
+    current_amount: str = "",
+    added_amount: str = "",
     user_id: Annotated[str, InjectedState("user_id")] = "",
     db_session_factory: Annotated[Any, InjectedState("db_session_factory")] = None,
 ) -> dict[str, Any]:
-    """Update the current saved amount of the most relevant financial goal.
+    """Update the saved amount of the best-matching active financial goal.
 
-    Use this tool when the user reports having savings that match an
-    existing goal (e.g., "มีเงินออม 200,000 บาท" after creating a car goal).
-    Searches for the best-matching active goal by keyword, then updates
-    its current_amount.
+    Give exactly one amount:
+    - current_amount: the NEW TOTAL saved, when the user states what they have now
+      (e.g. "มีเงินออม 200,000 บาท" after creating a car goal).
+    - added_amount: a DEPOSIT added on top of what is saved, when the user saves more
+      (e.g. "เพิ่มเงินเข้ากองทุนฉุกเฉินอีก 10,000"). Never pass a deposit as current_amount.
 
     Args:
-        search_term: Keyword to find the goal (e.g., "รถ", "บ้าน", "ออม").
+        search_term: Keyword to find the goal (e.g., "รถ", "บ้าน", "ฉุกเฉิน").
                      Pass empty string to update the most recently created goal.
-        current_amount: New current saved amount in THB (e.g., "200000").
+        current_amount: New total saved in THB (e.g., "200000"), or "".
+        added_amount: Amount deposited in THB (e.g., "10000"), or "".
         user_id: UUID of the user (injected from graph state).
         db_session_factory: Session factory (injected from graph state).
 
     Returns:
-        Dict with updated goal info or not_found status.
+        Dict with the updated goal, or an error / no_goals status.
     """
-    from decimal import Decimal  # noqa: PLC0415
-
     from finance_ai.tools.planning_service import (  # noqa: PLC0415
         get_active_goals,
-        update_goal_progress,
+        resolve_goal_amount,
     )
 
     try:
-        parsed_amount = Decimal(current_amount.replace(",", ""))
-    except Exception:  # noqa: BLE001
-        return {"status": "error", "message": f"Invalid amount: {current_amount}"}
-
+        mode, amount = resolve_goal_amount(current_amount, added_amount)
+    except ValueError as error:
+        return {"status": "error", "message": str(error)}
     with get_tool_session(db_session_factory) as session:
         goals = get_active_goals(session, user_id)
         if not goals:
             return {"status": "no_goals", "message": "ไม่พบเป้าหมายที่ยังไม่เสร็จ"}
-
-        match = _find_best_goal_match(goals, search_term)
-        updated = update_goal_progress(session, match.id, parsed_amount)
-
+        updated = _apply_goal_update(
+            session, _find_best_goal_match(goals, search_term), mode, amount
+        )
     return {
         "status": "updated",
+        "goal_id": str(updated.id),
         "goal_name": updated.name,
         "goal_type": updated.goal_type,
         "current_amount": str(updated.current_amount),
         "target_amount": str(updated.target_amount),
         "is_completed": updated.is_completed,
     }
+
+
+def _apply_goal_update(session: Any, goal: Any, mode: str, amount: Any) -> Any:
+    """Set a goal's saved total or add a deposit to it.
+
+    Args:
+        session: Database session.
+        goal: Goal to update.
+        mode: "set" or "add".
+        amount: New total or deposit (Decimal).
+
+    Returns:
+        Updated goal.
+    """
+    from finance_ai.tools.planning_service import (  # noqa: PLC0415
+        add_to_goal_progress,
+        update_goal_progress,
+    )
+
+    service = add_to_goal_progress if mode == "add" else update_goal_progress
+    return service(session, goal.id, amount)
 
 
 def _find_best_goal_match(goals: list[Any], search_term: str) -> Any:

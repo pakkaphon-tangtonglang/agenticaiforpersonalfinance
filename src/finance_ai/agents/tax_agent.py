@@ -10,10 +10,9 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import ToolNode
 
 from finance_ai.agents.cross_agent_tools import TAX_CROSS_TOOLS
-from finance_ai.agents.graph_utils import should_continue
+from finance_ai.agents.graph_utils import build_tool_node, should_continue
 from finance_ai.agents.prompts import TAX_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.rag_tool import search_finance_knowledge
 from finance_ai.agents.schemas import TaxAgentState
@@ -119,7 +118,7 @@ def build_tax_agent_graph(
 
     graph = StateGraph(TaxAgentState)
     graph.add_node("first_turn", _create_first_turn_node(chat_model))
-    graph.add_node("tools", ToolNode(TAX_TOOLS))
+    graph.add_node("tools", build_tool_node(TAX_TOOLS))
     graph.add_node("respond", _create_respond_node(chat_model))
     graph.set_entry_point("first_turn")
     graph.add_edge("first_turn", "tools")

@@ -10,10 +10,9 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import ToolNode
 
 from finance_ai.agents.cross_agent_tools import PLANNING_CROSS_TOOLS
-from finance_ai.agents.graph_utils import should_continue
+from finance_ai.agents.graph_utils import build_tool_node, should_continue
 from finance_ai.agents.planning_tools import (
     calculate_saving_plan,
     create_financial_goal,
@@ -103,7 +102,7 @@ def build_planning_agent_graph(
 
     graph = StateGraph(PlanningAgentState)
     graph.add_node("agent", create_llm_node(chat_model))
-    graph.add_node("tools", ToolNode(PLANNING_TOOLS))
+    graph.add_node("tools", build_tool_node(PLANNING_TOOLS))
     graph.set_entry_point("agent")
     graph.add_conditional_edges(
         "agent",

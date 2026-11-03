@@ -16,10 +16,12 @@ from finance_ai.agents.cross_agent_tools import (
     get_expense_summary_cross,
     get_goals_summary_cross,
     get_income_summary_cross,
+    update_savings_goal_cross,
 )
 from finance_ai.database.crud.income_crud import IncomeCRUD
 from finance_ai.database.crud.transaction_crud import TransactionCRUD
 from finance_ai.database.models.user import User
+from finance_ai.tools.planning_service import create_goal, update_goal_progress
 
 
 class TestToolLists:
@@ -180,3 +182,56 @@ class TestGetIncomeSummaryCross:
         )
         assert result["total_income"] == "60000.00"
         assert result["source_count"] == 1
+
+
+class TestUpdateSavingsGoalCross:
+    """Tests for update_savings_goal_cross (set a total or add a deposit)."""
+
+    @pytest.fixture(name="goal_id")
+    def fixture_goal_id(self, test_session: Session, sample_user: User) -> str:
+        """Create an emergency-fund goal with 96,000 already saved."""
+        goal = create_goal(
+            test_session, sample_user.id, "emergency_fund", "กองทุนสำรองฉุกเฉิน", Decimal("180000")
+        )
+        update_goal_progress(test_session, goal.id, Decimal("96000"))
+        test_session.commit()
+        return str(goal.id)
+
+    def _invoke(self, user: User, factory: Callable[[], Session], **amounts: str) -> Any:
+        """Call the tool for the emergency fund with the given amount fields."""
+        payload: dict[str, Any] = {
+            "search_term": "ฉุกเฉิน",
+            "user_id": user.id,
+            "db_session_factory": factory,
+        }
+        payload.update(amounts)
+        return update_savings_goal_cross.invoke(payload)
+
+    def test_deposit_adds_to_saved_amount(
+        self, goal_id: str, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """ "เพิ่มเงิน 10,000" keeps the 96,000 already saved."""
+        result = self._invoke(sample_user, db_session_factory, added_amount="10000")
+        assert result["status"] == "updated" and result["goal_id"] == goal_id
+        assert Decimal(result["current_amount"]) == Decimal("106000")
+
+    def test_total_sets_saved_amount(
+        self, goal_id: str, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """ "มีเงินออม 120,000" sets the total."""
+        result = self._invoke(sample_user, db_session_factory, current_amount="120,000")
+        assert result["goal_id"] == goal_id
+        assert Decimal(result["current_amount"]) == Decimal("120000")
+
+    def test_neither_amount_is_an_error(
+        self, goal_id: str, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Without an amount the tool reports an error instead of guessing."""
+        assert goal_id
+        result = self._invoke(sample_user, db_session_factory)
+        assert result["status"] == "error" and "exactly one" in result["message"]
+
+    def test_no_goals(self, sample_user: User, db_session_factory: Callable[[], Session]) -> None:
+        """A user without goals gets no_goals."""
+        result = self._invoke(sample_user, db_session_factory, added_amount="10000")
+        assert result["status"] == "no_goals"

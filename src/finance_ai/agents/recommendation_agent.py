@@ -11,9 +11,8 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import ToolNode
 
-from finance_ai.agents.graph_utils import should_continue
+from finance_ai.agents.graph_utils import build_tool_node, should_continue
 from finance_ai.agents.market_data_tools import search_finance_news
 from finance_ai.agents.prompts import RECOMMENDATION_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.psychology_tools import detect_psychological_cues
@@ -210,7 +209,7 @@ def build_recommendation_agent_graph(
 
     graph = StateGraph(RecommendationAgentState)
     graph.add_node("agent", create_llm_node(chat_model))
-    graph.add_node("tools", ToolNode(RECOMMENDATION_AGENT_TOOLS))
+    graph.add_node("tools", build_tool_node(RECOMMENDATION_AGENT_TOOLS))
     graph.add_node("guardrail", create_guardrail_node())
     graph.set_entry_point("agent")
     graph.add_conditional_edges(

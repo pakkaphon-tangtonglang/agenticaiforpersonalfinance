@@ -11,7 +11,6 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import ToolNode
 
 from finance_ai.agents.cross_agent_tools import (
     get_expense_summary_cross,
@@ -19,7 +18,7 @@ from finance_ai.agents.cross_agent_tools import (
     get_income_summary_cross,
     update_savings_goal_cross,
 )
-from finance_ai.agents.graph_utils import should_continue
+from finance_ai.agents.graph_utils import build_tool_node, should_continue
 from finance_ai.agents.guru_personas import get_guru_persona
 from finance_ai.agents.guru_rag_tool import search_guru_knowledge
 from finance_ai.agents.guru_scorecard_tool import get_guru_scorecard
@@ -101,7 +100,7 @@ def create_guarded_tools_node() -> Any:
     Example:
         >>> node = create_guarded_tools_node()
     """
-    tool_node = ToolNode(GURU_TOOLS)
+    tool_node = build_tool_node(GURU_TOOLS)
 
     def tools_node(state: GuruAgentState) -> Any:
         """Run tools, or return confirmation errors for blocked writes."""
