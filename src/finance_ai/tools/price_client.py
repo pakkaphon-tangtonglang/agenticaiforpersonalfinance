@@ -13,6 +13,7 @@ returns None so callers (scheduler, services) can degrade gracefully.
 """
 
 import time
+from datetime import date, timedelta
 from decimal import Decimal
 from typing import Optional
 
@@ -137,6 +138,38 @@ def _fetch_price_history_close(symbol: str) -> Optional[Decimal]:
     except Exception as exc:  # noqa: BLE001
         logger.warning("yfinance history fetch failed for %s: %s", symbol, exc)
         return None
+
+
+HISTORY_LOOKBACK_DAYS = 7  # covers weekends and long holidays
+
+
+def fetch_close_on(symbol: str, day: date) -> Optional[Decimal]:
+    """Closing price on a past day, or the last trading day before it (weekends).
+
+    Args:
+        symbol: Ticker symbol (e.g. "USDTHB=X").
+        day: The day wanted.
+
+    Returns:
+        Close as Decimal, or None when Yahoo has no data or fails.
+
+    Example:
+        >>> fetch_close_on("USDTHB=X", date(2026, 10, 4))  # a Sunday → Friday's close
+        Decimal('33.4')
+    """
+    start = (day - timedelta(days=HISTORY_LOOKBACK_DAYS)).isoformat()
+    end = (day + timedelta(days=1)).isoformat()  # yfinance's end is exclusive
+    try:
+        import yfinance as yf  # noqa: PLC0415
+
+        history = yf.Ticker(symbol).history(start=start, end=end)
+        closes = history["Close"].dropna() if "Close" in history else None
+    except Exception as exc:  # noqa: BLE001  # pylint: disable=broad-exception-caught
+        logger.warning("yfinance history on %s failed for %s: %s", day, symbol, exc)
+        return None
+    if closes is None or closes.empty:
+        return None
+    return Decimal(str(closes.iloc[-1]))
 
 
 def fetch_multiple_prices(

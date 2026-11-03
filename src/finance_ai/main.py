@@ -103,6 +103,15 @@ from finance_ai.tools.holding_entry_service import (
     HoldingForm,
     add_holding_from_form,
 )
+from finance_ai.tools.recurring_editor_service import (
+    RecurringInput,
+    RecurringItem,
+    RecurringNotFoundError,
+    create_recurring_item,
+    delete_recurring_item,
+    list_recurring_items,
+    update_recurring_item,
+)
 from finance_ai.tools.investment_service import get_portfolio_summary, refresh_portfolio_prices
 from finance_ai.tools.receipt_ocr import (
     SUPPORTED_MIME_TYPES,
@@ -476,6 +485,7 @@ class ExchangeRateOut(BaseModel):
     currency: str = Field(..., description="Trading currency (e.g. 'USD')")
     rate_to_thb: str = Field(..., description="Baht per one unit of the currency")
     fetched_at: datetime = Field(..., description="When the rate was read (UTC)")
+    rate_date: date | None = Field(default=None, description="Day the rate is for")
 
 
 class HoldingAddRequest(HoldingForm):
@@ -1650,6 +1660,55 @@ def remove_goal(goal_id: str, user_id: str, session: Session = Depends(get_sessi
     return Response(status_code=204)
 
 
+_RECURRING_NOT_FOUND = "ไม่พบรายการประจำนี้ (หรือหนี้ที่เลือก)"
+
+
+class RecurringRequest(RecurringInput):
+    """A monthly entry from the dashboard form plus its owner."""
+
+    user_id: str = Field(..., description="User UUID")
+
+
+@app.get("/recurring", response_model=list[RecurringItem])
+def get_recurring(user_id: str, session: Session = Depends(get_session)) -> list[RecurringItem]:
+    """Active monthly income and expenses for the dashboard card."""
+    return list_recurring_items(session, user_id)
+
+
+@app.post("/recurring", response_model=RecurringItem, status_code=201)
+def add_recurring(req: RecurringRequest, session: Session = Depends(get_session)) -> RecurringItem:
+    """Add a monthly entry; this month is recorded at once when its day has passed."""
+    data = RecurringInput(**req.model_dump(exclude={"user_id"}))
+    try:
+        return create_recurring_item(session, req.user_id, data, bangkok_today())
+    except RecurringNotFoundError as error:
+        raise HTTPException(status_code=404, detail=_RECURRING_NOT_FOUND) from error
+
+
+@app.patch("/recurring/{entry_id}", response_model=RecurringItem)
+def edit_recurring(
+    entry_id: str, req: RecurringRequest, session: Session = Depends(get_session)
+) -> RecurringItem:
+    """Change a monthly entry from now on; 404 when it is not the user's."""
+    data = RecurringInput(**req.model_dump(exclude={"user_id"}))
+    try:
+        return update_recurring_item(session, req.user_id, entry_id, data)
+    except RecurringNotFoundError as error:
+        raise HTTPException(status_code=404, detail=_RECURRING_NOT_FOUND) from error
+
+
+@app.delete("/recurring/{entry_id}", status_code=204)
+def stop_recurring(
+    entry_id: str, user_id: str, session: Session = Depends(get_session)
+) -> Response:
+    """Stop a monthly entry (recorded months stay); 404 when it is not the user's."""
+    try:
+        delete_recurring_item(session, user_id, entry_id)
+    except RecurringNotFoundError as error:
+        raise HTTPException(status_code=404, detail=_RECURRING_NOT_FOUND) from error
+    return Response(status_code=204)
+
+
 # ──────────────────────── Dashboard ──────────────────────────────
 
 
@@ -1882,11 +1941,12 @@ def get_holdings(user_id: str, session: Session = Depends(get_session)) -> list[
 
 
 @app.get("/assets/exchange-rate", response_model=ExchangeRateOut)
-def get_exchange_rate(symbol: str) -> ExchangeRateOut:
-    """Live rate from a foreign stock's currency to baht, for the holding form preview.
+def get_exchange_rate(symbol: str, on_date: date | None = None) -> ExchangeRateOut:
+    """Rate from a foreign stock's currency to baht, for the holding form preview.
 
     Args:
         symbol: Foreign ticker (e.g. "NVDA").
+        on_date: Purchase day; a past day uses that day's close, else the live rate.
 
     Returns:
         Currency, baht per unit and the time it was read.
@@ -1900,14 +1960,14 @@ def get_exchange_rate(symbol: str) -> ExchangeRateOut:
             status_code=422, detail=f"{ticker} ไม่ใช่หุ้นต่างประเทศ ไม่ต้องแปลงสกุลเงิน"
         )
     try:
-        rate = exchange_rate_to_thb(ticker)
+        rate = exchange_rate_to_thb(ticker, on_date)
     except ValueError as error:
         raise HTTPException(
             status_code=503, detail="ยังดึงอัตราแลกเปลี่ยนไม่ได้ ลองใหม่อีกครั้ง"
         ) from error
     return ExchangeRateOut(
         symbol=ticker, currency=rate.currency, rate_to_thb=str(rate.exchange_rate),
-        fetched_at=datetime.now(timezone.utc),
+        fetched_at=datetime.now(timezone.utc), rate_date=rate.rate_date,
     )  # fmt: skip
 
 

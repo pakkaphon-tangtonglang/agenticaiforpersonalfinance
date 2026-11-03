@@ -1,5 +1,6 @@
 """Tests for foreign stocks held in a baht portfolio."""
 
+from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -120,3 +121,44 @@ class TestExchangeRateToThb:
 
         with pytest.raises(ValueError, match="exchange rate"):
             foreign_stock_service.exchange_rate_to_thb("NVDA")
+
+
+class TestRateOnPurchaseDay:
+    """A past purchase is converted at that day's rate, not today's."""
+
+    def test_past_date_uses_that_days_rate(self) -> None:
+        """Bought on 1 Oct at 33 THB/USD while today's rate is 35."""
+        with (
+            patch(f"{SERVICE}.fetch_currency", return_value="USD"),
+            patch(f"{SERVICE}.fetch_current_price", return_value=Decimal("35")),
+            patch(f"{SERVICE}.fetch_close_on", return_value=Decimal("33")) as close_on,
+        ):
+            converted = price_in_thb("NVDA", Decimal("100"), date(2026, 10, 1))
+        assert (converted.amount_thb, converted.rate_date) == (
+            Decimal("3300.0000"),
+            date(2026, 10, 1),
+        )
+        assert close_on.call_args.args == ("USDTHB=X", date(2026, 10, 1))
+
+    def test_no_history_falls_back_to_today(self) -> None:
+        """No rate for that day: today's rate, and rate_date says so."""
+        with (
+            patch(f"{SERVICE}.fetch_currency", return_value="USD"),
+            patch(f"{SERVICE}.fetch_current_price", return_value=Decimal("35")),
+            patch(f"{SERVICE}.fetch_close_on", return_value=None),
+            patch(f"{SERVICE}.bangkok_today", return_value=date(2026, 11, 4)),
+        ):
+            converted = price_in_thb("NVDA", Decimal("100"), date(2026, 10, 1))
+        assert (converted.exchange_rate, converted.rate_date) == (Decimal("35"), date(2026, 11, 4))
+
+    def test_today_uses_live_rate(self) -> None:
+        """Bought today: the live rate, no history lookup."""
+        with (
+            patch(f"{SERVICE}.fetch_currency", return_value="USD"),
+            patch(f"{SERVICE}.fetch_current_price", return_value=Decimal("35")),
+            patch(f"{SERVICE}.fetch_close_on") as close_on,
+            patch(f"{SERVICE}.bangkok_today", return_value=date(2026, 11, 4)),
+        ):
+            converted = price_in_thb("NVDA", Decimal("1"), date(2026, 11, 4))
+        assert converted.exchange_rate == Decimal("35")
+        close_on.assert_not_called()

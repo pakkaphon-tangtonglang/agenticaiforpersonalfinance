@@ -1115,8 +1115,12 @@
       THAI_CATEGORY_LABELS[c.category] || c.category || "อื่นๆ");
     const data = cats.map((c) => Number(c.amount || 0));
     destroyChart("expense");
+    // Keep the canvas (hide it) so the next reload can draw into it again.
+    const canvas = $("expenseChart");
+    canvas.parentElement.querySelector(".notif-empty")?.remove();
+    canvas.hidden = !data.length;
     if (!data.length) {
-      $("expenseChart").parentElement.innerHTML = "<p class='notif-empty'>ยังไม่มีข้อมูลรายจ่าย</p>";
+      canvas.parentElement.append(el("p", { class: "notif-empty" }, "ยังไม่มีข้อมูลรายจ่าย"));
       return;
     }
     state.charts.expense = new Chart($("expenseChart"), {
@@ -2148,13 +2152,14 @@
       e.preventDefault();
       saveHolding(result, { qty, price, bought }, submit, out);
     });
-    if (isForeignStock(result)) attachFxPreview(form, result.symbol, { qty, price }, form.querySelector(".holding-form-hint"));
+    if (isForeignStock(result)) attachFxPreview(form, result.symbol, { qty, price, bought }, form.querySelector(".holding-form-hint"));
     return form;
   }
 
   // ─── Live USD→THB preview for foreign stocks ───
-  // The rate is read when the form opens and every FX_REFRESH_MS while it stays open
-  // (the server caches Yahoo for 60 s), so the baht amount follows the market.
+  // Bought today: the live rate, re-read every FX_REFRESH_MS while the form is open
+  // (the server caches Yahoo for 60 s). Bought on a past day: that day's closing rate,
+  // which is what the server saves with.
   const FX_REFRESH_MS = 60000;
 
   function attachFxPreview(form, symbol, fields, before) {
@@ -2164,21 +2169,26 @@
     const render = () => { line.textContent = fxPreviewText(rate, fields); };
     const refresh = async () => {
       if (!form.isConnected) { clearInterval(timer); return; }
-      try { rate = await api("GET", "/assets/exchange-rate", { params: { symbol } }); }
+      const onDate = fields.bought.value && fields.bought.value < localToday() ? fields.bought.value : null;
+      try { rate = await api("GET", "/assets/exchange-rate", { params: { symbol, on_date: onDate } }); }
       catch (_) { if (!rate) { line.textContent = "ยังดึงอัตราแลกเปลี่ยนไม่ได้ ระบบจะแปลงเป็นบาทตอนบันทึก"; return; } }
       render();
     };
     const timer = setInterval(refresh, FX_REFRESH_MS);
     fields.qty.addEventListener("input", render);
     fields.price.addEventListener("input", render);
+    fields.bought.addEventListener("change", () => { rate = null; render(); refresh(); });
     refresh();
   }
 
   function fxPreviewText(rate, { qty, price }) {
     if (!rate) return "กำลังดึงอัตราแลกเปลี่ยน…";
     const perUnit = Number(rate.rate_to_thb);
-    const time = new Date(rate.fetched_at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    const rateText = `1 ${rate.currency} = ${perUnit.toFixed(4)} ฿ (อัปเดต ${time})`;
+    const isPast = rate.rate_date && rate.rate_date < localToday();
+    const when = isPast
+      ? `เรตวันที่ ${formatThaiDate(rate.rate_date)}`
+      : `อัปเดต ${new Date(rate.fetched_at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`;
+    const rateText = `1 ${rate.currency} = ${perUnit.toFixed(4)} ฿ (${when})`;
     const usd = Number(price.value.replace(/,/g, ""));
     if (!price.value.trim() || !Number.isFinite(usd) || usd <= 0) return rateText;
     const shares = Number(qty.value.replace(/,/g, ""));
@@ -2230,8 +2240,9 @@
   }
 
   function holdingSummaryLines(res, unit) {
+    const rateDay = res.rate_date ? ` เรตวันที่ ${formatThaiDate(res.rate_date)}` : "";
     const fxNote = res.price_in_currency
-      ? ` (${res.price_in_currency} ${res.currency} × ${res.exchange_rate} ฿)` : "";
+      ? ` (${res.price_in_currency} ${res.currency} × ${res.exchange_rate} ฿${rateDay})` : "";
     const priceNote = res.used_latest_price ? " (ราคาล่าสุด)" : fxNote;
     const saved = el("p", {},
       `✓ บันทึกแล้ว: ${res.quantity} ${unit} × ${res.price_per_unit} ฿${priceNote} = ต้นทุน ${thb(res.total_cost)} · ซื้อ ${formatThaiDate(res.purchase_date)}`);

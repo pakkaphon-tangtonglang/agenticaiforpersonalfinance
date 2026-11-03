@@ -265,6 +265,7 @@
   }
 
   window.HistoryView = {
+    categories: CATEGORIES,
     load(year, month) { wireOnce(); return load(year, month); },
   };
 })();
