@@ -210,6 +210,15 @@ class TestValidateSymbol:
         """Dispatches to stock validation for stock type."""
         assert validate_symbol("PTT.BK", "stock") == "PTT.BK"
 
+    def test_foreign_stock(self) -> None:
+        """Foreign tickers are upper-cased."""
+        assert validate_symbol("nvda", "foreign_stock") == "NVDA"
+
+    def test_foreign_stock_rejects_crypto(self) -> None:
+        """Crypto is not a foreign stock."""
+        with pytest.raises(ValueError, match="BTC-USD"):
+            validate_symbol("BTC-USD", "foreign_stock")
+
     def test_dispatches_mutual_fund(self) -> None:
         """Dispatches to fund validation for mutual_fund type."""
         assert validate_symbol("K-EQUITY", "mutual_fund") == "K-EQUITY"

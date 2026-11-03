@@ -21,6 +21,7 @@ from finance_ai.agents.expense_tools import (
 from finance_ai.agents.graph_utils import build_tool_node, should_continue
 from finance_ai.agents.prompts import EXPENSE_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.rag_tool import search_finance_knowledge
+from finance_ai.agents.recurring_tools import RECURRING_TOOLS
 from finance_ai.agents.schemas import ExpenseAgentState
 from finance_ai.core.logging import get_logger
 
@@ -32,7 +33,9 @@ EXPENSE_TOOLS = [
     summarize_monthly_expenses,
     query_expenses_by_category,
     search_finance_knowledge,
-] + EXPENSE_CROSS_TOOLS
+    *RECURRING_TOOLS,
+    *EXPENSE_CROSS_TOOLS,
+]
 
 
 def create_llm_node(

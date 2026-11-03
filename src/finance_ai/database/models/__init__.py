@@ -16,6 +16,7 @@ from finance_ai.database.models.risk_assessment import RiskAssessment
 from finance_ai.database.models.line_user_mapping import LineUserMapping
 from finance_ai.database.models.guru_knowledge_gap import GuruKnowledgeGap
 from finance_ai.database.models.embedding_cache_entry import EmbeddingCacheEntry
+from finance_ai.database.models.recurring_entry import RecurringEntry
 
 __all__ = [
     "User",
@@ -34,4 +35,5 @@ __all__ = [
     "LineUserMapping",
     "GuruKnowledgeGap",
     "EmbeddingCacheEntry",
+    "RecurringEntry",
 ]

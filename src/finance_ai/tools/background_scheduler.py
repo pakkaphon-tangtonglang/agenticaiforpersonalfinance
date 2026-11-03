@@ -204,6 +204,47 @@ def load_all_schedules(session_factory: Any) -> int:
         session.close()
 
 
+RECURRING_POSTING_JOB_ID: str = "recurring_entries_daily"
+
+
+def post_recurring_entries_job(session_factory: Any) -> int:
+    """Daily job: post every user's due recurring income and expenses.
+
+    Requests also post them (see main.provision_request_user); this covers
+    users who do not open the app that day.
+
+    Args:
+        session_factory: SQLAlchemy session factory.
+
+    Returns:
+        Number of transactions created.
+    """
+    from finance_ai.tools.recurring_service import (  # noqa: PLC0415
+        bangkok_today,
+        post_due_entries,
+    )
+
+    with session_factory() as session:
+        posted = post_due_entries(session, bangkok_today())
+    logger.info("Recurring entries posted: %d", posted)
+    return posted
+
+
+def register_recurring_posting(session_factory: Any) -> None:
+    """Run post_recurring_entries_job every day at 00:10 Bangkok time.
+
+    Args:
+        session_factory: SQLAlchemy session factory.
+    """
+    get_scheduler().add_job(
+        post_recurring_entries_job,
+        trigger=CronTrigger(hour=0, minute=10, timezone="Asia/Bangkok"),
+        args=[session_factory],
+        id=RECURRING_POSTING_JOB_ID,
+        replace_existing=True,
+    )
+
+
 def start_scheduler(session_factory: Any) -> int:
     """Start the background scheduler and load all active schedules.
 
@@ -220,6 +261,7 @@ def start_scheduler(session_factory: Any) -> int:
     """
     scheduler = get_scheduler()
     count = load_all_schedules(session_factory)
+    register_recurring_posting(session_factory)
 
     if not scheduler.running:
         scheduler.start()

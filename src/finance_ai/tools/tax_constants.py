@@ -32,6 +32,9 @@ DEDUCTION_LIMITS: dict[str, Decimal] = {
     "provident_fund": Decimal("500000"),
     "rmf": Decimal("500000"),
     "ssf": Decimal("200000"),
+    # ThaiESG/ThaiESGX share one cap: 300,000 for tax years 2567-2569
+    # (100,000 from 2570; docs/all_known_problem.md 3.3).
+    "thai_esg": Decimal("300000"),
     "mortgage_interest": Decimal("100000"),
 }
 
@@ -49,6 +52,7 @@ PERCENTAGE_CAPPED_DEDUCTIONS: dict[str, Decimal] = {
     "provident_fund": Decimal("0.15"),
     "rmf": Decimal("0.30"),
     "ssf": Decimal("0.30"),
+    "thai_esg": Decimal("0.30"),
 }
 
 # Employee social security contribution (Section 33): 5% of wage up to the ceiling.

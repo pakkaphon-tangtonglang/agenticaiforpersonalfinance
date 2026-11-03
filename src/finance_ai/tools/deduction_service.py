@@ -29,6 +29,7 @@ CLAIMABLE_DEDUCTION_TYPES: frozenset[str] = (
 ) | {"donations"}
 
 TAX_SAVING_FUND_MARKERS: dict[str, tuple[str, ...]] = {
+    "thai_esg": ("THAIESG", "ไทยเพื่อความยั่งยืน"),
     "rmf": ("RMF", "เพื่อการเลี้ยงชีพ", "RETIREMENT MUTUAL FUND"),
     "ssf": ("SSF", "เพื่อการออม", "SUPER SAVINGS"),
 }

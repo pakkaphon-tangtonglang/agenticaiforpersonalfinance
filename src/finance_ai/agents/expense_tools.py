@@ -82,7 +82,7 @@ def add_expense(  # pylint: disable=too-many-arguments,too-many-positional-argum
     Args:
         amount: Expense amount in THB (e.g., "80").
         category: Category key (food, transport, entertainment,
-            utilities, health, education, shopping, other).
+            utilities, health, education, shopping, debt, other).
         description: Optional description (e.g., "กาแฟ").
         transaction_date: Date in YYYY-MM-DD format. Defaults to today.
         user_id: UUID of the user (injected from graph state).

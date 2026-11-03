@@ -180,6 +180,8 @@ class TestDetectTaxSavingFundType:
             ("scbrmf", "rmf"),
             ("K-CHANGESSF", "ssf"),
             ("KFSDIV", None),
+            ("SCBTHAIESG", "thai_esg"),
+            ("K-TNZ-THAIESG", "thai_esg"),
             ("PTT.BK", None),
         ],
     )

@@ -16,6 +16,11 @@ from finance_ai.agents.expense_tools import parse_date_value
 from finance_ai.agents.session_helper import get_tool_session
 from finance_ai.agents.tax_tools import parse_decimal_value
 from finance_ai.tools.deduction_service import detect_tax_saving_fund_type
+from finance_ai.tools.foreign_stock_service import (
+    FOREIGN_STOCK,
+    is_foreign_stock_symbol,
+    price_in_thb,
+)
 from finance_ai.tools.investment_calculator import HoldingSummary
 from finance_ai.tools.investment_service import add_investment_holding, get_portfolio_summary
 from finance_ai.tools.investment_calculator import validate_mutual_fund_symbol
@@ -37,6 +42,8 @@ ASSET_TYPE_ALIASES: dict[str, str] = {
     "กองทุน": "mutual_fund",
     "กองทุนรวม": "mutual_fund",
     "หุ้น": "stock",
+    "หุ้นต่างประเทศ": FOREIGN_STOCK,
+    "foreign": FOREIGN_STOCK,
     "stocks": "stock",
 }
 ASSET_TYPE_OPTIONS: list[str] = ["หุ้นไทย", "กองทุนรวม"]
@@ -47,9 +54,10 @@ ASK_QUANTITY = "ซื้อจำนวนกี่หุ้น/หน่วย
 ASK_PRICE = "ซื้อมาราคาต่อหุ้น/หน่วยเท่าไร (บาท)"
 ASK_DATE = "ซื้อวันไหน (เช่น 2026-10-01 หรือ 1/10/2569)"
 ASK_POSITIVE_VALUES = "ขอจำนวนและราคาที่มากกว่า 0 อีกครั้ง"
-UNSUPPORTED_STOCK = (
-    "'{symbol}' is not a Thai (SET) stock. The portfolio holds Thai stocks (.BK)"
-    " and Thai mutual funds only; it can be added to the watchlist instead."
+_CENTS = Decimal("0.01")
+UNSUPPORTED_ASSET = (
+    "'{symbol}' is not a stock (crypto, gold, index or currency). The portfolio holds"
+    " Thai stocks, foreign stocks and Thai mutual funds; add it to the watchlist instead."
 )
 
 
@@ -88,7 +96,7 @@ def get_portfolio_holdings(
 
 
 @tool
-def add_portfolio_holding(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def add_portfolio_holding(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
     symbol: str,
     quantity: str,
     price_per_unit: str,
@@ -102,14 +110,16 @@ def add_portfolio_holding(  # pylint: disable=too-many-arguments,too-many-positi
 
     ใช้เมื่อผู้ใช้บอกว่า "ซื้อ", "ถือ", "เพิ่มเข้าพอร์ต", "เพิ่มรายการถือครอง" พร้อมจำนวนและราคา.
     ถ้าผู้ใช้ยังไม่บอกจำนวนหรือราคาต่อหน่วย ให้ถามก่อน ห้ามเดา.
-    รองรับหุ้นไทย (asset_type="stock", ลงท้าย .BK) และกองทุนรวมทุกบริษัทจัดการ
-    (asset_type="mutual_fund" เช่น K-USA-A(A), KFSDIV, SCBSET50) เท่านั้น.
+    รองรับหุ้นไทย (.BK), หุ้นต่างประเทศ (เช่น NVDA, AAPL — ใช้ asset_type="stock"
+    ระบบแยกให้เอง) และกองทุนรวมทุกบริษัทจัดการ (asset_type="mutual_fund"
+    เช่น K-USA-A(A), KFSDIV, SCBSET50). คริปโต/ทองคำ เพิ่มเข้าพอร์ตไม่ได้.
     ถ้าผลลัพธ์มี needs_clarification ให้ถามผู้ใช้ตาม ask_user ห้ามเดาแทน.
 
     Args:
         symbol: สัญลักษณ์ เช่น "PTT", "PTT.BK", "K-USA-A(A)".
         quantity: จำนวนหน่วย/หุ้น เช่น "100" หรือ "1,000".
-        price_per_unit: ราคาซื้อต่อหน่วย (บาท) เช่น "35.50".
+        price_per_unit: ราคาซื้อต่อหน่วย เช่น "35.50" (บาท; หุ้นต่างประเทศใช้สกุลเงินของหุ้น
+            เช่น USD แล้วระบบแปลงเป็นบาทตามอัตราวันนี้).
         purchase_date: วันที่ซื้อ YYYY-MM-DD หรือ DD/MM/YYYY (พ.ศ. ได้) ค่าเริ่มต้น = วันนี้.
         asset_type: "stock" หรือ "mutual_fund".
         name: ชื่อที่แสดง เช่น "PTT".
@@ -124,13 +134,16 @@ def add_portfolio_holding(  # pylint: disable=too-many-arguments,too-many-positi
         >>> add_portfolio_holding.invoke({"symbol": "PTT", "quantity": "100",
         ...     "price_per_unit": "35.50", "user_id": uid, "db_session_factory": f})
     """
-    normalized_type = ASSET_TYPE_ALIASES.get(asset_type.strip().lower(), asset_type.strip().lower())
-    holding_symbol, problem = _holding_symbol(symbol, normalized_type)
+    typed_type = ASSET_TYPE_ALIASES.get(asset_type.strip().lower(), asset_type.strip().lower())
+    normalized_type, holding_symbol, problem = _holding_identity(symbol, typed_type)
     if problem:
         return problem
     values = _parse_holding_values(quantity, price_per_unit, purchase_date)
     if "error" in values:
         return values
+    conversion = _convert_foreign_price(normalized_type, holding_symbol, values)
+    if "error" in conversion:
+        return conversion
     try:
         with get_tool_session(db_session_factory) as session:
             holding = add_investment_holding(
@@ -140,6 +153,7 @@ def add_portfolio_holding(  # pylint: disable=too-many-arguments,too-many-positi
             return {
                 "status": "added",
                 **_saved_holding(holding.symbol, holding.total_cost),
+                **conversion,
                 **_follow_up_after_add(normalized_type, holding_symbol, name, holding.total_cost),
             }
     except ValueError as exc:
@@ -149,19 +163,19 @@ def add_portfolio_holding(  # pylint: disable=too-many-arguments,too-many-positi
 def _follow_up_after_add(
     asset_type: str, symbol: str, name: str, total_cost: Decimal
 ) -> dict[str, Any]:
-    """Related step after a purchase: record an RMF/SSF deduction, or watch a stock's news.
+    """Related step after a purchase: record an RMF/SSF/ThaiESG deduction, or watch a stock's news.
 
     Args:
         asset_type: "stock" or "mutual_fund".
         symbol: Canonical holding symbol.
-        name: Display name the agent passed (fund names reveal RMF/SSF).
+        name: Display name the agent passed (fund names reveal RMF/SSF/ThaiESG).
         total_cost: Purchase cost in THB.
 
     Returns:
-        {"tax_deduction_hint": {...}} for an RMF/SSF, {"watchlist_hint": {...}}
+        {"tax_deduction_hint": {...}} for an RMF/SSF/ThaiESG, {"watchlist_hint": {...}}
         for a stock, else {}.
     """
-    if asset_type == "stock":
+    if asset_type in ("stock", FOREIGN_STOCK):
         return {"watchlist_hint": {"symbol": symbol, "name": name or symbol}}
     fund_type = detect_tax_saving_fund_type(symbol, name)
     if fund_type is None:
@@ -170,24 +184,55 @@ def _follow_up_after_add(
     return {"tax_deduction_hint": {"deduction_type": fund_type, "amount": amount}}
 
 
-def _holding_symbol(symbol: str, asset_type: str) -> tuple[str, dict[str, Any] | None]:
-    """Canonical symbol for the holding, or a problem to report/ask about."""
+def _fund_identity(symbol: str) -> tuple[str, str, dict[str, Any] | None]:
+    """A Thai fund code, or a question asking for it again."""
+    try:
+        return "mutual_fund", validate_mutual_fund_symbol(symbol), None
+    except ValueError as exc:
+        return "mutual_fund", "", clarification(str(exc), ASK_FUND_CODE)
+
+
+def _holding_identity(symbol: str, asset_type: str) -> tuple[str, str, dict[str, Any] | None]:
+    """Asset type and canonical symbol (Thai/foreign stock or fund), or a problem."""
     if asset_type == "mutual_fund":
-        try:
-            return validate_mutual_fund_symbol(symbol), None
-        except ValueError as exc:
-            return "", clarification(str(exc), ASK_FUND_CODE)
-    if asset_type != "stock":
-        return "", clarification(
-            f"Unknown asset_type '{asset_type}'.", ASK_ASSET_TYPE, ASSET_TYPE_OPTIONS
+        return _fund_identity(symbol)
+    if asset_type not in ("stock", FOREIGN_STOCK):
+        return (
+            asset_type,
+            "",
+            clarification(
+                f"Unknown asset_type '{asset_type}'.", ASK_ASSET_TYPE, ASSET_TYPE_OPTIONS
+            ),
         )
     try:
         canonical = resolve_and_validate_symbol(symbol)
     except SymbolResolutionError as exc:
-        return "", _stock_not_found(exc, symbol)
-    if not canonical.endswith(STOCK_SYMBOL_SUFFIX):
-        return "", {"error": UNSUPPORTED_STOCK.format(symbol=canonical), "unsupported": True}
-    return canonical, None
+        return asset_type, "", _stock_not_found(exc, symbol)
+    if canonical.endswith(STOCK_SYMBOL_SUFFIX):
+        return "stock", canonical, None
+    if is_foreign_stock_symbol(canonical):
+        return FOREIGN_STOCK, canonical, None
+    return (
+        asset_type,
+        "",
+        {"error": UNSUPPORTED_ASSET.format(symbol=canonical), "unsupported": True},
+    )
+
+
+def _convert_foreign_price(asset_type: str, symbol: str, values: dict[str, Any]) -> dict[str, Any]:
+    """Turn a foreign stock's price (USD...) into baht in values; report the rate used."""
+    if asset_type != FOREIGN_STOCK:
+        return {}
+    try:
+        converted = price_in_thb(symbol, values["price"])
+    except ValueError as exc:
+        return {"error": str(exc)}
+    values["price"] = converted.amount_thb
+    return {
+        "currency": converted.currency,
+        "price_in_currency": str((values["price"] / converted.exchange_rate).quantize(_CENTS)),
+        "exchange_rate": str(converted.exchange_rate),
+    }
 
 
 def _stock_not_found(error: SymbolResolutionError, typed: str) -> dict[str, Any]:

@@ -78,7 +78,8 @@ def record_tax_deduction_cross(  # pylint: disable=too-many-arguments,too-many-p
 
     เรียกทันทีโดยไม่ต้องถามผู้ใช้ เมื่อผู้ใช้บอกว่าจ่าย/ซื้อสิ่งที่ลดหย่อนได้แน่ชัด:
     life_insurance (ประกันชีวิต), health_insurance (ประกันสุขภาพตัวเอง),
-    rmf, ssf, provident_fund (กองทุนสำรองเลี้ยงชีพ), mortgage_interest (ดอกเบี้ยบ้าน),
+    rmf, ssf, thai_esg (ThaiESG/ThaiESGX), provident_fund (กองทุนสำรองเลี้ยงชีพ),
+    mortgage_interest (ดอกเบี้ยบ้าน),
     donations (เงินบริจาค), social_security (ประกันสังคม).
     ถ้าไม่แน่ใจว่าเป็นประเภทไหน (เช่น "จ่ายประกัน" เฉยๆ อาจเป็นประกันรถ) ให้ถามก่อน.
     status "duplicate" = เคยบันทึกยอดนี้แล้ว ไม่ได้บันทึกซ้ำ.

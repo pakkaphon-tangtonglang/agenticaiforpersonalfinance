@@ -14,9 +14,13 @@ from finance_ai.tools.expense_constants import (
 class TestExpenseCategories:
     """Tests for expense category constants."""
 
-    def test_has_ten_categories(self) -> None:
-        """Test that there are exactly 10 expense categories."""
-        assert len(EXPENSE_CATEGORIES) == 10
+    def test_has_eleven_categories(self) -> None:
+        """Test that there are exactly 11 expense categories."""
+        assert len(EXPENSE_CATEGORIES) == 11
+
+    def test_debt_payment_category(self) -> None:
+        """Debt payments (credit card, loans) have their own category."""
+        assert EXPENSE_CATEGORIES["debt"] == "ชำระหนี้"
 
     def test_all_expected_categories_present(self) -> None:
         """Test that all expected category keys are defined."""
@@ -30,6 +34,7 @@ class TestExpenseCategories:
             "education",
             "shopping",
             "investment",
+            "debt",
             "other",
         }
         assert set(EXPENSE_CATEGORIES.keys()) == expected

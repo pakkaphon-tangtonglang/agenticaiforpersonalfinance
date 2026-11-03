@@ -64,7 +64,7 @@
     food: "อาหาร", transport: "เดินทาง", housing: "ที่พักอาศัย",
     health: "สุขภาพ", education: "การศึกษา", shopping: "ช้อปปิ้ง",
     utilities: "สาธารณูปโภค", entertainment: "บันเทิง",
-    investment: "ลงทุน", other: "อื่นๆ",
+    investment: "ลงทุน", debt: "ชำระหนี้", other: "อื่นๆ",
   };
 
   // Chart palette — mid-tone hues that read on light and dark cards
@@ -1245,7 +1245,8 @@
   const RECEIPT_CATEGORIES = {
     food: "อาหาร", transport: "การเดินทาง", housing: "ที่พักอาศัย",
     entertainment: "บันเทิง", utilities: "สาธารณูปโภค", health: "สุขภาพ",
-    education: "การศึกษา", shopping: "ช้อปปิ้ง", investment: "ลงทุน", other: "อื่นๆ",
+    education: "การศึกษา", shopping: "ช้อปปิ้ง", investment: "ลงทุน", debt: "ชำระหนี้",
+    other: "อื่นๆ",
   };
   let uploadMode = "scan"; // "scan" | "bank"
 
@@ -2108,11 +2109,15 @@
   }
 
   // ─── Add to portfolio (asset page) ───
-  // Thai stocks (.BK) and Thai mutual funds (SEC data, type FUND): the portfolio
-  // is in baht. A blank price = the latest price (stocks) or latest NAV (funds).
+  // Thai stocks (.BK), foreign stocks/ETFs and Thai mutual funds (SEC data, type FUND).
+  // The portfolio is in baht: a foreign price is typed in the stock's currency (USD)
+  // and the server converts it. A blank price = the latest price or NAV.
   const isThaiStock = (symbol) => /\.BK$/i.test(symbol || "");
   const isFund = (result) => result.type === "FUND";
+  const isForeignStock = (result) =>
+    !isFund(result) && !isThaiStock(result.symbol) && ["EQUITY", "ETF"].includes(result.type);
   const unitWord = (result) => (isFund(result) ? "หน่วย" : "หุ้น");
+  const priceCurrency = (result) => (isForeignStock(result) ? "USD" : "บาท");
 
   function localToday() {
     const now = new Date();
@@ -2120,11 +2125,11 @@
   }
 
   function portfolioButton(result) {
-    const allowed = isFund(result) || isThaiStock(result.symbol);
+    const allowed = isFund(result) || isThaiStock(result.symbol) || isForeignStock(result);
     return el("button", {
       type: "button", class: "asset-port-btn", "aria-expanded": "false",
       disabled: allowed ? null : "",
-      title: allowed ? "บันทึกว่าซื้อสินทรัพย์นี้แล้ว" : "พอร์ตรองรับเฉพาะหุ้นไทย (.BK) และกองทุนรวมไทย",
+      title: allowed ? "บันทึกว่าซื้อสินทรัพย์นี้แล้ว" : "พอร์ตรองรับหุ้นและกองทุนรวม (คริปโต/ทองคำ ใช้ Watchlist)",
       onclick: (e) => toggleHoldingForm(result, e.currentTarget),
     }, "เพิ่มลงพอร์ต");
   }
@@ -2148,7 +2153,7 @@
     const unit = unitWord(result);
     const latestWord = isFund(result) ? "NAV ล่าสุด" : "ราคาล่าสุด";
     const [qtyField, qty] = holdingFormField(`จำนวน${unit}`, { placeholder: "เช่น 100" });
-    const [priceField, price] = holdingFormField(`ราคาซื้อต่อ${unit} (บาท)`, { placeholder: latestWord });
+    const [priceField, price] = holdingFormField(`ราคาซื้อต่อ${unit} (${priceCurrency(result)})`, { placeholder: latestWord });
     const [dateField, bought] = holdingFormField("วันที่ซื้อ", { type: "date", inputmode: null, max: localToday(), value: localToday() });
     const out = el("div", { class: "holding-form-result", role: "status", "aria-live": "polite" });
     const submit = el("button", { type: "submit", class: "asset-fetch-btn" }, "บันทึก");
@@ -2172,7 +2177,7 @@
     try {
       const res = await api("POST", "/assets/holdings", { json: {
         user_id: state.userId, symbol: result.symbol, name: result.name,
-        asset_type: isFund(result) ? "mutual_fund" : "stock",
+        asset_type: isFund(result) ? "mutual_fund" : (isForeignStock(result) ? "foreign_stock" : "stock"),
         quantity: qty.value, price_per_unit: price.value.trim() || null,
         purchase_date: bought.value || null,
       } });
@@ -2207,7 +2212,9 @@
   }
 
   function holdingSummaryLines(res, unit) {
-    const priceNote = res.used_latest_price ? " (ราคาล่าสุด)" : "";
+    const fxNote = res.price_in_currency
+      ? ` (${res.price_in_currency} ${res.currency} × ${res.exchange_rate} ฿)` : "";
+    const priceNote = res.used_latest_price ? " (ราคาล่าสุด)" : fxNote;
     const saved = el("p", {},
       `✓ บันทึกแล้ว: ${res.quantity} ${unit} × ${res.price_per_unit} ฿${priceNote} = ต้นทุน ${thb(res.total_cost)} · ซื้อ ${formatThaiDate(res.purchase_date)}`);
     if (res.gain_loss == null) {

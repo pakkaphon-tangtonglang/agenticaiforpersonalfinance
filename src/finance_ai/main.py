@@ -101,6 +101,7 @@ from finance_ai.tools.transaction_history_service import (
     list_entries,
     update_entry,
 )
+from finance_ai.tools.recurring_service import bangkok_today, post_due_entries
 from finance_ai.tools.user_provisioning_service import ensure_user_exists, is_valid_user_id
 from finance_ai.tools.expense_constants import VALID_EXPENSE_CATEGORIES
 from finance_ai.tools.conversation_service import (
@@ -199,10 +200,24 @@ async def _request_user_id(request: Request) -> str | None:
 
 
 def _ensure_user_committed(user_id: str) -> None:
-    """Create the user row (if missing) in its own short transaction."""
+    """Create the user row (if missing), then post the user's due recurring entries.
+
+    Posting here means rent or loan installments show up as soon as the user
+    opens the app, even if the server slept through the daily job.
+    """
     with _session_factory() as session:
         ensure_user_exists(session, user_id)
         session.commit()
+        _post_recurring_safely(session, user_id)
+
+
+def _post_recurring_safely(session: Session, user_id: str) -> None:
+    """Post due recurring entries; a failure is logged, never blocks the request."""
+    try:
+        post_due_entries(session, bangkok_today(), user_id)
+    except SQLAlchemyError as exc:
+        session.rollback()
+        logger.warning("Recurring posting failed for %s: %s", user_id, exc)
 
 
 async def provision_request_user(request: Request) -> None:

@@ -312,6 +312,26 @@ class TestRefreshPortfolioPrices:
         test_session.refresh(sample_holding)
         assert sample_holding.current_price_per_unit == Decimal("42.50")
 
+    @patch("finance_ai.tools.foreign_stock_service.latest_price_in_thb")
+    @patch("finance_ai.tools.price_client.fetch_multiple_prices")
+    def test_foreign_stock_priced_in_baht(
+        self,
+        mock_fetch: MagicMock,
+        mock_thb: MagicMock,
+        test_session: Session,
+        sample_user: User,
+    ) -> None:
+        """Foreign holdings get the latest price converted to baht."""
+        add_investment_holding(
+            test_session, sample_user.id, "foreign_stock", "NVDA", "NVIDIA",
+            Decimal("2"), Decimal("6000"), date(2026, 10, 1),
+        )  # fmt: skip
+        mock_thb.return_value = Decimal("6800")
+        assert refresh_portfolio_prices(test_session, sample_user.id) == 1
+        mock_fetch.assert_not_called()
+        holding = test_session.query(InvestmentHolding).one()
+        assert holding.current_price_per_unit == Decimal("6800")
+
     @patch("finance_ai.tools.price_client.fetch_multiple_prices")
     def test_skips_unavailable_prices(
         self,
