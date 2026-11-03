@@ -77,6 +77,26 @@ from finance_ai.tools.holding_edit_service import (
     delete_holding,
     update_holding,
 )
+from finance_ai.tools.debt_editor_service import (
+    DebtEntry,
+    DebtInput,
+    DebtListing,
+    DebtNotFoundError,
+    create_debt_entry,
+    delete_debt_entry,
+    list_debt_entries,
+    update_debt_entry,
+)
+from finance_ai.tools.foreign_stock_service import exchange_rate_to_thb, is_foreign_stock_symbol
+from finance_ai.tools.goal_editor_service import (
+    GoalEntry,
+    GoalInput,
+    GoalNotFoundError,
+    create_goal_entry,
+    delete_goal_entry,
+    list_goal_entries,
+    update_goal_entry,
+)
 from finance_ai.tools.holding_entry_service import (
     HoldingEntry,
     HoldingEntryError,
@@ -447,6 +467,15 @@ class HoldingItemOut(BaseModel):
     current_value: str | None = Field(default=None, description="THB value; None without a price")
     unrealized_gain_loss: str | None = Field(default=None, description="THB gain/loss or None")
     gain_loss_percentage: str | None = Field(default=None, description="Gain/loss in percent")
+
+
+class ExchangeRateOut(BaseModel):
+    """Live rate the holding form converts a foreign price with."""
+
+    symbol: str = Field(..., description="Foreign ticker (e.g. 'NVDA')")
+    currency: str = Field(..., description="Trading currency (e.g. 'USD')")
+    rate_to_thb: str = Field(..., description="Baht per one unit of the currency")
+    fetched_at: datetime = Field(..., description="When the rate was read (UTC)")
 
 
 class HoldingAddRequest(HoldingForm):
@@ -1539,6 +1568,88 @@ def delete_transaction_entry(
     return Response(status_code=204)
 
 
+# ──────────────────────── Debts & goals (dashboard editors) ───────
+
+_DEBT_NOT_FOUND = "ไม่พบหนี้รายการนี้"
+_GOAL_NOT_FOUND = "ไม่พบเป้าหมายนี้"
+
+
+class DebtRequest(DebtInput):
+    """A debt from the dashboard form plus its owner."""
+
+    user_id: str = Field(..., description="User UUID")
+
+
+class GoalRequest(GoalInput):
+    """A goal from the dashboard form plus its owner."""
+
+    user_id: str = Field(..., description="User UUID")
+
+
+@app.get("/debts", response_model=DebtListing)
+def get_debts(user_id: str, session: Session = Depends(get_session)) -> DebtListing:
+    """Open debts with totals for the dashboard card."""
+    return list_debt_entries(session, user_id)
+
+
+@app.post("/debts", response_model=DebtEntry, status_code=201)
+def add_debt(req: DebtRequest, session: Session = Depends(get_session)) -> DebtEntry:
+    """Add a debt typed into the dashboard."""
+    return create_debt_entry(session, req.user_id, DebtInput(**req.model_dump(exclude={"user_id"})))
+
+
+@app.patch("/debts/{debt_id}", response_model=DebtEntry)
+def edit_debt(debt_id: str, req: DebtRequest, session: Session = Depends(get_session)) -> DebtEntry:
+    """Edit a debt; 404 when it is missing or not the user's."""
+    data = DebtInput(**req.model_dump(exclude={"user_id"}))
+    try:
+        return update_debt_entry(session, req.user_id, debt_id, data)
+    except DebtNotFoundError as error:
+        raise HTTPException(status_code=404, detail=_DEBT_NOT_FOUND) from error
+
+
+@app.delete("/debts/{debt_id}", status_code=204)
+def remove_debt(debt_id: str, user_id: str, session: Session = Depends(get_session)) -> Response:
+    """Delete a debt; 404 when it is missing or not the user's."""
+    try:
+        delete_debt_entry(session, user_id, debt_id)
+    except DebtNotFoundError as error:
+        raise HTTPException(status_code=404, detail=_DEBT_NOT_FOUND) from error
+    return Response(status_code=204)
+
+
+@app.get("/goals", response_model=list[GoalEntry])
+def get_goals(user_id: str, session: Session = Depends(get_session)) -> list[GoalEntry]:
+    """All the user's goals for the dashboard card."""
+    return list_goal_entries(session, user_id)
+
+
+@app.post("/goals", response_model=GoalEntry, status_code=201)
+def add_goal(req: GoalRequest, session: Session = Depends(get_session)) -> GoalEntry:
+    """Add a goal typed into the dashboard."""
+    return create_goal_entry(session, req.user_id, GoalInput(**req.model_dump(exclude={"user_id"})))
+
+
+@app.patch("/goals/{goal_id}", response_model=GoalEntry)
+def edit_goal(goal_id: str, req: GoalRequest, session: Session = Depends(get_session)) -> GoalEntry:
+    """Edit a goal; 404 when it is missing or not the user's."""
+    data = GoalInput(**req.model_dump(exclude={"user_id"}))
+    try:
+        return update_goal_entry(session, req.user_id, goal_id, data)
+    except GoalNotFoundError as error:
+        raise HTTPException(status_code=404, detail=_GOAL_NOT_FOUND) from error
+
+
+@app.delete("/goals/{goal_id}", status_code=204)
+def remove_goal(goal_id: str, user_id: str, session: Session = Depends(get_session)) -> Response:
+    """Delete a goal; 404 when it is missing or not the user's."""
+    try:
+        delete_goal_entry(session, user_id, goal_id)
+    except GoalNotFoundError as error:
+        raise HTTPException(status_code=404, detail=_GOAL_NOT_FOUND) from error
+    return Response(status_code=204)
+
+
 # ──────────────────────── Dashboard ──────────────────────────────
 
 
@@ -1768,6 +1879,36 @@ def get_holdings(user_id: str, session: Session = Depends(get_session)) -> list[
     """
     summary = get_portfolio_summary(session, user_id)
     return [HoldingItemOut(**holding_to_dict(holding)) for holding in summary.holdings]
+
+
+@app.get("/assets/exchange-rate", response_model=ExchangeRateOut)
+def get_exchange_rate(symbol: str) -> ExchangeRateOut:
+    """Live rate from a foreign stock's currency to baht, for the holding form preview.
+
+    Args:
+        symbol: Foreign ticker (e.g. "NVDA").
+
+    Returns:
+        Currency, baht per unit and the time it was read.
+
+    Raises:
+        HTTPException: 422 for a non-foreign symbol, 503 when Yahoo has no rate.
+    """
+    ticker = symbol.strip().upper()
+    if not is_foreign_stock_symbol(ticker):
+        raise HTTPException(
+            status_code=422, detail=f"{ticker} ไม่ใช่หุ้นต่างประเทศ ไม่ต้องแปลงสกุลเงิน"
+        )
+    try:
+        rate = exchange_rate_to_thb(ticker)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=503, detail="ยังดึงอัตราแลกเปลี่ยนไม่ได้ ลองใหม่อีกครั้ง"
+        ) from error
+    return ExchangeRateOut(
+        symbol=ticker, currency=rate.currency, rate_to_thb=str(rate.exchange_rate),
+        fetched_at=datetime.now(timezone.utc),
+    )  # fmt: skip
 
 
 @app.post("/assets/holdings", response_model=HoldingEntry)

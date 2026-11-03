@@ -8,6 +8,7 @@ from langgraph.prebuilt import InjectedState
 from finance_ai.agents.session_helper import get_tool_session
 from finance_ai.agents.tax_tools import parse_decimal_value
 from finance_ai.database.models.recurring_entry import RecurringEntry
+from finance_ai.tools.debt_service import find_active_debt
 from finance_ai.tools.recurring_service import (
     bangkok_today,
     cancel_recurring_entry,
@@ -37,12 +38,13 @@ def recurring_entry_to_dict(entry: RecurringEntry) -> dict[str, Any]:
 
 
 @tool
-def add_recurring_entry(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def add_recurring_entry(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
     entry_type: str,
     amount: str,
     category: str,
     day_of_month: str,
     description: str = "",
+    debt_creditor: str = "",
     user_id: Annotated[str, InjectedState("user_id")] = "",
     db_session_factory: Annotated[Any, InjectedState("db_session_factory")] = None,
 ) -> dict[str, Any]:
@@ -61,23 +63,29 @@ def add_recurring_entry(  # pylint: disable=too-many-arguments,too-many-position
             shopping, entertainment, debt, investment, other.
         day_of_month: วันที่ของเดือน 1-31 เช่น "3".
         description: คำอธิบาย เช่น "ค่าเช่าบ้าน".
+        debt_creditor: ถ้าเป็นค่างวดหนี้ที่บันทึกไว้ ใส่เจ้าหนี้ เช่น "ธนาคาร" แล้ว
+            ทุกงวดจะหักยอดหนี้ และหยุดเองเมื่อหนี้หมด (linked_debt ใน Returns).
         user_id: UUID ของผู้ใช้ (injected จาก graph state).
         db_session_factory: Session factory (injected จาก graph state).
 
     Returns:
-        Dict with status "created", the entry and posted_now (รายการที่บันทึกทันที),
-        or an error.
+        Dict with status "created", the entry, posted_now (รายการที่บันทึกทันที)
+        and linked_debt (เจ้าหนี้ที่ผูกไว้ หรือ None), or an error.
     """
     try:
         parsed_amount = parse_decimal_value(amount, "amount")
         day = int(day_of_month.strip())
         with get_tool_session(db_session_factory) as session:
+            debt = find_active_debt(session, user_id, debt_creditor)
             entry = create_recurring_entry(
                 session, user_id, entry_type, category, parsed_amount, day,
                 description, bangkok_today().replace(day=1),
+                debt_id=debt.id if debt else None,
             )  # fmt: skip
             posted_now = post_due_entries(session, bangkok_today(), user_id)
-            return {"status": "created", **recurring_entry_to_dict(entry), "posted_now": posted_now}
+            linked = debt.creditor if debt else None
+            return {"status": "created", **recurring_entry_to_dict(entry),
+                    "posted_now": posted_now, "linked_debt": linked}  # fmt: skip
     except ValueError as error:
         return {"status": "error", "message": str(error)}
 

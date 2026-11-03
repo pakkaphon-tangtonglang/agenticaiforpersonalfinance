@@ -933,3 +933,42 @@ class TestEditDeleteHoldingEndpoints:
         [row] = client.get("/assets/holdings", params={"user_id": user_id}).json()
 
         assert row["name"] == "PTT"
+
+
+def _stub_fx(monkeypatch: pytest.MonkeyPatch, rate: Decimal | None) -> None:
+    """Stub the USD→THB rate and the trading currency used by the FX endpoint."""
+    monkeypatch.setattr(
+        "finance_ai.tools.foreign_stock_service.fetch_current_price", lambda symbol: rate
+    )
+    monkeypatch.setattr(
+        "finance_ai.tools.foreign_stock_service.fetch_currency", lambda symbol: "USD"
+    )
+
+
+class TestExchangeRateEndpoint:
+    """GET /assets/exchange-rate: the live rate the holding form converts with."""
+
+    def test_returns_live_rate(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        """A foreign ticker gets its currency, the THB rate and when it was read."""
+        _stub_fx(monkeypatch, Decimal("33.7612"))
+
+        body = client.get("/assets/exchange-rate", params={"symbol": "nvda"}).json()
+
+        assert body["symbol"] == "NVDA"
+        assert body["currency"] == "USD"
+        assert body["rate_to_thb"] == "33.7612"
+        assert body["fetched_at"]
+
+    def test_no_rate_is_503(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Yahoo down: 503 so the form says the preview is unavailable."""
+        _stub_fx(monkeypatch, None)
+
+        response = client.get("/assets/exchange-rate", params={"symbol": "NVDA"})
+
+        assert response.status_code == 503
+
+    def test_thai_stock_is_422(self, client: TestClient) -> None:
+        """Thai stocks are already in baht, so there is nothing to convert."""
+        response = client.get("/assets/exchange-rate", params={"symbol": "PTT.BK"})
+
+        assert response.status_code == 422

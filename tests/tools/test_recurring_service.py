@@ -153,3 +153,41 @@ class TestListAndCancel:
     ) -> None:
         """Nothing to cancel returns None."""
         assert cancel_recurring_entry(test_session, sample_user.id, "เช่า") is None
+
+
+class TestInstallmentLinkedToDebt:
+    """A monthly installment linked to a debt lowers it and stops once paid off."""
+
+    def test_each_month_lowers_debt_then_stops(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """3,000 owed, 1,000 a month: three postings, then the entry ends."""
+        from finance_ai.tools.debt_service import list_active_debts, record_debt
+
+        debt = record_debt(test_session, sample_user.id, "ธนาคาร", Decimal("3000")).debt
+        create_recurring_entry(
+            test_session, sample_user.id, "expense", "debt", Decimal("1000"), 5, "ผ่อนธนาคาร",
+            date(2026, 8, 1), debt_id=debt.id,
+        )  # fmt: skip
+
+        assert post_due_entries(test_session, date(2026, 9, 5), sample_user.id) == 2
+        assert debt.remaining_balance == Decimal("1000")
+        assert post_due_entries(test_session, date(2027, 1, 5), sample_user.id) == 1
+        assert list_active_debts(test_session, sample_user.id) == []
+        assert list_recurring_entries(test_session, sample_user.id) == []
+
+    def test_debt_already_settled_posts_nothing(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """Paid off by hand before the due date: no extra installment is recorded."""
+        from finance_ai.tools.debt_service import record_debt, set_debt_balance
+
+        debt = record_debt(test_session, sample_user.id, "ธนาคาร", Decimal("3000")).debt
+        create_recurring_entry(
+            test_session, sample_user.id, "expense", "debt", Decimal("1000"), 5, "ผ่อนธนาคาร",
+            date(2026, 8, 1), debt_id=debt.id,
+        )  # fmt: skip
+        set_debt_balance(test_session, sample_user.id, "ธนาคาร", Decimal("0"))
+
+        assert post_due_entries(test_session, date(2026, 9, 5), sample_user.id) == 0
+        assert TransactionCRUD().get_all(test_session) == []

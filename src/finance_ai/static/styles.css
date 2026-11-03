@@ -671,6 +671,16 @@ svg.i {
   border-radius: var(--radius-full); transition: width 0.8s var(--ease);
 }
 
+/* Goals & debts: editable rows */
+.ledger-list { margin-top: var(--sp-3); }
+.ledger-head { display: flex; align-items: center; gap: var(--sp-2); font-size: var(--text-body); }
+.ledger-head .goal-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ledger-amount { font-variant-numeric: tabular-nums; font-weight: var(--fw-medium); color: var(--ink); white-space: nowrap; }
+.ledger-sub { margin: 0; font-size: var(--text-caption); color: var(--muted); }
+.goal-item.is-done .goal-fill { background: var(--positive); }
+.debt-item .goal-fill { background: var(--positive); }
+.debt-item .ledger-amount { color: var(--exp); }
+
 /* Tax */
 .tax-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--sp-4); }
 .tax-grid dt { font-size: var(--text-body-sm); color: var(--muted); }

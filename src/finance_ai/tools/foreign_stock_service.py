@@ -81,15 +81,37 @@ def price_in_thb(symbol: str, price: Decimal) -> ThbPrice:
         >>> price_in_thb("NVDA", Decimal("180")).amount_thb  # doctest: +SKIP
         Decimal('6300.0000')
     """
+    rate = exchange_rate_to_thb(symbol)
+    return ThbPrice(
+        amount_thb=(price * rate.exchange_rate).quantize(_PRICE_PLACES),
+        currency=rate.currency,
+        exchange_rate=rate.exchange_rate,
+    )
+
+
+def exchange_rate_to_thb(symbol: str) -> ThbPrice:
+    """Live rate from the stock's trading currency to baht (Yahoo, 60 s cache).
+
+    Args:
+        symbol: Foreign ticker (e.g. "NVDA").
+
+    Returns:
+        ThbPrice for one unit of the currency (amount_thb equals the rate).
+
+    Raises:
+        ValueError: If no exchange rate is available.
+
+    Example:
+        >>> exchange_rate_to_thb("NVDA").exchange_rate  # doctest: +SKIP
+        Decimal('33.7612')
+    """
     currency = _currency_of(symbol)
     rate = _rate_to_thb(currency)
     if rate is None:
         raise ValueError(
             f"No exchange rate for {currency} → THB right now. Please try again later."
         )
-    return ThbPrice(
-        amount_thb=(price * rate).quantize(_PRICE_PLACES), currency=currency, exchange_rate=rate
-    )
+    return ThbPrice(amount_thb=rate, currency=currency, exchange_rate=rate)
 
 
 def latest_price_in_thb(symbol: str) -> Optional[Decimal]:

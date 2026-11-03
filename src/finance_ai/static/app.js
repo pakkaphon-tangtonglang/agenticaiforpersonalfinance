@@ -228,8 +228,9 @@
       minimumFractionDigits: 0, maximumFractionDigits: 2,
     }) + " ฿";
   }
-  function pct(value) {
-    return Number(value || 0).toFixed(1) + "%";
+  // The API sends rates as fractions (savings_rate 1.0 = 100%, effective_rate 0.075 = 7.5%).
+  function pct(fraction) {
+    return (Number(fraction || 0) * 100).toFixed(1) + "%";
   }
   function esc(text) {
     const d = document.createElement("div");
@@ -1006,6 +1007,7 @@
       $("dashEmpty").hidden = true;
       $("dashContent").hidden = false;
       if (window.HistoryView) window.HistoryView.load(year, month);
+      if (window.LedgerCards) window.LedgerCards.load();
       if (window.InsightCards) window.InsightCards.load(year, month);
     } catch (e) {
       toast("โหลดแดชบอร์ดไม่สำเร็จ: " + e.message, true);
@@ -1028,7 +1030,6 @@
     renderPillars(r.health_pillars || {});
     renderExpenseChart(r.expense_breakdown || {});
     renderPortfolio(r.investment_portfolio || {});
-    renderGoals(r.goal_progress || {});
     renderTax(r.tax_status || {});
     renderHighlights(r.highlights || []);
   }
@@ -1171,25 +1172,6 @@
           },
         },
       });
-    }
-  }
-
-  function renderGoals(g) {
-    const list = $("goalsList");
-    list.innerHTML = "";
-    if (!(g.goals || []).length) {
-      list.append(el("li", { class: "notif-empty" }, "ยังไม่มีเป้าหมายการเงิน"));
-      return;
-    }
-    for (const goal of g.goals) {
-      const pctVal = Math.min(100, Number(goal.percentage || 0));
-      list.append(el("li", { class: "goal-item" },
-        el("div", { class: "goal-head" },
-          el("span", { class: "goal-name" }, goal.name || "เป้าหมาย"),
-          el("span", { class: "goal-pct" }, pct(pctVal))),
-        el("div", { class: "goal-bar" },
-          el("div", { class: "goal-fill", style: `width:${pctVal}%` })),
-      ));
     }
   }
 
@@ -2166,7 +2148,43 @@
       e.preventDefault();
       saveHolding(result, { qty, price, bought }, submit, out);
     });
+    if (isForeignStock(result)) attachFxPreview(form, result.symbol, { qty, price }, form.querySelector(".holding-form-hint"));
     return form;
+  }
+
+  // ─── Live USD→THB preview for foreign stocks ───
+  // The rate is read when the form opens and every FX_REFRESH_MS while it stays open
+  // (the server caches Yahoo for 60 s), so the baht amount follows the market.
+  const FX_REFRESH_MS = 60000;
+
+  function attachFxPreview(form, symbol, fields, before) {
+    const line = el("p", { class: "holding-form-hint fx-preview", "aria-live": "polite" }, "กำลังดึงอัตราแลกเปลี่ยน…");
+    before.after(line);
+    let rate = null;
+    const render = () => { line.textContent = fxPreviewText(rate, fields); };
+    const refresh = async () => {
+      if (!form.isConnected) { clearInterval(timer); return; }
+      try { rate = await api("GET", "/assets/exchange-rate", { params: { symbol } }); }
+      catch (_) { if (!rate) { line.textContent = "ยังดึงอัตราแลกเปลี่ยนไม่ได้ ระบบจะแปลงเป็นบาทตอนบันทึก"; return; } }
+      render();
+    };
+    const timer = setInterval(refresh, FX_REFRESH_MS);
+    fields.qty.addEventListener("input", render);
+    fields.price.addEventListener("input", render);
+    refresh();
+  }
+
+  function fxPreviewText(rate, { qty, price }) {
+    if (!rate) return "กำลังดึงอัตราแลกเปลี่ยน…";
+    const perUnit = Number(rate.rate_to_thb);
+    const time = new Date(rate.fetched_at).toLocaleTimeString("th-TH", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    const rateText = `1 ${rate.currency} = ${perUnit.toFixed(4)} ฿ (อัปเดต ${time})`;
+    const usd = Number(price.value.replace(/,/g, ""));
+    if (!price.value.trim() || !Number.isFinite(usd) || usd <= 0) return rateText;
+    const shares = Number(qty.value.replace(/,/g, ""));
+    const each = usd * perUnit;
+    const total = Number.isFinite(shares) && shares > 0 ? ` · รวม ≈ ${thb(each * shares)}` : "";
+    return `≈ ${thb(each)} ต่อหุ้น${total} · ${rateText}`;
   }
 
   async function saveHolding(result, fields, submit, out) {

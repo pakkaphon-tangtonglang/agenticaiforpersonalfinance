@@ -12,6 +12,7 @@ from typing import Annotated, Any
 from langchain_core.tools import tool
 from langgraph.prebuilt import InjectedState
 
+from finance_ai.agents.debt_tools import list_debts_tool
 from finance_ai.agents.session_helper import get_tool_session
 from finance_ai.agents.tax_deduction_tools import (
     calculate_tax_from_records,
@@ -232,6 +233,7 @@ TAX_CROSS_TOOLS = [
 PLANNING_CROSS_TOOLS = [
     get_expense_summary_cross,
     get_income_summary_cross,
+    list_debts_tool,
 ]
 
 EXPENSE_CROSS_TOOLS = [

@@ -18,6 +18,8 @@ from sqlalchemy.orm import Session
 from finance_ai.database.crud.income_crud import IncomeCRUD
 from finance_ai.database.crud.transaction_crud import TransactionCRUD
 from finance_ai.database.models.recurring_entry import RecurringEntry
+from finance_ai.database.models.debt import Debt
+from finance_ai.tools.debt_service import apply_debt_payment
 from finance_ai.tools.expense_calculator import validate_expense_category
 from finance_ai.tools.expense_constants import INCOME_TYPES
 
@@ -85,6 +87,8 @@ def create_recurring_entry(  # pylint: disable=too-many-arguments,too-many-posit
     day_of_month: int,
     description: str,
     start_date: date,
+    *,
+    debt_id: Optional[str] = None,
 ) -> RecurringEntry:
     """Save a monthly income or expense (committed).
 
@@ -97,6 +101,7 @@ def create_recurring_entry(  # pylint: disable=too-many-arguments,too-many-posit
         day_of_month: Day it happens each month (1-31).
         description: Note shown on each transaction.
         start_date: First day it may happen.
+        debt_id: Debt each posting pays down (installments only).
 
     Returns:
         The saved entry.
@@ -120,6 +125,7 @@ def create_recurring_entry(  # pylint: disable=too-many-arguments,too-many-posit
         day_of_month=day_of_month,
         start_date=start_date,
         is_active=True,
+        debt_id=debt_id,
     )
     session.add(entry)
     session.commit()
@@ -174,16 +180,34 @@ def post_due_entries(session: Session, today: date, user_id: Optional[str] = Non
         >>> post_due_entries(session, date(2026, 11, 3), uid)
         1
     """
-    posted = 0
-    for entry in _active_entries(session, user_id):
-        for occurrence in due_dates(
-            entry.day_of_month, entry.start_date, entry.last_posted_on, today
-        ):
-            _post_occurrence(session, entry, occurrence)
-            entry.last_posted_on = occurrence
-            posted += 1
+    posted = sum(_post_entry(session, entry, today) for entry in _active_entries(session, user_id))
     session.commit()
     return posted
+
+
+def _post_entry(session: Session, entry: RecurringEntry, today: date) -> int:
+    """Post one entry's due months; an installment stops when its debt is gone."""
+    posted = 0
+    for occurrence in due_dates(entry.day_of_month, entry.start_date, entry.last_posted_on, today):
+        debt = _linked_open_debt(session, entry)
+        if entry.debt_id is not None and debt is None:
+            entry.is_active = False
+            break
+        _post_occurrence(session, entry, occurrence)
+        entry.last_posted_on = occurrence
+        posted += 1
+        if debt is not None and apply_debt_payment(session, debt, entry.amount).paid_off:
+            entry.is_active = False
+            break
+    return posted
+
+
+def _linked_open_debt(session: Session, entry: RecurringEntry) -> Optional[Debt]:
+    """The debt this installment pays down, if it is still open."""
+    if entry.debt_id is None:
+        return None
+    debt = session.get(Debt, entry.debt_id)
+    return None if debt is None or debt.is_paid_off else debt
 
 
 def list_recurring_entries(session: Session, user_id: str) -> list[RecurringEntry]:
