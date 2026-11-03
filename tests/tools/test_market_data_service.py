@@ -544,3 +544,39 @@ class TestReputableRecentNews:
 
         assert result.has_news is False
         assert result.articles == []
+
+
+class TestBuildNewsQuery:
+    """Google News finds nothing for tickers like GC=F, so queries use names."""
+
+    @pytest.mark.parametrize(
+        ("symbol", "expected"),
+        [
+            ("GC=F", "ราคาทองคำ"),
+            ("gc=f", "ราคาทองคำ"),
+            ("CL=F", "ราคาน้ำมันดิบ"),
+            ("^SET", "ดัชนี SET"),
+            ("^GSPC", "S&P 500"),
+            ("BTC-USD", "Bitcoin"),
+            ("SOL-USD", "SOL crypto"),
+            ("PTT.BK", "หุ้น PTT"),
+            ("NVDA", "NVDA stock"),
+        ],
+    )
+    def test_query_for_symbol(self, symbol: str, expected: str) -> None:
+        """Commodities, indexes and crypto by name; Thai stocks as หุ้น <code>."""
+        from finance_ai.tools.market_data_service import build_news_query  # noqa: PLC0415
+
+        assert build_news_query(symbol) == expected
+
+    def test_rss_request_uses_query(self) -> None:
+        """The feed is requested with the built query, not '<symbol> stock'."""
+        from finance_ai.tools import market_data_service  # noqa: PLC0415
+
+        response = MagicMock(text="<rss/>")
+        client = MagicMock()
+        client.__enter__.return_value.get.return_value = response
+        with patch("httpx.Client", return_value=client):
+            market_data_service._fetch_news_rss("GC=F")  # pylint: disable=protected-access
+        params = client.__enter__.return_value.get.call_args.kwargs["params"]
+        assert params["q"] == "ราคาทองคำ"

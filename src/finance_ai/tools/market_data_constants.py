@@ -89,3 +89,22 @@ NEWS_SOURCE_NAMES: frozenset[str] = frozenset(
 
 # Dividend yield is returned as a fraction (0.03 = 3%); multiply to get percent
 DIVIDEND_YIELD_TO_PERCENT: int = 100
+
+# Google News finds nothing for tickers like "GC=F stock", so news searches use
+# what people call the asset. Checked against the live feed 2026-11-03.
+NEWS_QUERY_BY_SYMBOL: dict[str, str] = {
+    "GC=F": "ราคาทองคำ",
+    "SI=F": "silver price",
+    "CL=F": "ราคาน้ำมันดิบ",
+    "BZ=F": "ราคาน้ำมันดิบ",
+    "^SET": "ดัชนี SET",
+    "^SET50": "SET50",
+    "^GSPC": "S&P 500",
+    "^IXIC": "Nasdaq",
+    "^DJI": "Dow Jones",
+}
+CRYPTO_NEWS_NAMES: dict[str, str] = {
+    "BTC": "Bitcoin",
+    "ETH": "Ethereum",
+}
+CRYPTO_SYMBOL_SUFFIX: str = "-USD"
