@@ -17,6 +17,7 @@ EXPENSE_CATEGORIES: dict[str, str] = {
     "education": "การศึกษา",
     "shopping": "ช้อปปิ้ง",
     "investment": "ลงทุน",
+    "debt": "ชำระหนี้",
     "other": "อื่นๆ",
 }
 

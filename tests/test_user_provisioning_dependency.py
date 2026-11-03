@@ -87,3 +87,46 @@ class TestProvisionRequestUser:
         TestClient(app).get("/health")
 
         assert _users(fk_db) == set()
+
+
+class TestRecurringPostingOnRequest:
+    """Opening the app posts the user's due recurring income and expenses."""
+
+    def test_due_rent_is_posted_on_request(self, fk_db: sessionmaker[Session]) -> None:
+        """A request after the due day creates this month's rent income."""
+        from datetime import date  # pylint: disable=import-outside-toplevel
+        from decimal import Decimal  # pylint: disable=import-outside-toplevel
+
+        from finance_ai.database.models.transaction import (  # pylint: disable=import-outside-toplevel
+            Transaction,
+        )
+        from finance_ai.tools.recurring_service import (  # pylint: disable=import-outside-toplevel
+            create_recurring_entry,
+        )
+
+        with fk_db() as session:
+            session.add(
+                User(id="rent-user-01", email="r@x.com", hashed_password="x", full_name="R")
+            )
+            session.commit()
+            create_recurring_entry(
+                session, "rent-user-01", "income", "rental", Decimal("8000"), 1, "ค่าเช่า",
+                date(2026, 1, 1),
+            )  # fmt: skip
+        TestClient(app).get("/dashboard", params={"user_id": "rent-user-01"})
+        with fk_db() as session:
+            assert session.query(Transaction).count() >= 1
+
+    def test_posting_failure_does_not_block_request(
+        self, fk_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A database error while posting is logged; the endpoint still answers."""
+        from sqlalchemy.exc import OperationalError  # pylint: disable=import-outside-toplevel
+
+        def _fail(*_args: Any) -> int:
+            raise OperationalError("SELECT", {}, Exception("db down"))
+
+        monkeypatch.setattr("finance_ai.main.post_due_entries", _fail)
+        response = TestClient(app).get("/dashboard", params={"user_id": "fail-user-01"})
+        assert response.status_code == 200
+        assert "fail-user-01" in _users(fk_db)

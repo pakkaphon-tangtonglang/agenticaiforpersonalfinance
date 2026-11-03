@@ -13,7 +13,7 @@
     expense: {
       food: "อาหาร", transport: "การเดินทาง", housing: "ที่พักอาศัย", entertainment: "บันเทิง",
       utilities: "สาธารณูปโภค", health: "สุขภาพ", education: "การศึกษา", shopping: "ช้อปปิ้ง",
-      investment: "ลงทุน", other: "อื่นๆ",
+      investment: "ลงทุน", debt: "ชำระหนี้", other: "อื่นๆ",
     },
     income: {
       salary: "เงินเดือน", freelance: "ฟรีแลนซ์", bonus: "โบนัส", investment: "รายได้จากการลงทุน",

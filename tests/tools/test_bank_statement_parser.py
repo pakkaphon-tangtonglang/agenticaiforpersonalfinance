@@ -67,6 +67,18 @@ class TestClassifyExpenseCategory:
         """Unknown description returns 'other'."""
         assert classify_expense_category("random text xyz") == "other"
 
+    @pytest.mark.parametrize(
+        "description",
+        ["ชำระบัตรเครดิต KTC", "ผ่อนรถ งวดที่ 12", "Credit card payment", "ชำระสินเชื่อ กยศ."],
+    )
+    def test_debt_payments(self, description: str) -> None:
+        """Credit card, car loan and student loan payments are debt."""
+        assert classify_expense_category(description) == "debt"
+
+    def test_mortgage_stays_housing(self) -> None:
+        """A home installment is still housing, not debt."""
+        assert classify_expense_category("ผ่อนบ้าน ต.ค.") == "housing"
+
     def test_place_name_with_baan_is_not_housing(self) -> None:
         """A shop in a village called บ้าน... is not a housing cost (real statement row)."""
         assert classify_expense_category("จ่ายบิล CJ 0123 ตลาดนัดตัวอย่าง บ้านชากยา") == "food"

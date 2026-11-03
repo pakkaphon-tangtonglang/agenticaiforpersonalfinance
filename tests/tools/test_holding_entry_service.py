@@ -95,13 +95,52 @@ class TestAddHoldingFromForm:
         with pytest.raises(HoldingEntryError, match="ราคาซื้อ"):
             _add(test_session, sample_user, "10", price, "35")
 
-    def test_foreign_symbol_rejected(self, test_session: Session, sample_user: User) -> None:
-        """The baht portfolio holds Thai stocks only."""
-        with pytest.raises(HoldingEntryError, match="หุ้นไทย"):
+    def test_foreign_stock_price_converted_to_baht(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """AAPL bought at 200 USD is stored in baht at today's rate."""
+        foreign = "finance_ai.tools.foreign_stock_service"
+        prices = {"AAPL": Decimal("210"), "USDTHB=X": Decimal("35")}
+        with (
+            patch(f"{foreign}.fetch_current_price", side_effect=prices.get),
+            patch(f"{foreign}.fetch_currency", return_value="USD"),
+        ):
+            entry = add_holding_from_form(
+                test_session,
+                sample_user.id,
+                HoldingForm(symbol="aapl", quantity="2", price_per_unit="200"),
+            )
+        assert entry.symbol == "AAPL"
+        assert entry.total_cost == "14000.00"
+        assert (entry.currency, entry.price_in_currency, entry.exchange_rate) == (
+            "USD",
+            "200",
+            "35",
+        )
+        assert entry.current_value == "14700.00"
+        holding = test_session.query(InvestmentHolding).one()
+        assert holding.asset_type == "foreign_stock"
+
+    def test_foreign_stock_without_rate(self, test_session: Session, sample_user: User) -> None:
+        """No exchange rate → a Thai message instead of a wrong baht price."""
+        with (
+            patch("finance_ai.tools.foreign_stock_service.fetch_current_price", return_value=None),
+            patch("finance_ai.tools.foreign_stock_service.fetch_currency", return_value="USD"),
+            pytest.raises(HoldingEntryError, match="อัตราแลกเปลี่ยน"),
+        ):
             add_holding_from_form(
                 test_session,
                 sample_user.id,
                 HoldingForm(symbol="AAPL", quantity="1", price_per_unit="200"),
+            )
+
+    def test_crypto_rejected(self, test_session: Session, sample_user: User) -> None:
+        """Crypto is not a stock; the message points to the watchlist."""
+        with pytest.raises(HoldingEntryError, match="Watchlist"):
+            add_holding_from_form(
+                test_session,
+                sample_user.id,
+                HoldingForm(symbol="BTC-USD", quantity="1", price_per_unit="100"),
             )
 
     def test_tiny_lot_has_no_percent(self, test_session: Session, sample_user: User) -> None:

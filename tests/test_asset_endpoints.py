@@ -700,17 +700,20 @@ class TestAddHoldingEndpoint:
         listed = client.get("/assets/holdings", params={"user_id": user_id}).json()
         assert listed[0]["gain_loss_percentage"] is not None
 
-    def test_foreign_stock_returns_422(
-        self, client: TestClient, temp_db: sessionmaker[Session]
-    ) -> None:
-        """Only Thai stocks can be added from the asset page."""
+    def test_crypto_returns_422(self, client: TestClient, temp_db: sessionmaker[Session]) -> None:
+        """Crypto cannot be added to the portfolio from the asset page."""
         user_id = _first_user_id(temp_db)
         response = client.post(
             "/assets/holdings",
-            json={"user_id": user_id, "symbol": "AAPL", "quantity": "1", "price_per_unit": "200"},
+            json={
+                "user_id": user_id,
+                "symbol": "BTC-USD",
+                "quantity": "1",
+                "price_per_unit": "200",
+            },
         )
         assert response.status_code == 422
-        assert "หุ้นไทย" in response.json()["detail"]
+        assert "Watchlist" in response.json()["detail"]
 
     def test_refresh_updates_gain(
         self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch

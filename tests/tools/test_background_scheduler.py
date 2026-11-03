@@ -255,3 +255,29 @@ class TestExecuteJob:
         ):
             _execute_job("gone", MagicMock)
         fetch.assert_not_called()
+
+
+class TestRecurringPostingJob:
+    """The daily job that posts recurring income and expenses."""
+
+    def test_registered_on_start(self) -> None:
+        """start_scheduler adds the daily recurring job."""
+        from finance_ai.tools.background_scheduler import (  # pylint: disable=import-outside-toplevel
+            RECURRING_POSTING_JOB_ID,
+            get_scheduler,
+            register_recurring_posting,
+        )
+
+        register_recurring_posting(MagicMock())
+        assert get_scheduler().get_job(RECURRING_POSTING_JOB_ID) is not None
+
+    def test_job_posts_for_everyone(self) -> None:
+        """The job posts with today's Bangkok date for all users."""
+        from finance_ai.tools.background_scheduler import (  # pylint: disable=import-outside-toplevel
+            post_recurring_entries_job,
+        )
+
+        factory = MagicMock()
+        with patch("finance_ai.tools.recurring_service.post_due_entries", return_value=2) as post:
+            assert post_recurring_entries_job(factory) == 2
+        assert post.call_count == 1

@@ -295,7 +295,7 @@ def refresh_portfolio_prices(
 
 
 def _latest_prices(holdings: list[InvestmentHolding]) -> dict[str, Decimal | None]:
-    """Latest price per symbol: SEC NAV for funds, market prices for stocks.
+    """Latest price per symbol: SEC NAV for funds, market prices for stocks (foreign in THB).
 
     Args:
         holdings: The user's holdings.
@@ -310,10 +310,17 @@ def _latest_prices(holdings: list[InvestmentHolding]) -> dict[str, Decimal | Non
         fetch_multiple_prices,
     )
 
+    from finance_ai.tools.foreign_stock_service import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+        FOREIGN_STOCK,
+        latest_price_in_thb,
+    )
+
     funds = {h.symbol for h in holdings if h.asset_type == "mutual_fund"}
-    stocks = [h.symbol for h in holdings if h.symbol not in funds]
+    foreign = {h.symbol for h in holdings if h.asset_type == FOREIGN_STOCK}
+    stocks = [h.symbol for h in holdings if h.symbol not in funds | foreign]
     prices: dict[str, Decimal | None] = dict(fetch_multiple_prices(stocks)) if stocks else {}
     prices.update({symbol: fetch_latest_nav(symbol) for symbol in funds})
+    prices.update({symbol: latest_price_in_thb(symbol) for symbol in foreign})
     return prices
 
 

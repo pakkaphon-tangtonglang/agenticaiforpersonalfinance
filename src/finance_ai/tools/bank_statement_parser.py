@@ -79,6 +79,17 @@ CATEGORY_KEYWORDS: dict[str, list[str]] = {
         "apartment",
         "housing",
     ],
+    # After housing, so "ผ่อนบ้าน" (mortgage) stays housing.
+    "debt": [
+        "บัตรเครดิต",
+        "ชำระหนี้",
+        "สินเชื่อ",
+        "ผ่อนรถ",
+        "กยศ",
+        "credit card",
+        "loan",
+        "ktc",
+    ],
     "health": [
         "โรงพยาบาล",
         "ยา",
@@ -350,6 +361,9 @@ CSV_CATEGORY_MAP: dict[str, str] = {
     "transport": "transport",
     "transportation": "transport",
     "shopping": "shopping",
+    "debt": "debt",
+    "loan": "debt",
+    "credit card": "debt",
     "entertainment": "entertainment",
     "education": "education",
 }
@@ -569,7 +583,7 @@ _LLM_PARSE_PROMPT: str = (
     '- "description": คำอธิบายรายการ\n'
     '- "amount": จำนวนเงิน (ตัวเลข, บวก=รายจ่าย, ลบ=รายรับ)\n'
     '- "category": หมวดหมู่ (food/transport/health/utilities/'
-    "shopping/entertainment/education/other)\n"
+    "shopping/entertainment/education/debt/other)\n"
     '- "type": "expense" หรือ "income"\n\n'
     "กฎ:\n"
     "- ถ้าเป็นรายรับ/เงินเดือน/โอนเข้า → type=income, amount เป็นค่าบวก\n"

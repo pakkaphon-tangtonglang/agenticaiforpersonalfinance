@@ -4,6 +4,7 @@ from collections.abc import Callable
 from datetime import date
 from decimal import Decimal
 from typing import Any
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy.orm import Session
@@ -157,14 +158,48 @@ class TestAddPortfolioHolding:
         )
         assert result["tax_deduction_hint"] == {"deduction_type": "rmf", "amount": "12500.00"}
 
-    def test_foreign_stock_rejected(
+    def test_foreign_stock_added_in_baht(
         self, sample_user: User, db_session_factory: Callable[[], Session]
     ) -> None:
-        """Only Thai (.BK) stocks fit the portfolio."""
+        """AAPL at 200 USD is stored in baht at today's rate, and watched for news."""
+        foreign = "finance_ai.tools.foreign_stock_service"
+        with (
+            patch(f"{foreign}.fetch_currency", return_value="USD"),
+            patch(f"{foreign}.fetch_current_price", return_value=Decimal("35")),
+        ):
+            result = _add(
+                sample_user, db_session_factory, symbol="AAPL", quantity="2", price_per_unit="200"
+            )
+        assert result["status"] == "added"
+        assert result["total_cost"] == "14000.00"
+        assert (result["currency"], result["price_in_currency"]) == ("USD", "200.00")
+        assert result["watchlist_hint"]["symbol"] == "AAPL"
+        holdings = _invoke(sample_user, db_session_factory)["holdings"]
+        assert holdings[0]["asset_type"] == "หุ้นต่างประเทศ"
+
+    def test_foreign_stock_without_rate(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """No exchange rate → error, nothing saved."""
+        foreign = "finance_ai.tools.foreign_stock_service"
+        with (
+            patch(f"{foreign}.fetch_currency", return_value="USD"),
+            patch(f"{foreign}.fetch_current_price", return_value=None),
+        ):
+            result = _add(
+                sample_user, db_session_factory, symbol="AAPL", quantity="1", price_per_unit="200"
+            )
+        assert "USD" in result["error"]
+        assert _invoke(sample_user, db_session_factory)["holding_count"] == 0
+
+    def test_crypto_rejected(
+        self, sample_user: User, db_session_factory: Callable[[], Session]
+    ) -> None:
+        """Crypto cannot go in the portfolio; the watchlist is suggested."""
         result = _add(
-            sample_user, db_session_factory, symbol="AAPL", quantity="1", price_per_unit="200"
+            sample_user, db_session_factory, symbol="BTC-USD", quantity="1", price_per_unit="200"
         )
-        assert ".BK" in result["error"]
+        assert "watchlist" in result["error"]
 
     def test_bad_quantity_rejected(
         self, sample_user: User, db_session_factory: Callable[[], Session]

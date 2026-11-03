@@ -69,7 +69,7 @@ class TestDeductionLimits:
         assert DEDUCTION_LIMITS["ssf"] == Decimal("200000")
 
     def test_all_deduction_types_present(self) -> None:
-        """Test that all 11 deduction types are defined."""
+        """Test that all 12 deduction types are defined."""
         expected_types = {
             "personal_allowance",
             "spouse_allowance",
@@ -81,9 +81,15 @@ class TestDeductionLimits:
             "provident_fund",
             "rmf",
             "ssf",
+            "thai_esg",
             "mortgage_interest",
         }
         assert set(DEDUCTION_LIMITS.keys()) == expected_types
+
+    def test_thai_esg_limit(self) -> None:
+        """ThaiESG: 30% of income, at most 300,000 (tax years 2567-2569)."""
+        assert DEDUCTION_LIMITS["thai_esg"] == Decimal("300000")
+        assert PERCENTAGE_CAPPED_DEDUCTIONS["thai_esg"] == Decimal("0.30")
 
     def test_percentage_capped_deductions(self) -> None:
         """Test that RMF, SSF, and PF have percentage caps."""

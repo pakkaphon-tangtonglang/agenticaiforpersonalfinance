@@ -10,6 +10,7 @@ from decimal import Decimal
 ASSET_TYPES: dict[str, str] = {
     "stock": "หุ้น",
     "mutual_fund": "กองทุนรวม",
+    "foreign_stock": "หุ้นต่างประเทศ",
 }
 
 # Valid asset type keys for validation
