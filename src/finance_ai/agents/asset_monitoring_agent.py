@@ -18,11 +18,10 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import SystemMessage
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
-from langgraph.prebuilt import ToolNode
 
 from finance_ai.agents.asset_monitoring_tools import manage_watchlist
 from finance_ai.agents.fund_search_tools import search_thai_funds
-from finance_ai.agents.graph_utils import should_continue
+from finance_ai.agents.graph_utils import build_tool_node, should_continue
 from finance_ai.agents.market_data_tools import MARKET_DATA_TOOLS
 from finance_ai.agents.portfolio_tools import add_portfolio_holding, get_portfolio_holdings
 from finance_ai.agents.prompts import ASSET_MONITORING_AGENT_SYSTEM_PROMPT, get_date_context
@@ -102,7 +101,7 @@ def build_asset_monitoring_agent_graph(
 
     graph = StateGraph(AssetMonitoringAgentState)
     graph.add_node("agent", create_llm_node(chat_model))
-    graph.add_node("tools", ToolNode(ASSET_MONITORING_TOOLS))
+    graph.add_node("tools", build_tool_node(ASSET_MONITORING_TOOLS))
     graph.set_entry_point("agent")
     graph.add_conditional_edges(
         "agent",

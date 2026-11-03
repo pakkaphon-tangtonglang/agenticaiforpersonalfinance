@@ -10,12 +10,14 @@ from finance_ai.database.crud.financial_goal_crud import FinancialGoalCRUD
 from finance_ai.database.models.financial_goal import FinancialGoal
 from finance_ai.database.models.user import User
 from finance_ai.tools.planning_service import (
+    add_to_goal_progress,
     convert_goal_to_record,
     create_goal,
     delete_goal,
     get_active_goals,
     get_user_goals,
     mark_goal_completed,
+    resolve_goal_amount,
     summarize_goals_for_user,
     update_goal_progress,
 )
@@ -276,6 +278,54 @@ class TestUpdateGoalProgress:
         """Raises ValueError for nonexistent goal."""
         with pytest.raises(ValueError, match="Goal not found"):
             update_goal_progress(test_session, "nonexistent-id", Decimal("50000"))
+
+
+class TestAddToGoalProgress:
+    """Tests for add_to_goal_progress (deposits add to the saved amount)."""
+
+    def test_adds_to_existing_amount(self, test_session: Session, sample_user: User) -> None:
+        """96,000 + 10,000 = 106,000 (the saved amount is not overwritten)."""
+        goal = create_goal(
+            test_session, sample_user.id, "emergency_fund", "ฉุกเฉิน", Decimal("180000")
+        )
+        update_goal_progress(test_session, goal.id, Decimal("96000"))
+        updated = add_to_goal_progress(test_session, goal.id, Decimal("10000"))
+        assert updated.current_amount == Decimal("106000")
+
+    def test_completes_when_deposit_reaches_target(
+        self, test_session: Session, sample_user: User
+    ) -> None:
+        """A deposit that reaches the target completes the goal."""
+        goal = create_goal(test_session, sample_user.id, "savings", "Test", Decimal("100000"))
+        update_goal_progress(test_session, goal.id, Decimal("90000"))
+        assert add_to_goal_progress(test_session, goal.id, Decimal("10000")).is_completed is True
+
+    @pytest.mark.parametrize("amount", [Decimal("0"), Decimal("-500")])
+    def test_non_positive_deposit_raises(
+        self, test_session: Session, sample_user: User, amount: Decimal
+    ) -> None:
+        """A deposit must be positive."""
+        goal = create_goal(test_session, sample_user.id, "savings", "Test", Decimal("100000"))
+        with pytest.raises(ValueError, match="must be positive"):
+            add_to_goal_progress(test_session, goal.id, amount)
+
+
+class TestResolveGoalAmount:
+    """Tests for resolve_goal_amount (set a total, or add a deposit)."""
+
+    def test_total_only(self) -> None:
+        """A total sets the saved amount."""
+        assert resolve_goal_amount("50,000", "") == ("set", Decimal("50000"))
+
+    def test_deposit_only(self) -> None:
+        """A deposit adds to the saved amount."""
+        assert resolve_goal_amount("", "10000") == ("add", Decimal("10000"))
+
+    @pytest.mark.parametrize(("total", "deposit"), [("", ""), ("1", "2")])
+    def test_exactly_one_required(self, total: str, deposit: str) -> None:
+        """Neither or both is an error with a clear message."""
+        with pytest.raises(ValueError, match="exactly one"):
+            resolve_goal_amount(total, deposit)
 
 
 class TestMarkGoalCompleted:

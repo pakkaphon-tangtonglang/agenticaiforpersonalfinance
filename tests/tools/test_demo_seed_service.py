@@ -88,6 +88,38 @@ class TestSeedDemoData:
             for income in incomes
         )
 
+    def test_salary_is_also_an_income_transaction(self, test_session: Session) -> None:
+        """Each monthly salary is a dated income transaction linked to its tax record.
+
+        Reports, the dashboard and the health score read monthly income from
+        transactions; without these rows they showed 0 income for the demo user.
+        """
+        seed_demo_data(test_session, as_of=AS_OF)
+        income_transactions = test_session.scalars(
+            select(Transaction).where(
+                Transaction.user_id == DEMO_USER_ID, Transaction.transaction_type == "income"
+            )
+        ).all()
+        months = {
+            (txn.transaction_date.year, txn.transaction_date.month) for txn in income_transactions
+        }
+        assert months == {(2025, 12), (2026, 1), (2026, 2)}
+        assert all(txn.amount == Decimal("50000.00") for txn in income_transactions)
+        linked = test_session.scalars(
+            select(Income.transaction_id).where(Income.user_id == DEMO_USER_ID)
+        ).all()
+        assert set(linked) == {txn.id for txn in income_transactions}
+
+    def test_monthly_income_summary_sees_salary(self, test_session: Session) -> None:
+        """The monthly income summary used by reports returns the salary."""
+        from finance_ai.tools.cross_agent_service import (  # pylint: disable=import-outside-toplevel
+            get_monthly_income_summary,
+        )
+
+        seed_demo_data(test_session, as_of=AS_OF)
+        summary = get_monthly_income_summary(test_session, DEMO_USER_ID, 2026, 1)
+        assert Decimal(summary["total_income"]) == Decimal("50000.00")
+
     def test_creates_rmf_and_ssf_deductions(self, test_session: Session) -> None:
         """Deductions include RMF and SSF for tax optimization demo."""
         seed_demo_data(test_session, as_of=AS_OF)

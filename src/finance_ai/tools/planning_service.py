@@ -185,6 +185,65 @@ def update_goal_progress(
     return goal
 
 
+def add_to_goal_progress(
+    session: Session,
+    goal_id: str,
+    added_amount: Decimal,
+) -> FinancialGoal:
+    """Add a deposit to a goal's saved amount (instead of replacing it).
+
+    Args:
+        session: Database session.
+        goal_id: UUID of the goal.
+        added_amount: Amount deposited, in THB (must be positive).
+
+    Returns:
+        Updated FinancialGoal instance.
+
+    Raises:
+        ValueError: If the deposit is not positive or the goal is not found.
+
+    Example:
+        >>> goal = add_to_goal_progress(session, "goal-1", Decimal("10000"))
+    """
+    if added_amount <= Decimal("0"):
+        raise ValueError(f"Deposit must be positive. Received: {added_amount} THB")
+    goal = FinancialGoalCRUD().get_by_id(session, goal_id)
+    if goal is None:
+        raise ValueError(f"Goal not found: {goal_id}")
+    return update_goal_progress(session, goal_id, goal.current_amount + added_amount)
+
+
+def resolve_goal_amount(current_amount: str, added_amount: str) -> tuple[str, Decimal]:
+    """Decide whether a goal update sets a new total or adds a deposit.
+
+    Args:
+        current_amount: New total saved ("มีเงินออม 120,000"), or "".
+        added_amount: Amount deposited ("เพิ่มอีก 10,000"), or "".
+
+    Returns:
+        ("set", total) or ("add", deposit).
+
+    Raises:
+        ValueError: Unless exactly one of the two is given, or if it is not a number.
+
+    Example:
+        >>> resolve_goal_amount("", "10,000")
+        ('add', Decimal('10000'))
+    """
+    total, deposit = current_amount.strip(), added_amount.strip()
+    if bool(total) == bool(deposit):
+        raise ValueError(
+            "Give exactly one of current_amount (new total saved) or added_amount (deposit). "
+            f"Received: current_amount={current_amount!r}, added_amount={added_amount!r}"
+        )
+    mode, raw = ("set", total) if total else ("add", deposit)
+    try:
+        return mode, Decimal(raw.replace(",", ""))
+    except ArithmeticError as error:
+        raise ValueError(f"Amount must be a number. Received: {raw!r}") from error
+
+
 def mark_goal_completed(
     session: Session,
     goal_id: str,

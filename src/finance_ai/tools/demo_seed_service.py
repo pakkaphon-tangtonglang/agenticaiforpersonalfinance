@@ -146,18 +146,35 @@ def _create_demo_user(session: Session) -> User:
 
 
 def _create_incomes(session: Session, as_of: date) -> None:
-    """Create monthly salary records for the last 3 months."""
+    """Create monthly salary for the last 3 months.
+
+    Like the add_income tool, each salary is a dated income transaction
+    (read by reports, dashboard and health score) plus a linked Income
+    row (read by the tax agent).
+    """
     for month_start in _recent_month_starts(as_of, 3):
+        description = f"เงินเดือน {month_start:%Y-%m}"
+        transaction = Transaction(
+            user_id=DEMO_USER_ID,
+            transaction_type="income",
+            category="salary",
+            description=description,
+            amount=_SALARY_AMOUNT,
+            transaction_date=month_start,
+        )
+        session.add(transaction)
+        session.flush()
         session.add(
             Income(
                 user_id=DEMO_USER_ID,
                 income_type="salary",
-                description=f"เงินเดือน {month_start:%Y-%m}",
+                description=description,
                 amount=_SALARY_AMOUNT,
                 tax_year=month_start.year,
                 pay_period="monthly",
                 employer_name="บริษัท ไทยซอฟต์แวร์ จำกัด",
                 withholding_tax=_SALARY_WITHHOLDING,
+                transaction_id=transaction.id,
             )
         )
 
