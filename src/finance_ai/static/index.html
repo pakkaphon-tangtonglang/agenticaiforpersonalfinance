@@ -33,6 +33,7 @@
 <script src="guru.js?v=32" defer></script>
 <script src="ask_about.js?v=32" defer></script>
 <script src="history.js?v=32" defer></script>
+<script src="ledgers.js?v=32" defer></script>
 <script src="insights.js?v=32" defer></script>
 </head>
 <body>
@@ -396,9 +397,21 @@
             </div>
           </div>
 
-          <div class="goals-card">
-            <h3 class="card-title">เป้าหมายการเงิน</h3>
-            <ul class="goals-list" id="goalsList"></ul>
+          <div class="goals-card" id="goalsCard">
+            <div class="history-head">
+              <h3 class="card-title">เป้าหมายการเงิน <span class="badge-count" id="goalCount">0</span></h3>
+              <button class="btn history-add" id="goalAdd" type="button">+ เพิ่มเป้าหมาย</button>
+            </div>
+            <ul class="goals-list ledger-list" id="goalsList" aria-live="polite"></ul>
+          </div>
+
+          <div class="goals-card" id="debtsCard">
+            <div class="history-head">
+              <h3 class="card-title">หนี้สิน <span class="badge-count" id="debtCount">0</span></h3>
+              <button class="btn history-add" id="debtAdd" type="button">+ เพิ่มหนี้</button>
+            </div>
+            <p class="history-totals" id="debtTotals"></p>
+            <ul class="goals-list ledger-list" id="debtsList" aria-live="polite"></ul>
           </div>
 
           <div class="tax-card">
@@ -580,6 +593,80 @@
     <div class="modal-actions">
       <button class="btn btn-ghost" type="button" id="historyCancel">ยกเลิก</button>
       <button class="btn" type="submit" id="historySave">บันทึก</button>
+    </div>
+  </form>
+</div>
+
+<div class="modal-overlay" id="goalModal" hidden>
+  <form class="modal history-form" id="goalForm" role="dialog" aria-modal="true" aria-labelledby="goalModalTitle" novalidate>
+    <div class="modal-head">
+      <h2 class="modal-title" id="goalModalTitle">เพิ่มเป้าหมาย</h2>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span class="field-label">ชื่อเป้าหมาย</span>
+        <input class="field-input" type="text" id="goalName" maxlength="255" required />
+      </label>
+      <label class="field">
+        <span class="field-label">ประเภท</span>
+        <select class="field-select" id="goalType"><option value="savings">ออมเงิน</option><option value="emergency_fund">เงินสำรองฉุกเฉิน</option><option value="retirement">เกษียณอายุ</option><option value="home_purchase">ซื้อบ้าน</option><option value="education">การศึกษา</option><option value="investment">การลงทุน</option><option value="debt_payoff">ปลดหนี้</option><option value="travel">ท่องเที่ยว</option></select>
+      </label>
+      <label class="field">
+        <span class="field-label">เป้าหมาย (บาท)</span>
+        <input class="field-input" type="number" id="goalTarget" min="0.01" step="0.01" inputmode="decimal" required />
+      </label>
+      <label class="field">
+        <span class="field-label">เก็บได้แล้ว (บาท)</span>
+        <input class="field-input" type="number" id="goalCurrent" min="0" step="0.01" inputmode="decimal" required />
+      </label>
+      <label class="field">
+        <span class="field-label">อยากได้ภายในวันที่ (ไม่บังคับ)</span>
+        <input class="field-input" type="date" id="goalDate" />
+      </label>
+      <p class="history-form-error" id="goalFormError" role="alert" hidden></p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="button" id="goalCancel">ยกเลิก</button>
+      <button class="btn" type="submit">บันทึก</button>
+    </div>
+  </form>
+</div>
+
+<div class="modal-overlay" id="debtModal" hidden>
+  <form class="modal history-form" id="debtForm" role="dialog" aria-modal="true" aria-labelledby="debtModalTitle" novalidate>
+    <div class="modal-head">
+      <h2 class="modal-title" id="debtModalTitle">เพิ่มหนี้</h2>
+    </div>
+    <div class="modal-body">
+      <label class="field">
+        <span class="field-label">เจ้าหนี้</span>
+        <input class="field-input" type="text" id="debtCreditor" maxlength="255" placeholder="เช่น เพื่อน, ธนาคารกสิกร, KTC" required />
+      </label>
+      <label class="field">
+        <span class="field-label">ประเภท</span>
+        <select class="field-select" id="debtType"><option value="personal">ยืมคนรู้จัก</option><option value="credit_card">บัตรเครดิต</option><option value="personal_loan">สินเชื่อส่วนบุคคล</option><option value="home_loan">สินเชื่อบ้าน</option><option value="car_loan">สินเชื่อรถ</option><option value="student_loan">กยศ.</option><option value="other">หนี้อื่นๆ</option></select>
+      </label>
+      <label class="field">
+        <span class="field-label">ยอดที่ยืม/กู้มาทั้งหมด (บาท)</span>
+        <input class="field-input" type="number" id="debtOriginal" min="0.01" step="0.01" inputmode="decimal" required />
+      </label>
+      <label class="field">
+        <span class="field-label">ยอดที่ยังเหลือ (บาท)</span>
+        <input class="field-input" type="number" id="debtRemaining" min="0" step="0.01" inputmode="decimal" required />
+      </label>
+      <label class="field">
+        <span class="field-label">ดอกเบี้ยต่อปี % (ไม่บังคับ)</span>
+        <input class="field-input" type="number" id="debtRate" min="0" step="0.01" inputmode="decimal" />
+      </label>
+      <label class="field">
+        <span class="field-label">ผ่อนต่อเดือน (บาท, ไม่บังคับ)</span>
+        <input class="field-input" type="number" id="debtMonthly" min="0" step="0.01" inputmode="decimal" />
+      </label>
+      <p class="history-form-error" id="debtFormError" role="alert" hidden></p>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" type="button" id="debtCancel">ยกเลิก</button>
+      <button class="btn" type="submit">บันทึก</button>
     </div>
   </form>
 </div>

@@ -18,6 +18,7 @@ from finance_ai.agents.expense_tools import (
     query_expenses_by_category,
     summarize_monthly_expenses,
 )
+from finance_ai.agents.debt_tools import DEBT_TOOLS
 from finance_ai.agents.graph_utils import build_tool_node, should_continue
 from finance_ai.agents.prompts import EXPENSE_AGENT_SYSTEM_PROMPT, get_date_context
 from finance_ai.agents.rag_tool import search_finance_knowledge
@@ -34,6 +35,7 @@ EXPENSE_TOOLS = [
     query_expenses_by_category,
     search_finance_knowledge,
     *RECURRING_TOOLS,
+    *DEBT_TOOLS,
     *EXPENSE_CROSS_TOOLS,
 ]
 

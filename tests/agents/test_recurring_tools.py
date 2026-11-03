@@ -110,3 +110,24 @@ def test_day_already_passed_this_month_is_posted(
     """Rent on the 1st, entered later in the month: this month's rent is recorded."""
     result = _add_rent(sample_user, db_session_factory, 1)
     assert result["posted_now"] == 1
+
+
+def test_installment_linked_to_debt(
+    sample_user: User, db_session_factory: Callable[[], Session]
+) -> None:
+    """A monthly installment naming a recorded creditor pays that debt down."""
+    from finance_ai.agents.debt_tools import list_debts_tool, record_debt_tool
+
+    record_debt_tool.invoke(
+        _injected(sample_user, db_session_factory, creditor="ธนาคารกสิกร", amount="500000")
+    )
+    result = add_recurring_entry.invoke(
+        _injected(
+            sample_user, db_session_factory, entry_type="expense", amount="12000",
+            category="debt", day_of_month="1", description="ผ่อนสินเชื่อ",
+            debt_creditor="กสิกร",
+        )  # fmt: skip
+    )
+    assert result["linked_debt"] == "ธนาคารกสิกร"
+    debts = list_debts_tool.invoke(_injected(sample_user, db_session_factory))
+    assert debts["total_remaining"] == "488000.00"

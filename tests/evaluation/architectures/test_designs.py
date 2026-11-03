@@ -168,10 +168,10 @@ class TestPeerToPeer:
 class TestSingleAgent:
     """One agent with every tool."""
 
-    def test_has_34_unique_tools(self) -> None:
+    def test_has_38_unique_tools(self) -> None:
         """All specialist tools, each once."""
         names = [tool.name for tool in all_tools()]
-        assert len(names) == len(set(names)) == 34
+        assert len(names) == len(set(names)) == 38
 
     def test_prompt_covers_every_domain_once(self) -> None:
         """Every section appears and the shared rules appear once."""

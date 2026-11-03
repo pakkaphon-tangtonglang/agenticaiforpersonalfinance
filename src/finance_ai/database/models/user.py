@@ -12,6 +12,7 @@ if TYPE_CHECKING:
     from finance_ai.database.models.asset_notification import AssetNotification
     from finance_ai.database.models.asset_schedule import AssetSchedule
     from finance_ai.database.models.conversation import Conversation
+    from finance_ai.database.models.debt import Debt
     from finance_ai.database.models.deduction import Deduction
     from finance_ai.database.models.financial_goal import FinancialGoal
     from finance_ai.database.models.income import Income
@@ -74,3 +75,4 @@ class User(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     recurring_entries: Mapped[list["RecurringEntry"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    debts: Mapped[list["Debt"]] = relationship(back_populates="user", cascade="all, delete-orphan")

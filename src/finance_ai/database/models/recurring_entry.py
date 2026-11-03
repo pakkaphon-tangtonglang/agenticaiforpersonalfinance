@@ -37,5 +37,9 @@ class RecurringEntry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     start_date: Mapped[date] = mapped_column(Date, nullable=False)
     last_posted_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # An installment that pays down a debt; the entry stops once the debt is paid off.
+    debt_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("debts.id"), nullable=True
+    )
 
     user: Mapped["User"] = relationship(back_populates="recurring_entries")

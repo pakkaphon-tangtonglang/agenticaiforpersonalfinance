@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
+from finance_ai.tools import foreign_stock_service
 from finance_ai.tools.foreign_stock_service import (
     is_foreign_stock_symbol,
     latest_price_in_thb,
@@ -92,3 +93,30 @@ class TestLatestPriceInThb:
             patch(f"{SERVICE}.fetch_current_price", side_effect=prices.get),
         ):
             assert latest_price_in_thb("NVDA") is None
+
+
+class TestExchangeRateToThb:
+    """exchange_rate_to_thb: the live rate for one foreign ticker."""
+
+    def test_rate_for_usd_stock(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """NVDA trades in USD, so the USDTHB=X price is the rate."""
+        asked: list[str] = []
+
+        def fake_price(symbol: str) -> Decimal:
+            asked.append(symbol)
+            return Decimal("33.5")
+
+        monkeypatch.setattr(foreign_stock_service, "fetch_current_price", fake_price)
+        monkeypatch.setattr(foreign_stock_service, "fetch_currency", lambda symbol: "USD")
+
+        rate = foreign_stock_service.exchange_rate_to_thb("NVDA")
+
+        assert (rate.currency, rate.exchange_rate, asked) == ("USD", Decimal("33.5"), ["USDTHB=X"])
+
+    def test_no_rate_raises(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """No rate from Yahoo is a clear error."""
+        monkeypatch.setattr(foreign_stock_service, "fetch_current_price", lambda symbol: None)
+        monkeypatch.setattr(foreign_stock_service, "fetch_currency", lambda symbol: "USD")
+
+        with pytest.raises(ValueError, match="exchange rate"):
+            foreign_stock_service.exchange_rate_to_thb("NVDA")
