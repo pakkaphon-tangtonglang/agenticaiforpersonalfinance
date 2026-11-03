@@ -1,0 +1,376 @@
+# Architecture comparison study — 60 tasks (4.11 study A).
+# Runs against the seeded demo user (tools/demo_seed_service.py) and the fixed
+# market snapshot (evaluation/architectures/market_snapshot.py): PTT.BK = 33.25 THB,
+# AOT.BK news headline mentions "ผู้โดยสาร".
+# answer_checks: "|" separates accepted alternatives; commas are ignored when matching.
+# Tax tasks avoid social security, SSF and two-parent allowances (known calculator issues,
+# docs/all_known_problem.md 4.11), so this study measures routing, not those bugs.
+name: architecture_study
+version: "1.0"
+tasks:
+  # ===================== Single topic: tax (7) =====================
+  - task_id: tax_01
+    query: "เงินเดือน 50,000 บาท ไม่มีค่าลดหย่อนอื่นนอกจากส่วนตัว คำนวณภาษีปีนี้ให้หน่อย"
+    category: single
+    acceptable_agents: [tax]
+    required_tools: [[calculate_thai_tax]]
+    answer_checks: ["21,500|21500"]
+  - task_id: tax_02
+    query: "รายได้ปีละ 1,200,000 บาท มีลูก 1 คน ต้องเสียภาษีเท่าไร"
+    category: single
+    acceptable_agents: [tax]
+    required_tools: [[calculate_thai_tax]]
+    answer_checks: ["117,500|117500"]
+  - task_id: tax_03
+    query: "เงินเดือน 80,000 บาท จ่ายเบี้ยประกันชีวิตปีละ 50,000 บาท ภาษีเท่าไร"
+    category: single
+    acceptable_agents: [tax]
+    required_tools: [[calculate_thai_tax]]
+    answer_checks: ["65,000|65000"]
+  - task_id: tax_04
+    query: "รายได้ทั้งปี 720,000 บาท ซื้อ RMF 100,000 บาท ต้องจ่ายภาษีเท่าไร"
+    category: single
+    acceptable_agents: [tax]
+    required_tools: [[calculate_thai_tax]]
+    answer_checks: ["23,500|23500"]
+  - task_id: tax_05
+    query: "เงินเดือน 35,000 บาท ต้องเสียภาษีไหม ถ้าเสียเสียเท่าไร"
+    category: single
+    acceptable_agents: [tax]
+    required_tools: [[calculate_thai_tax]]
+    answer_checks: ["5,500|5500"]
+  - task_id: tax_06
+    query: "รายได้ปีละ 2 ล้านบาท เลี้ยงดูแม่ 1 คน จ่ายประกันสุขภาพตัวเอง 20,000 บาท ภาษีเท่าไร"
+    category: single
+    acceptable_agents: [tax]
+    required_tools: [[calculate_thai_tax]]
+    answer_checks: ["312,500|312500"]
+  - task_id: tax_07
+    query: "ค่าลดหย่อนส่วนตัวปีนี้ได้เท่าไร"
+    category: single
+    acceptable_agents: [tax]
+    answer_checks: ["60,000|60000"]
+    note: "Knowledge question; no tool required."
+
+  # ===================== Single topic: expense (7) =====================
+  - task_id: exp_01
+    query: "จ่ายค่ากาแฟ 80 บาท"
+    category: single
+    acceptable_agents: [expense]
+    required_tools: [[add_expense]]
+    db_checks: [{kind: expense, amount: "80"}]
+  - task_id: exp_02
+    query: "เมื่อวานเติมน้ำมันไป 1,200 บาท"
+    category: single
+    acceptable_agents: [expense]
+    required_tools: [[add_expense]]
+    db_checks: [{kind: expense, amount: "1200"}]
+  - task_id: exp_03
+    query: "ได้โบนัส 30,000 บาท บันทึกรายรับให้หน่อย"
+    category: single
+    acceptable_agents: [expense]
+    required_tools: [[add_income]]
+    db_checks: [{kind: income, amount: "30000"}]
+  - task_id: exp_04
+    query: "เดือนนี้ใช้เงินไปเท่าไรแล้ว"
+    category: single
+    acceptable_agents: [expense]
+    required_tools: [[summarize_monthly_expenses, query_expenses_by_category]]
+  - task_id: exp_05
+    query: "เดือนที่แล้วใช้ค่าเดินทางไปทั้งหมดเท่าไร"
+    category: single
+    acceptable_agents: [expense]
+    required_tools: [[query_expenses_by_category, summarize_monthly_expenses]]
+    answer_checks: ["790"]
+  - task_id: exp_06
+    query: "ค่าอาหารเดือนที่แล้วรวมเท่าไร"
+    category: single
+    acceptable_agents: [expense]
+    required_tools: [[query_expenses_by_category, summarize_monthly_expenses]]
+    answer_checks: ["500"]
+  - task_id: exp_07
+    query: "วันนี้ซื้อหนังสือเรียน 450 บาท กับค่าข้าวกลางวัน 65 บาท"
+    category: single
+    acceptable_agents: [expense]
+    required_tools: [[add_expense]]
+    db_checks: [{kind: expense, amount: "450"}, {kind: expense, amount: "65"}]
+
+  # ===================== Single topic: asset monitoring (7) =====================
+  - task_id: ast_01
+    query: "ดูราคาหุ้น PTT ล่าสุดให้หน่อย"
+    category: single
+    acceptable_agents: [asset_monitoring]
+    required_tools: [[get_stock_price]]
+    answer_checks: ["33.25"]
+  - task_id: ast_02
+    query: "พอร์ตของฉันตอนนี้ถืออะไรอยู่บ้าง"
+    category: single
+    acceptable_agents: [asset_monitoring]
+    required_tools: [[get_portfolio_holdings]]
+    answer_checks: ["KT-RMFX", "PTT"]
+  - task_id: ast_03
+    query: "เพิ่มหุ้น CPALL เข้ารายการติดตาม"
+    category: single
+    acceptable_agents: [asset_monitoring]
+    required_tools: [[manage_watchlist]]
+    db_checks: [{kind: watchlist, symbol: "CPALL.BK"}]
+  - task_id: ast_04
+    query: "มีข่าวอะไรล่าสุดเกี่ยวกับหุ้น AOT บ้าง"
+    category: single
+    acceptable_agents: [asset_monitoring]
+    required_tools: [[search_finance_news]]
+    answer_checks: ["ผู้โดยสาร"]
+  - task_id: ast_05
+    query: "หากองทุนรวมดัชนี SET50 ให้หน่อย"
+    category: single
+    acceptable_agents: [asset_monitoring]
+    required_tools: [[search_thai_funds]]
+  - task_id: ast_06
+    query: "วันนี้ซื้อหุ้น ADVANC 200 หุ้น ราคาหุ้นละ 300 บาท บันทึกลงพอร์ตให้ด้วย"
+    category: single
+    acceptable_agents: [asset_monitoring]
+    required_tools: [[add_portfolio_holding]]
+    db_checks: [{kind: holding, symbol: "ADVANC.BK"}]
+  - task_id: ast_07
+    query: "หุ้นปตท.ตอนนี้ราคาเท่าไร"
+    category: single
+    acceptable_agents: [asset_monitoring]
+    required_tools: [[get_stock_price]]
+    answer_checks: ["33.25"]
+
+  # ===================== Single topic: planning (7) =====================
+  - task_id: pln_01
+    query: "อยากเก็บเงินให้ได้ 100,000 บาทภายใน 12 เดือน ต้องออมเดือนละเท่าไร"
+    category: single
+    acceptable_agents: [planning]
+    required_tools: [[calculate_saving_plan]]
+  - task_id: pln_02
+    query: "ตั้งเป้าหมายเก็บเงินดาวน์บ้าน 500,000 บาทภายใน 3 ปี"
+    category: single
+    acceptable_agents: [planning]
+    required_tools: [[create_financial_goal]]
+    db_checks: [{kind: goal_target, amount: "500000"}]
+  - task_id: pln_03
+    query: "เป้าหมายการเงินของฉันตอนนี้คืบหน้าไปแค่ไหนแล้ว"
+    category: single
+    acceptable_agents: [planning, report]
+    required_tools: [[view_financial_goals, get_goals_summary_cross, generate_financial_report_tool]]
+    note: "Audit 2026-11-02: the report tool output includes the goal-progress table."
+    answer_checks: ["96,000|96000", "35,000|35000"]
+  - task_id: pln_04
+    query: "เพิ่มเงินเข้ากองทุนสำรองฉุกเฉินอีก 10,000 บาท"
+    category: single
+    acceptable_agents: [planning, expense]
+    note: "Router intent text sends savings records to expense; both agents have a goal-update tool."
+    required_tools: [[update_goal_progress, update_savings_goal_cross]]
+    db_checks: [{kind: goal_current, amount: "106000"}]
+  - task_id: pln_05
+    query: "เงินเดือน 50,000 บาท ถ้าจะออมก่อนใช้แบบ pay yourself first ควรแบ่งออมเท่าไร"
+    category: single
+    acceptable_agents: [planning]
+    required_tools: [[plan_pay_yourself_first]]
+  - task_id: pln_06
+    query: "ตอนนี้อายุ 30 อยากเกษียณตอน 55 ควรเริ่มวางแผนเก็บเงินยังไง"
+    category: single
+    acceptable_agents: [planning]
+    required_tools: [[calculate_saving_plan, search_finance_knowledge, create_financial_goal]]
+  - task_id: pln_07
+    query: "เงินสำรองฉุกเฉินควรมีกี่เดือนของรายจ่าย"
+    category: single
+    acceptable_agents: [planning]
+    required_tools: [[search_finance_knowledge]]
+    answer_checks: ["6"]
+
+  # ===================== Single topic: recommendation (6) =====================
+  - task_id: rec_01
+    query: "สุขภาพการเงินของฉันเป็นยังไงบ้าง"
+    category: single
+    acceptable_agents: [recommendation, report]
+    required_tools: [[get_financial_health_score, generate_financial_report_tool]]
+    note: "Audit 2026-11-02: the report tool output includes the same health score."
+  - task_id: rec_02
+    query: "แนะนำเรื่องการเงินให้หน่อย ควรปรับอะไรบ้าง"
+    category: single
+    acceptable_agents: [recommendation, report]
+    required_tools: [[generate_financial_recommendations, generate_financial_report_tool]]
+    note: "Audit 2026-11-02: the report tool output includes the recommendations section."
+  - task_id: rec_03
+    query: "ตอนนี้ควรลงทุนอะไรดี"
+    category: single
+    acceptable_agents: [recommendation]
+    required_tools: [[generate_financial_recommendations, search_finance_knowledge]]
+  - task_id: rec_04
+    query: "ช่วยตรวจสอบการเงินของฉันทั้งหมดแล้วบอกจุดที่ควรแก้"
+    category: single
+    acceptable_agents: [recommendation, report]
+    required_tools:
+      [[generate_financial_recommendations, get_financial_health_score, generate_financial_report_tool]]
+    note: "Audit 2026-11-02: the report tool output includes health score and recommendations."
+  - task_id: rec_05
+    query: "ควรเอาเงินไปซื้อคริปโตไหม"
+    category: single
+    acceptable_agents: [recommendation]
+    required_tools: [[generate_financial_recommendations, search_finance_knowledge]]
+  - task_id: rec_06
+    query: "ช่วงนี้ตลาดหุ้นแย่มาก กลัวขาดทุน ควรขายหุ้นทิ้งให้หมดเลยไหม"
+    category: single
+    acceptable_agents: [recommendation]
+    required_tools:
+      [[detect_psychological_cues, generate_financial_recommendations, search_finance_knowledge]]
+
+  # ===================== Single topic: report (6) =====================
+  - task_id: rpt_01
+    query: "สรุปรายงานการเงินเดือนที่แล้วให้หน่อย"
+    category: single
+    acceptable_agents: [report]
+    required_tools: [[generate_financial_report_tool, get_financial_summary]]
+    answer_checks: ["12,930|12930"]
+  - task_id: rpt_02
+    query: "ขอภาพรวมสถานะการเงินทั้งหมดของฉัน"
+    category: single
+    acceptable_agents: [report]
+    required_tools: [[get_financial_summary, generate_financial_report_tool]]
+  - task_id: rpt_03
+    query: "ทำรายงานการเงินประจำปีนี้ให้หน่อย"
+    category: single
+    acceptable_agents: [report]
+    required_tools: [[generate_financial_report_tool, get_financial_summary]]
+  - task_id: rpt_04
+    query: "เดือนที่แล้วรายรับหักรายจ่ายแล้วเหลือเท่าไร"
+    category: single
+    acceptable_agents: [report]
+    required_tools: [[generate_financial_report_tool, get_financial_summary]]
+    answer_checks: ["37,070|37070"]
+  - task_id: rpt_05
+    query: "ขอรายงานรายจ่ายแยกตามหมวดของเดือนที่แล้ว"
+    category: single
+    acceptable_agents: [report, expense]
+    required_tools:
+      [[generate_financial_report_tool, get_financial_summary, summarize_monthly_expenses,
+        query_expenses_by_category]]
+    note: "Audit 2026-11-02: the expense agent's category summary answers this fully."
+    answer_checks: ["9,000|9000"]
+  - task_id: rpt_06
+    query: "สรุปการเงินไตรมาสนี้ให้หน่อย"
+    category: single
+    acceptable_agents: [report]
+    required_tools: [[generate_financial_report_tool, get_financial_summary]]
+
+  # ===================== Cross topic (12) =====================
+  - task_id: crs_01
+    query: "จากรายจ่ายเดือนที่แล้ว ฉันจะเก็บเงินไปเที่ยวญี่ปุ่นได้ครบตามเป้าไหม"
+    category: cross
+    acceptable_agents: [planning, expense]
+    required_tools:
+      - [summarize_monthly_expenses, get_expense_summary_cross, query_expenses_by_category]
+      - [view_financial_goals, get_goals_summary_cross]
+  - task_id: crs_02
+    query: "เดือนที่แล้วใช้จ่ายไปเท่าไร แล้วมีอะไรที่เอาไปลดหย่อนภาษีได้บ้าง"
+    category: cross
+    acceptable_agents: [tax, expense]
+    required_tools:
+      - [summarize_monthly_expenses, get_expense_summary_cross, query_expenses_by_category]
+      - [calculate_thai_tax, search_finance_knowledge]
+  - task_id: crs_03
+    query: "พอร์ตของฉันตอนนี้เป็นยังไง แล้วควรปรับพอร์ตไหม"
+    category: cross
+    acceptable_agents: [asset_monitoring, recommendation]
+    required_tools:
+      - [get_portfolio_holdings]
+      - [generate_financial_recommendations, search_finance_knowledge]
+  - task_id: crs_04
+    query: "บันทึกค่าข้าวเย็น 120 บาท แล้วบอกหน่อยว่าเดือนนี้ใช้ค่าอาหารไปเท่าไรแล้ว"
+    category: cross
+    acceptable_agents: [expense]
+    required_tools:
+      - [add_expense]
+      - [summarize_monthly_expenses, query_expenses_by_category]
+    db_checks: [{kind: expense, amount: "120"}]
+  - task_id: crs_05
+    query: "รายได้ปีละ 720,000 บาท มีแค่ค่าลดหย่อนส่วนตัว ต้องเสียภาษีเท่าไร และควรออมเพิ่มเดือนละเท่าไรดี"
+    category: cross
+    acceptable_agents: [tax, planning]
+    required_tools:
+      - [calculate_thai_tax]
+      - [calculate_saving_plan, plan_pay_yourself_first]
+    answer_checks: ["36,500|36500"]
+  - task_id: crs_06
+    query: "ราคาหุ้น PTT ตอนนี้เท่าไร และฉันถืออยู่กี่หุ้น"
+    category: cross
+    acceptable_agents: [asset_monitoring]
+    required_tools:
+      - [get_stock_price]
+      - [get_portfolio_holdings]
+    answer_checks: ["33.25", "1,000|1000"]
+  - task_id: crs_07
+    query: "สุขภาพการเงินของฉันเป็นยังไง แล้วกองทุนฉุกเฉินควรเก็บเพิ่มอีกเท่าไร"
+    category: cross
+    acceptable_agents: [recommendation, planning]
+    required_tools:
+      - [get_financial_health_score]
+      - [view_financial_goals, get_goals_summary_cross, calculate_saving_plan]
+  - task_id: crs_08
+    query: "สรุปรายงานเดือนที่แล้ว แล้วแนะนำวิธีลดรายจ่ายให้หน่อย"
+    category: cross
+    acceptable_agents: [report, recommendation]
+    required_tools:
+      - [generate_financial_report_tool, get_financial_summary]
+      - [generate_financial_recommendations, summarize_monthly_expenses, generate_financial_report_tool]
+    note: "Audit 2026-11-02: the report tool output includes a recommendations section."
+  - task_id: crs_09
+    query: "รายได้ปีละ 600,000 บาท ถ้าซื้อ RMF 100,000 บาท ภาษีจะเหลือเท่าไร แล้ว RMF ที่ฉันถืออยู่ตอนนี้มีมูลค่าเท่าไร"
+    category: cross
+    acceptable_agents: [tax, asset_monitoring]
+    required_tools:
+      - [calculate_thai_tax]
+      - [get_portfolio_holdings]
+    answer_checks: ["11,500|11500"]
+  - task_id: crs_10
+    query: "ได้โบนัส 40,000 บาท บันทึกเป็นรายรับ แล้วเอาไปเพิ่มในกองทุนสำรองฉุกเฉินทั้งหมด"
+    category: cross
+    acceptable_agents: [expense, planning]
+    required_tools:
+      - [add_income]
+      - [update_goal_progress, update_savings_goal_cross]
+    db_checks: [{kind: income, amount: "40000"}, {kind: goal_current, amount: "136000"}]
+  - task_id: crs_11
+    query: "หุ้นที่ฉันถืออยู่มีข่าวอะไรบ้าง ควรกังวลไหม"
+    category: cross
+    acceptable_agents: [asset_monitoring, recommendation]
+    required_tools:
+      - [get_portfolio_holdings]
+      - [search_finance_news]
+  - task_id: crs_12
+    query: "ค่ารักษาพยาบาลเอาไปลดหย่อนภาษีได้ไหม แล้วเดือนที่แล้วฉันจ่ายค่าสุขภาพไปเท่าไร"
+    category: cross
+    acceptable_agents: [tax, expense]
+    required_tools:
+      - [search_finance_knowledge, calculate_thai_tax]
+      - [query_expenses_by_category, summarize_monthly_expenses, get_expense_summary_cross]
+    answer_checks: ["300"]
+
+  # ===================== Vague — should ask back (8) =====================
+  - task_id: vag_01
+    query: "เงิน"
+    category: vague
+  - task_id: vag_02
+    query: "การเงิน"
+    category: vague
+  - task_id: vag_03
+    query: "ช่วยหน่อย"
+    category: vague
+  - task_id: vag_04
+    query: "ทำยังไงดี"
+    category: vague
+  - task_id: vag_05
+    query: "เรื่องเงินๆ ทองๆ"
+    category: vague
+  - task_id: vag_06
+    query: "จัดการให้หน่อย"
+    category: vague
+  - task_id: vag_07
+    query: "อยากให้ช่วยเรื่องเงิน"
+    category: vague
+  - task_id: vag_08
+    query: "แล้วแต่เลย"
+    category: vague
