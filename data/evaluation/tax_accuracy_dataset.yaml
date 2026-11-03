@@ -95,7 +95,7 @@ cases:
     tags: ["moderate", "child_allowance"]
 
   - case_id: "tax_acc_009"
-    query: "รายได้ 800,000 ลดหย่อนส่วนตัว 60,000 SSF 200,000 ประกันสุขภาพ 15,000"
+    query: "ปีภาษี 2567 รายได้ 800,000 ลดหย่อนส่วนตัว 60,000 SSF 200,000 ประกันสุขภาพ 15,000"
     description: "Multiple deductions including SSF"
     gross_income: "800000"
     deductions_by_type:
@@ -159,8 +159,8 @@ cases:
     deductions_by_type:
       personal_allowance: "60000"
       parent_allowance: "60000"
-    expected_total_tax: "5500"
-    expected_effective_rate: "0.0122"
+    expected_total_tax: "4000"
+    expected_effective_rate: "0.0089"
     tolerance_thb: "500"
     tags: ["moderate", "parent"]
 
@@ -214,7 +214,7 @@ cases:
     tags: ["moderate", "social_security"]
 
   - case_id: "tax_acc_019"
-    query: "รายได้ 3,000,000 บาท ลดหย่อนส่วนตัว 60,000 RMF 500,000 SSF 200,000"
+    query: "ปีภาษี 2567 รายได้ 3,000,000 บาท ลดหย่อนส่วนตัว 60,000 RMF 500,000 SSF 200,000"
     description: "Very high income with RMF and SSF"
     gross_income: "3000000"
     deductions_by_type:
@@ -235,7 +235,7 @@ cases:
       child_allowance: "60000"
       social_security: "9000"
       life_insurance: "50000"
-    expected_total_tax: "41150"
-    expected_effective_rate: "0.0490"
+    expected_total_tax: "36650"
+    expected_effective_rate: "0.0436"
     tolerance_thb: "1000"
     tags: ["complex", "family", "multiple_deductions"]

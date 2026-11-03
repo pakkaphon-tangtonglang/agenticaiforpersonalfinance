@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from finance_ai.tools.tax_constants import (
     DEDUCTION_LIMITS,
+    MAX_PERSONS_PER_ALLOWANCE,
     DONATION_CAP_PERCENTAGE,
     NUMBER_OF_BRACKETS,
     PERCENTAGE_CAPPED_DEDUCTIONS,
@@ -51,8 +52,13 @@ class TestDeductionLimits:
         assert DEDUCTION_LIMITS["personal_allowance"] == Decimal("60000")
 
     def test_social_security_limit(self) -> None:
-        """Test social security limit is 9,000 THB."""
-        assert DEDUCTION_LIMITS["social_security"] == Decimal("9000")
+        """Social security limit is 10,500 THB (wage ceiling 17,500 from tax year 2569)."""
+        assert DEDUCTION_LIMITS["social_security"] == Decimal("10500")
+
+    def test_parent_allowance_counts_up_to_four_people(self) -> None:
+        """Own parents and spouse's parents: at most 4 people."""
+        assert MAX_PERSONS_PER_ALLOWANCE["parent_allowance"] == 4
+        assert MAX_PERSONS_PER_ALLOWANCE["child_allowance"] is None
 
     def test_rmf_absolute_limit(self) -> None:
         """Test RMF absolute limit is 500,000 THB."""

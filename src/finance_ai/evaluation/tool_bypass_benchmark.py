@@ -82,7 +82,7 @@ BYPASS_TEST_CASES: list[dict[str, Any]] = [
     },
     {
         "case_id": "bypass_006",
-        "query": "รายได้ 800,000 ลดหย่อนส่วนตัว 60,000 SSF 200,000 ประกันสุขภาพ 15,000 ภาษีเท่าไหร่",
+        "query": "ปีภาษี 2567 รายได้ 800,000 ลดหย่อนส่วนตัว 60,000 SSF 200,000 ประกันสุขภาพ 15,000 ภาษีเท่าไหร่",
         "expected_tax": Decimal("20000"),
         "tolerance": Decimal("1000"),
         "description": "รายได้ปานกลาง มี SSF และประกันสุขภาพ",
@@ -95,7 +95,7 @@ BYPASS_TEST_CASES: list[dict[str, Any]] = [
     },
     {
         "case_id": "bypass_007",
-        "query": "รายได้ 3,000,000 บาท ลดหย่อนส่วนตัว 60,000 RMF 500,000 SSF 200,000 คำนวณภาษี",
+        "query": "ปีภาษี 2567 รายได้ 3,000,000 บาท ลดหย่อนส่วนตัว 60,000 RMF 500,000 SSF 200,000 คำนวณภาษี",
         "expected_tax": Decimal("407000"),
         "tolerance": Decimal("5000"),
         "description": "รายได้สูงมาก RMF + SSF เต็มขั้น",
@@ -109,13 +109,13 @@ BYPASS_TEST_CASES: list[dict[str, Any]] = [
     {
         "case_id": "bypass_008",
         "query": "เงินเดือน 70,000 ลดหย่อนส่วนตัว 60,000 ลูก 2 คน ประกันสังคม 9,000 ประกันชีวิต 50,000",
-        "expected_tax": Decimal("41150"),
+        "expected_tax": Decimal("36650"),
         "tolerance": Decimal("1000"),
         "description": "ครอบครัว หลายลดหย่อน",
         "gross_income": Decimal("840000"),
         "deductions": {
             "personal_allowance": Decimal("60000"),
-            "child": Decimal("60000"),
+            "child_allowance": Decimal("60000"),
             "social_security": Decimal("9000"),
             "life_insurance": Decimal("50000"),
         },
