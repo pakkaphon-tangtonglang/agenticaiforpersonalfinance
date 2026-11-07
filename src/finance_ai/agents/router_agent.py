@@ -13,17 +13,28 @@ from typing import Any
 
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from finance_ai.agents.llm_error_messages import describe_llm_error
 from finance_ai.agents.llm_factory import router_chat_model
+from finance_ai.agents.multi_intent import (
+    TaskSection,
+    combine_sections,
+    merge_tasks_by_agent,
+    run_tasks,
+    section_title,
+    split_by_confidence,
+)
 from finance_ai.agents.prompts import (
     GENERAL_CHAT_SYSTEM_PROMPT,
     ORCHESTRATOR_HISTORY_INSTRUCTION,
+    ORCHESTRATOR_PREVIOUS_TOPICS_HINT,
     build_orchestrator_system_prompt,
     get_date_context,
 )
-from finance_ai.agents.schemas import OrchestratorDecision
+from finance_ai.agents.schemas import OrchestratorDecision, RoutedTask
+from finance_ai.agents.tool_trace import ToolTrace, traces_from_messages
 from finance_ai.core.logging import get_logger
 from finance_ai.tools.symbol_search_service import search_asset_symbols
 
@@ -113,10 +124,39 @@ def parse_orchestrator_response(content: Any) -> OrchestratorDecision:
         text = _content_to_text(content).strip()
         text = _strip_code_fence(text)
         data = json.loads(text)
-        return OrchestratorDecision(**data)
-    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+        raw_tasks = data.pop("tasks", [])
+        decision = OrchestratorDecision(**data)
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError, AttributeError):
         logger.warning("Failed to parse router response: %s", content)
         return DEFAULT_DECISION
+    return decision.model_copy(update={"tasks": parse_routed_tasks(raw_tasks)})
+
+
+def parse_routed_tasks(raw_tasks: Any) -> list[RoutedTask]:
+    """Validate each part of a multi-topic reply on its own.
+
+    One malformed part is dropped instead of discarding the whole decision.
+
+    Args:
+        raw_tasks: The ``tasks`` value from the router JSON.
+
+    Returns:
+        Valid tasks in the router's order ([] when absent or not a list).
+
+    Example:
+        >>> raw = [{"intent": "tax", "sub_query": "ภาษี", "confidence": 0.9}]
+        >>> parse_routed_tasks(raw)[0].intent
+        'tax'
+    """
+    if not isinstance(raw_tasks, list):
+        return []
+    tasks: list[RoutedTask] = []
+    for item in raw_tasks:
+        try:
+            tasks.append(RoutedTask.model_validate(item))
+        except ValidationError:
+            logger.warning("Dropped invalid router task: %s", item)
+    return tasks
 
 
 def _strip_code_fence(text: str) -> str:
@@ -164,6 +204,7 @@ def classify_query(
     chat_model: BaseChatModel | None = None,
     chat_history: list[tuple[str, str]] | None = None,
     config: RouterAblationConfig | None = None,
+    previous_intents: list[str] | None = None,
 ) -> OrchestratorDecision:
     """Classify a user query into an intent category.
 
@@ -176,9 +217,10 @@ def classify_query(
         chat_model: Optional ChatModel override for testing.
         chat_history: Optional recent (role, content) messages for context.
         config: Optional ablation toggles; None uses production defaults.
+        previous_intents: Topics of the previous reply when it covered several.
 
     Returns:
-        OrchestratorDecision with intent and confidence.
+        OrchestratorDecision with intent, confidence and any multi-topic tasks.
 
     Example:
         >>> decision = classify_query("คำนวณภาษีปี 2024")
@@ -190,9 +232,34 @@ def classify_query(
     settings = config or DEFAULT_ABLATION_CONFIG
     asset_hint = _resolve_asset_hint(query) if settings.resolve_asset_hint else None
     messages = _build_router_messages(query, chat_history, asset_hint, settings)
+    topics_hint = previous_topics_hint(previous_intents)
+    if topics_hint:
+        messages.insert(-1, SystemMessage(content=topics_hint))
     response = router_chat_model(chat_model).invoke(messages)
     decision = parse_orchestrator_response(response.content)
     return _apply_confidence_threshold(decision, settings)
+
+
+def previous_topics_hint(previous_intents: list[str] | None) -> str | None:
+    """Describe the previous reply's topics when it answered several.
+
+    Lets a follow-up such as "แล้วเรื่องภาษีล่ะ" route to the right agent.
+    Single-topic replies add nothing, so single-topic routing is unchanged.
+
+    Args:
+        previous_intents: Agents that answered the previous message.
+
+    Returns:
+        Thai hint for the router, or None.
+
+    Example:
+        >>> previous_topics_hint(["tax"]) is None
+        True
+    """
+    if not previous_intents or len(previous_intents) < 2:
+        return None
+    topics = ", ".join(f"{section_title(intent)} ({intent})" for intent in previous_intents)
+    return ORCHESTRATOR_PREVIOUS_TOPICS_HINT.format(topics=topics)
 
 
 def _extract_asset_candidate_tokens(query: str) -> list[str]:
@@ -348,7 +415,8 @@ def _apply_confidence_threshold(
         threshold is enabled and confidence is below the threshold.
     """
     if config.apply_confidence_threshold and _should_clarify(decision):
-        return OrchestratorDecision(intent="clarify", confidence=decision.confidence)
+        # Keep the parts: a multi-topic message is judged per part, not by the first one.
+        return decision.model_copy(update={"intent": "clarify"})
     return decision
 
 
@@ -371,7 +439,7 @@ def _invoke_intent(
         chat_history: Optional previous messages for context.
 
     Returns:
-        Dict with the intent and the agent's last message content.
+        Dict with the intent, the agent's last message content and its tool calls.
 
     Raises:
         ValueError: If the intent has no registered graph builder.
@@ -389,7 +457,11 @@ def _invoke_intent(
         }
     )
     last_message = result["messages"][-1]
-    return {"intent": intent, "response": last_message.text}
+    return {
+        "intent": intent,
+        "response": last_message.text,
+        "tools": traces_from_messages(list(result["messages"])),
+    }
 
 
 def execute_tax_agent(
@@ -631,13 +703,16 @@ def orchestrate_query(
     user_id: str = "",
     db_session_factory: Callable[[], Session] | None = None,
     chat_history: list[tuple[str, str]] | None = None,
+    previous_intents: list[str] | None = None,
+    allow_multi_intent: bool = True,
 ) -> dict[str, Any]:
-    """Route a user query to the appropriate agent.
+    """Route a user query to the appropriate agent (or agents).
 
     Classifies the query intent (with chat history and asset-hint context)
     and dispatches to the matching agent. Low-confidence classifications
     ask the user for clarification instead of guessing. Passes
-    chat_history for conversation context.
+    chat_history for conversation context. A message about several topics
+    runs one agent per topic and returns one combined reply.
 
     Args:
         query: The user's natural language query.
@@ -645,40 +720,124 @@ def orchestrate_query(
         user_id: UUID of the user for DB-backed agents.
         db_session_factory: Optional session factory for DB access.
         chat_history: Optional previous messages for context.
+        previous_intents: Topics of the previous reply when it covered several.
+        allow_multi_intent: False sends every message to one agent, as before
+            multi-intent routing (used by the architecture study baseline).
 
     Returns:
-        Dict with 'intent' and 'response' from the target agent.
+        Dict with 'intent' and 'response'; multi-topic replies also carry
+        'intents' (every agent that answered, in order).
 
     Example:
         >>> result = orchestrate_query("คำนวณภาษี เงินเดือน 1 ล้าน")
     """
     try:
-        return _route_query(query, chat_model, user_id, db_session_factory, chat_history)
+        context = RunContext(chat_model, user_id, db_session_factory, chat_history)
+        return _route_query(query, context, previous_intents, allow_multi_intent)
     except Exception as exc:  # noqa: BLE001
         logger.error("Query orchestration failed: %s", exc, exc_info=True)
         return {"intent": "error", "response": describe_llm_error(exc)}
 
 
+@dataclass(frozen=True)
+class RunContext:
+    """What every agent in one request shares.
+
+    Example:
+        >>> RunContext(None, "user-1", None, None).user_id
+        'user-1'
+    """
+
+    chat_model: BaseChatModel | None
+    user_id: str
+    db_session_factory: Callable[[], Session] | None
+    chat_history: list[tuple[str, str]] | None
+
+
 def _route_query(
     query: str,
-    chat_model: BaseChatModel | None,
-    user_id: str,
-    db_session_factory: Callable[[], Session] | None,
-    chat_history: list[tuple[str, str]] | None,
+    context: RunContext,
+    previous_intents: list[str] | None = None,
+    allow_multi_intent: bool = True,
 ) -> dict[str, Any]:
-    """Classify a query and run the matching agent (errors propagate).
+    """Classify a query and run the matching agent or agents (errors propagate).
 
     Returns:
-        Dict with 'intent' and 'response' from the target agent.
+        Dict with 'intent' and 'response' (plus 'intents' for several topics).
     """
-    decision = classify_query(query, chat_model, chat_history)
+    decision = classify_query(
+        query, context.chat_model, context.chat_history, previous_intents=previous_intents
+    )
     logger.info("Routed query to: %s (confidence: %s)", decision.intent, decision.confidence)
+    tasks = merge_tasks_by_agent(decision.tasks) if allow_multi_intent else []
+    if len(tasks) >= 2:
+        return _route_multi_intent(query, tasks, context)
     if _should_clarify(decision):
         logger.info("Low confidence - asking user for clarification")
         return _build_clarify_response()
-    agent_map = _build_agent_map()
-    default_fn: Callable[..., dict[str, Any]] = execute_general_chat
-    agent_fn = agent_map.get(decision.intent, default_fn)
-    result = agent_fn(query, chat_model, user_id, db_session_factory, chat_history)
+    agent_fn: Callable[..., dict[str, Any]] = (
+        _build_agent_map().get(decision.intent) or execute_general_chat
+    )
+    result = agent_fn(
+        query,
+        context.chat_model,
+        context.user_id,
+        context.db_session_factory,
+        context.chat_history,
+    )
     result["response"] = _content_to_text(result.get("response", ""))
+    result.pop("tools", None)
     return result
+
+
+def _route_multi_intent(query: str, tasks: list[RoutedTask], context: RunContext) -> dict[str, Any]:
+    """Answer every confident part, then join the answers into one reply.
+
+    Args:
+        query: The user's whole message.
+        tasks: Merged tasks (two or more agents).
+        context: Shared request context.
+
+    Returns:
+        Dict with the first 'intent', every answering agent in 'intents',
+        and the combined 'response'.
+    """
+    confident, unsure = split_by_confidence(tasks)
+    logger.info("Multi-intent message: %s", [task.intent for task in tasks])
+    if not confident:
+        return _build_clarify_response()
+    sections = run_tasks(
+        confident, query, lambda intent, question: run_agent(intent, question, context)
+    )
+    return _multi_intent_result(sections, combine_sections(sections, unsure))
+
+
+def run_agent(intent: str, question: str, context: RunContext) -> tuple[str, list[ToolTrace]]:
+    """Run one agent (general chat for unknown intents) and return its answer and tool calls.
+
+    Args:
+        intent: Agent key from the router.
+        question: Question for the agent.
+        context: Shared request context.
+
+    Returns:
+        (answer text, tool calls).
+
+    Example:
+        >>> run_agent("tax", "ภาษีปีนี้", context)  # doctest: +SKIP
+    """
+    agent_fn: Callable[..., dict[str, Any]] = _build_agent_map().get(intent) or execute_general_chat
+    result = agent_fn(
+        question,
+        context.chat_model,
+        context.user_id,
+        context.db_session_factory,
+        context.chat_history,
+    )
+    return _content_to_text(result.get("response", "")), list(result.get("tools", []))
+
+
+def _multi_intent_result(sections: list[TaskSection], response: str) -> dict[str, Any]:
+    """Build the orchestrator result for a multi-topic reply."""
+    intents = [section.intent for section in sections]
+    return {"intent": intents[0], "intents": intents, "response": response}

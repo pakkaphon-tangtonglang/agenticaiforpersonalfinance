@@ -49,12 +49,45 @@ class ExpenseAgentState(TypedDict):
     db_session_factory: Callable[[], Session] | None
 
 
+RoutedIntent = Literal[
+    "tax",
+    "asset_monitoring",
+    "expense",
+    "planning",
+    "recommendation",
+    "report",
+    "general",
+    "unknown",
+]
+
+
+class RoutedTask(BaseModel):
+    """One part of a message that asks about several topics.
+
+    Attributes:
+        intent: Agent that owns this part.
+        sub_query: The part rewritten to stand alone (numbers and names included).
+        confidence: Router confidence for this part (0.0 to 1.0).
+
+    Example:
+        >>> RoutedTask(intent="tax", sub_query="ภาษีปีนี้เท่าไร", confidence=Decimal("0.9")).intent
+        'tax'
+    """
+
+    intent: RoutedIntent
+    sub_query: str = ""
+    confidence: Decimal = Field(ge=Decimal("0"), le=Decimal("1"))
+
+
 class OrchestratorDecision(BaseModel):
     """Structured output from the Router Agent.
 
     Attributes:
-        intent: Classified intent of the user query.
+        intent: Classified intent of the user query (the first part when there
+            are several).
         confidence: Confidence score (0.0 to 1.0).
+        tasks: One entry per topic when the message asks about several topics;
+            empty for a single-topic message.
 
     Example:
         >>> decision = OrchestratorDecision(intent="tax", confidence=Decimal("0.95"))
@@ -77,6 +110,10 @@ class OrchestratorDecision(BaseModel):
         ge=Decimal("0"),
         le=Decimal("1"),
         description="Confidence score of the classification.",
+    )
+    tasks: list[RoutedTask] = Field(
+        default_factory=list,
+        description="Parts of a multi-topic message, in the order the user asked.",
     )
 
 

@@ -16,7 +16,9 @@ from typing import Any, Optional
 
 from finance_ai.evaluation.architectures.report import write_report
 from finance_ai.evaluation.architectures.runner import (
+    DESIGNS,
     LOG_NAME,
+    ORIGINAL_DESIGNS,
     StudyConfig,
     StudyPaused,
     run_study,
@@ -44,6 +46,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--report-only", action="store_true", help="rebuild report from the log")
     parser.add_argument("--output", type=Path, default=None, help="override the output folder")
     parser.add_argument("--tasks", nargs="+", default=None, help="only these task ids")
+    parser.add_argument(
+        "--designs",
+        nargs="+",
+        choices=list(DESIGNS),
+        default=list(ORIGINAL_DESIGNS),
+        help="designs to run (default: the original four)",
+    )
     return parser
 
 
@@ -120,6 +129,7 @@ def main(argv: Optional[list[str]] = None) -> Path:
             output_dir=folder,
             rounds=1 if args.pilot else args.rounds,
             task_ids=args.tasks,
+            designs=args.designs,
         )
         try:
             run_study(

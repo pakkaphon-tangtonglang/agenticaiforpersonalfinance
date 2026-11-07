@@ -24,5 +24,7 @@ class ConversationMessage(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     intent: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
     # Citation source cards shown under an assistant answer (None when uncited).
     sources: Mapped[Optional[list[dict[str, Any]]]] = mapped_column(JSON, nullable=True)
+    # Every agent that answered a multi-topic message (None for single-topic replies).
+    intents: Mapped[Optional[list[str]]] = mapped_column(JSON, nullable=True)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")

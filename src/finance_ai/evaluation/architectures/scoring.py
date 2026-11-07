@@ -176,6 +176,8 @@ def _route_ok(task: ArchitectureTask, run: ArchitectureRun) -> Optional[bool]:
     """Return route correctness; None for the single agent (no routing)."""
     if run.design == "single_agent":
         return None
+    if run.design == "hub_multi":
+        return any(agent in task.acceptable_agents for agent in run.route)
     return run.final_agent in task.acceptable_agents
 
 

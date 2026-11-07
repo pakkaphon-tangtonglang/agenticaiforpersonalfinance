@@ -30,7 +30,7 @@ from finance_ai.evaluation.architectures.environment import (
     open_template,
 )
 from finance_ai.evaluation.architectures.hierarchical import run_hierarchical
-from finance_ai.evaluation.architectures.hub_spoke import run_hub_spoke
+from finance_ai.evaluation.architectures.hub_spoke import run_hub_multi, run_hub_spoke
 from finance_ai.evaluation.architectures.market_snapshot import market_snapshot
 from finance_ai.evaluation.architectures.peer_to_peer import run_peer_to_peer
 from finance_ai.evaluation.architectures.run_metrics import collect_run_metrics
@@ -47,9 +47,17 @@ DesignFunction = Callable[[str, DesignContext], DesignOutcome]
 DESIGNS: dict[DesignName, DesignFunction] = {
     "single_agent": run_single_agent,
     "hub_spoke": run_hub_spoke,
+    "hub_multi": run_hub_multi,
     "hierarchical": run_hierarchical,
     "peer_to_peer": run_peer_to_peer,
 }
+# The four designs of the original study; hub_multi runs only when asked for.
+ORIGINAL_DESIGNS: tuple[DesignName, ...] = (
+    "single_agent",
+    "hub_spoke",
+    "hierarchical",
+    "peer_to_peer",
+)
 LOG_NAME = "runs.jsonl"
 RETRY_MAX_ATTEMPTS = 4
 RETRY_INITIAL_DELAY_SECONDS = 5.0
@@ -107,7 +115,7 @@ class StudyConfig(BaseModel):
     model_label: str
     output_dir: Path
     rounds: int = Field(default=3, ge=1)
-    designs: list[DesignName] = Field(default_factory=lambda: list(DESIGNS))
+    designs: list[DesignName] = Field(default_factory=lambda: list(ORIGINAL_DESIGNS))
     seed: int = 20261102
     as_of: date = Field(default_factory=date.today)
     task_ids: Optional[list[str]] = None

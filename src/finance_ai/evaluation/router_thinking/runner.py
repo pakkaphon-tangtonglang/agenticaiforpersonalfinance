@@ -21,6 +21,7 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import BaseModel, Field, ValidationError
 
 from finance_ai.agents import router_agent
+from finance_ai.agents.multi_intent import merge_tasks_by_agent, split_by_confidence
 from finance_ai.agents.router_agent import DEFAULT_ABLATION_CONFIG, classify_query
 from finance_ai.core.logging import get_logger
 from finance_ai.evaluation.architectures.runner import StudyPaused, is_provider_unavailable
@@ -28,6 +29,7 @@ from finance_ai.evaluation.router_thinking.questions import (
     RoutingQuestion,
     accepted_destinations,
     destination_for,
+    routed_correctly,
 )
 from finance_ai.evaluation.router_thinking.setups import RouterSetup
 
@@ -54,6 +56,7 @@ class RouterCallRow(BaseModel):
     predicted_intent: str = ""
     confidence: str = "0"
     destination: str = ""
+    destinations: list[str] = Field(default_factory=list)
     correct: bool = False
     parse_failed: bool = False
     raw_reply: str = ""
@@ -199,6 +202,30 @@ def is_parse_failure(intent: str, confidence: str, raw_reply: str) -> bool:
     return intent == "unknown" and float(confidence) == 0.0 and '"unknown"' not in raw_reply
 
 
+def production_destinations(decision: Any) -> list[str]:
+    """Return every place production sends a message, as the router decided.
+
+    A message with two or more agents in its parts runs one agent per
+    confident part (ask-back when none is confident); otherwise the single
+    intent decides, as before.
+
+    Args:
+        decision: OrchestratorDecision after the confidence threshold.
+
+    Returns:
+        One destination, or several for a multi-topic message.
+
+    Example:
+        >>> production_destinations(OrchestratorDecision(intent="unknown", confidence=1))
+        ['general_chat']
+    """
+    tasks = merge_tasks_by_agent(decision.tasks)
+    if len(tasks) < 2:
+        return [destination_for(decision.intent)]
+    confident, _unsure = split_by_confidence(tasks)
+    return [destination_for(task.intent) for task in confident] or ["clarify"]
+
+
 def build_row(call: PlannedCall, recorder: CallRecorder, decision: Any) -> RouterCallRow:
     """Turn one finished classification into a log row.
 
@@ -213,7 +240,7 @@ def build_row(call: PlannedCall, recorder: CallRecorder, decision: Any) -> Route
     raw_reply = _reply_text(recorder.reply)
     confidence = str(decision.confidence)
     parse_failed = is_parse_failure(decision.intent, confidence, raw_reply)
-    destination = destination_for(decision.intent)
+    destinations = production_destinations(decision)
     input_tokens, output_tokens, thinking_tokens = _usage(recorder.reply)
     return RouterCallRow(
         setup=call.setup.name,
@@ -225,8 +252,10 @@ def build_row(call: PlannedCall, recorder: CallRecorder, decision: Any) -> Route
         expected=call.question.expected,
         predicted_intent=decision.intent,
         confidence=confidence,
-        destination=destination,
-        correct=not parse_failed and destination in accepted_destinations(call.question),
+        destination=destinations[0],
+        destinations=destinations,
+        correct=not parse_failed
+        and routed_correctly(destinations, accepted_destinations(call.question)),
         parse_failed=parse_failed,
         raw_reply=raw_reply,
         latency_seconds=recorder.latency_seconds,

@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from finance_ai.evaluation.architectures.run_metrics import RunMetrics
 
-DesignName = Literal["single_agent", "hub_spoke", "hierarchical", "peer_to_peer"]
+DesignName = Literal["single_agent", "hub_spoke", "hub_multi", "hierarchical", "peer_to_peer"]
 CLARIFY_ROUTE = "clarify"
 
 

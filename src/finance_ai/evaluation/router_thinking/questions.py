@@ -17,7 +17,7 @@ Destination = Literal[
     "clarify",
 ]
 DESTINATIONS: tuple[str, ...] = get_args(Destination)
-QuestionSource = Literal["new", "sept35"]
+QuestionSource = Literal["new", "sept35", "multi"]
 
 NEW_QUESTIONS_PATH = Path("data/evaluation/routing_v2_dataset.yaml")
 SEPT_QUESTIONS_PATH = Path("data/evaluation/routing_dataset.yaml")
@@ -73,6 +73,25 @@ def accepted_destinations(question: RoutingQuestion) -> set[str]:
         ['general_chat', 'planning']
     """
     return {question.expected, *question.also_accept}
+
+
+def routed_correctly(destinations: list[str], accepted: set[str]) -> bool:
+    """Return True when a one-topic question went to exactly one accepted place.
+
+    Splitting a one-topic question into several agents counts as wrong.
+
+    Args:
+        destinations: Where production sends the message (one or more).
+        accepted: Destinations that count as correct.
+
+    Returns:
+        True for a single accepted destination.
+
+    Example:
+        >>> routed_correctly(["tax", "planning"], {"tax"})
+        False
+    """
+    return len(destinations) == 1 and destinations[0] in accepted
 
 
 def load_new_questions(path: Path = NEW_QUESTIONS_PATH) -> list[RoutingQuestion]:
