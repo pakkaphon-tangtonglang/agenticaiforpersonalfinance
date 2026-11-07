@@ -1,0 +1,1096 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage{fontspec}
+\setmainfont{texgyretermes}[Path=C:/project/thesis-latex/fonts/, Extension=.otf, UprightFont=*-regular, BoldFont=*-bold, ItalicFont=*-italic, BoldItalicFont=*-bolditalic]
+\newfontfamily\thaifont{Kinnari}[Path=C:/project/thesis-latex/fonts/, Extension=.otf, BoldFont=*-Bold, ItalicFont=*-Italic, BoldItalicFont=*-BoldItalic, Script=Thai, Scale=0.95]
+\XeTeXlinebreaklocale "th_TH"
+\XeTeXlinebreakskip = 0pt plus 1pt
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{booktabs,longtable,array,float,enumitem,xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\titleformat{\section}{\large\bfseries}{\thesection}{0.8em}{}
+\titleformat{\subsection}{\normalsize\bfseries}{\thesubsection}{0.8em}{}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small Evaluation Report --- Multi-Agent Personal Finance AI}
+\fancyhead[R]{\small 7 November 2026}
+\fancyfoot[C]{\small \thepage}
+\setlength{\parskip}{0.45em}
+\setlength{\parindent}{0pt}
+\setlength{\LTcapwidth}{\textwidth}
+\renewcommand{\arraystretch}{1.12}
+\setlist{itemsep=0.15em, topsep=0.3em}
+
+\begin{document}
+
+\begin{titlepage}
+\centering
+\vspace*{3cm}
+{\Large\bfseries Evaluation Report\par}
+\vspace{0.6cm}
+{\large Multi-Agent Personal Finance AI for Thai Users\par}
+\vspace{0.3cm}
+{\normalsize Architecture, Router, Retrieval and Tax Evaluations (Section 4.11)\par}
+\vspace{2.5cm}
+{\normalsize Prepared by Pakkaphon (Student ID 66070146)\par}
+\vspace{0.2cm}
+{\normalsize Faculty of Information Technology, King Mongkut's Institute of Technology Ladkrabang\par}
+\vspace{0.2cm}
+{\normalsize 7 November 2026\par}
+\vfill
+{\small All figures in this report are generated directly from the logged evaluation results in \texttt{data/evaluation/results/}. Every failed run in the architecture study was read by hand before it was counted.\par}
+\end{titlepage}
+
+\tableofcontents
+\clearpage
+
+\section{Executive Summary}
+
+This report presents the evaluations carried out for the thesis system, a Thai personal finance assistant built as a multi-agent system with LangGraph. A router agent classifies each message and passes it to one of six specialist agents (tax, expense, asset monitoring, planning, recommendation and report) or to general chat. The production system uses Google Gemini 3.5 Flash. The evaluations address four questions:
+
+\begin{enumerate}
+\item \textbf{Architecture (Study A).} How does the hub-and-spoke design compare with a single agent, a hierarchical router and a peer-to-peer design on the same 60 tasks?
+\item \textbf{Router configuration (Study B).} Does the router keep its accuracy at the lowest thinking level, which is the configuration claimed in Chapter 3?
+\item \textbf{Retrieval (Study C).} Which embedding model retrieves the right knowledge-base passages, and does the choice change the final answers?
+\item \textbf{Tax correctness.} Are tax calculations correct under the 2569 (2026) rules, and is the calculator tool still needed?
+\end{enumerate}
+
+\textbf{Main findings.}
+\begin{itemize}
+\item On DeepSeek V4.1 Flash, the single agent had the highest task success (98.9\%), against 87.2\% for hub-and-spoke ($p<0.0001$). The whole gap came from cross-topic tasks (100\% against 61.1\%). On gpt-oss:20b, the single agent and hub-and-spoke were statistically tied (83.9\% and 83.3\%). Hub-and-spoke used about 3.6 times fewer input tokens per task.
+\item Adding \textbf{multi-intent routing} to hub-and-spoke raised its cross-topic success from 61.1\% to an estimated 86.1\% (paired $p=0.012$) without a significant change in single-topic routing (95.7\% against 94.6\%, $p=0.69$). The router split 22 of 22 multi-topic messages correctly, including messages with three to five topics.
+\item The router's lowest thinking level (\emph{minimal}) kept accuracy (95.9\% against 96.2\% without the setting; difference within $-2.2$ to $+1.6$ points) and halved routing latency (1.36\,s against 2.59\,s).
+\item Gemini embeddings retrieved best (nDCG@10 0.805), significantly above BAAI/bge-m3 (0.724), multilingual-e5 (0.722), BM25 (0.568) and MiniLM (0.394). Final answer correctness, however, did not differ significantly between the three best retrievers (92.5--94.2\%).
+\item The production Tax Agent computed 26 of 26 tax cases correctly. Without the calculator tool, the model alone was correct in 7 of 8 cases and repeated an outdated social-security cap.
+\end{itemize}
+
+\section{System Under Test and Method}
+
+\subsection{System and models}
+The system is model-agnostic: chat models are created through one factory that supports Google Gemini, Ollama and OpenRouter, so a study can run the same agents and tools on a different model by changing one setting. Production uses \texttt{gemini-3.5-flash} with the router at the \emph{minimal} thinking level and the specialist agents at the \emph{low} level, and \texttt{gemini-embedding-001} for retrieval.
+
+Study A was run on two other model families through Ollama Cloud: \texttt{gpt-oss:20b} and \texttt{deepseek-v4.1-flash}. In each run, one model served as both router and agents, so the designs differ only in their structure. Studies B and C and the tax evaluations use the production Gemini models.
+
+\subsection{Datasets}
+All datasets were written for this project and checked against the system's own rules. Router prompt examples were checked so that none copies an evaluation question.
+
+\begin{table}[H]
+\centering
+\footnotesize
+\caption{Evaluation datasets (all in data/evaluation/).}\label{tab:datasets}
+\begin{tabular}{llrp{6.6cm}}
+\toprule
+\textbf{Dataset} & \textbf{File} & \textbf{Items} & \textbf{Composition} \\
+\midrule
+Architecture tasks & architecture\_\allowbreak{}tasks.yaml & 60 & 40 single-topic, 12 cross-topic, 8 vague (should ask back) \\
+Routing questions & routing\_\allowbreak{}v2\_\allowbreak{}dataset.yaml + Sept. set & 185 & 150 written for this study + 35 from September; 8 destinations \\
+Multi-topic routing & routing\_\allowbreak{}multi\_\allowbreak{}dataset.yaml & 30 & 22 multi-topic (2--5 topics) + 8 one-question look-alikes \\
+RAG questions & rag\_\allowbreak{}v2\_\allowbreak{}dataset.yaml & 120 & user wording, gold files + answer keywords, leakage-checked \\
+Tax accuracy & tax\_\allowbreak{}accuracy\_\allowbreak{}dataset.yaml & 26 & 20 existing + 6 cases for the 2569 (2026) rules \\
+Tool bypass & tool\_\allowbreak{}bypass\_\allowbreak{}benchmark.py & 8 & tax with and without the calculator tool \\
+Hallucination & hallucination\_\allowbreak{}dataset.yaml & 10 & regex checks on tax facts \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Statistical methods}
+\begin{itemize}
+\item \textbf{Rates} are reported with 95\% Wilson score intervals.
+\item \textbf{Paired comparisons} (same task or question and the same round) use the exact McNemar test on the discordant pairs; latency differences use the sign test, with bootstrap intervals for the median difference.
+\item \textbf{Consistency} is reported as pass$^{3}$: the share of tasks that succeeded in all three rounds.
+\item \textbf{Non-inferiority} (Study B) is accepted when the whole 95\% interval of the accuracy difference lies above $-3$ points.
+\item \textbf{Retrieval} uses nDCG@10, Recall@$k$ and MRR, with bootstrap intervals over questions and sign or McNemar tests for paired differences.
+\end{itemize}
+
+\section{Study A: Architecture Comparison}
+
+\subsection{Design}
+Four designs were built on the same production agents and tools: a \textbf{single agent} holding all 27 tools and every specialist prompt; \textbf{hub-and-spoke} (the production router choosing one specialist); a \textbf{hierarchical} router (group first, then agent); and \textbf{peer-to-peer} (agents forward the question among themselves, up to three hops). Each of the 60 tasks ran three times per design (720 runs per model), in a shuffled order with a fixed seed, each on a fresh copy of the database and with market data frozen in a snapshot.
+
+A run succeeds only when it takes an acceptable route, calls every required group of tools, includes every required value in its answer and writes the required database rows. A vague task succeeds when the system asks the user back without writing anything. Every failed run was read by hand; a run is overridden only when the automatic check was wrong (for example, an equivalent tool gave the same correct figure). The DeepSeek audit overrode 6 runs and confirmed 67 real failures.
+
+\subsection{Results}
+\begin{table}[H]
+\centering
+\footnotesize
+\caption{Study A results on DeepSeek V4.1 Flash (60 tasks $\times$ 3 rounds per design; audited).}\label{tab:a-ds}
+\begin{tabular}{lrrrrrrrr}
+\toprule
+\textbf{Design} & \textbf{Success (95\% CI)} & \textbf{Single} & \textbf{Cross} & \textbf{Vague} & \textbf{pass$^{3}$} & \textbf{LLM calls} & \textbf{Input tokens} & \textbf{Latency (s)} \\
+\midrule
+Single agent & 98.9\% (96.0--99.7\%) & 99.2\% & 100.0\% & 95.8\% & 96.7\% & 2.3 & 42,555 & 3.6 \\
+Peer-to-peer & 91.7\% (86.7--94.9\%) & 97.5\% & 66.7\% & 100.0\% & 88.3\% & 3.9 & 14,807 & 5.6 \\
+Hub-and-spoke & 87.2\% (81.6--91.3\%) & 92.5\% & 61.1\% & 100.0\% & 83.3\% & 3.1 & 11,649 & 4.4 \\
+Hierarchical & 85.0\% (79.1--89.5\%) & 90.8\% & 55.6\% & 100.0\% & 80.0\% & 4.0 & 12,280 & 5.3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\small
+\caption{Paired comparison against hub-and-spoke on DeepSeek V4.1 Flash (same task and round).}\label{tab:a-cmp-ds}
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Design vs hub-and-spoke} & \textbf{Pairs} & \textbf{Design only} & \textbf{Hub only} & \textbf{McNemar p} & \textbf{Latency diff. (s)} \\
+\midrule
+Hierarchical & 180 & 7 & 11 & 0.481 & +0.86 \\
+Peer-to-peer & 180 & 13 & 5 & 0.096 & +0.80 \\
+Single agent & 180 & 23 & 2 & $<$0.0001 & -0.52 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\caption{Study A results on gpt-oss:20b (60 tasks $\times$ 3 rounds per design; audited).}\label{tab:a-oss}
+\begin{tabular}{lrrrrrrrr}
+\toprule
+\textbf{Design} & \textbf{Success (95\% CI)} & \textbf{Single} & \textbf{Cross} & \textbf{Vague} & \textbf{pass$^{3}$} & \textbf{LLM calls} & \textbf{Input tokens} & \textbf{Latency (s)} \\
+\midrule
+Hierarchical & 83.9\% (77.8--88.5\%) & 89.2\% & 55.6\% & 100.0\% & 71.7\% & 3.8 & 7,218 & 11.5 \\
+Single agent & 83.9\% (77.8--88.5\%) & 88.3\% & 58.3\% & 100.0\% & 73.3\% & 2.1 & 24,568 & 6.6 \\
+Hub-and-spoke & 83.3\% (77.2--88.1\%) & 90.0\% & 50.0\% & 100.0\% & 78.3\% & 3.1 & 7,483 & 9.2 \\
+Peer-to-peer & 76.1\% (69.4--81.8\%) & 80.0\% & 47.2\% & 100.0\% & 58.3\% & 3.5 & 9,132 & 12.3 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\small
+\caption{Paired comparison against hub-and-spoke on gpt-oss:20b (same task and round).}\label{tab:a-cmp-oss}
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Design vs hub-and-spoke} & \textbf{Pairs} & \textbf{Design only} & \textbf{Hub only} & \textbf{McNemar p} & \textbf{Latency diff. (s)} \\
+\midrule
+Hierarchical & 180 & 14 & 13 & 1.000 & +0.79 \\
+Peer-to-peer & 180 & 11 & 24 & 0.041 & +2.03 \\
+Single agent & 180 & 17 & 16 & 1.000 & -2.24 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\footnotesize
+\caption{Study A failures by first failed check (audited).}\label{tab:a-failures}
+\begin{tabular}{llrrrrrrrr}
+\toprule
+\textbf{Model} & \textbf{Design} & \textbf{Route} & \textbf{Tool} & \textbf{Value} & \textbf{Empty} & \textbf{Write} & \textbf{No ask} & \textbf{Acted} & \textbf{Error} \\
+\midrule
+DeepSeek V4.1 Flash & Hierarchical & 12 & 12 & 0 & 3 & 0 & 0 & 0 & 0 \\
+DeepSeek V4.1 Flash & Hub-and-spoke & 9 & 11 & 0 & 3 & 0 & 0 & 0 & 0 \\
+DeepSeek V4.1 Flash & Peer-to-peer & 6 & 9 & 0 & 0 & 0 & 0 & 0 & 0 \\
+DeepSeek V4.1 Flash & Single agent & 0 & 1 & 0 & 0 & 0 & 1 & 0 & 0 \\
+gpt-oss:20b & Hierarchical & 8 & 17 & 0 & 4 & 0 & 0 & 0 & 0 \\
+gpt-oss:20b & Hub-and-spoke & 3 & 22 & 1 & 1 & 0 & 0 & 0 & 0 \\
+gpt-oss:20b & Peer-to-peer & 26 & 12 & 0 & 3 & 0 & 0 & 0 & 0 \\
+gpt-oss:20b & Single agent & 0 & 27 & 0 & 0 & 1 & 0 & 0 & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Discussion}
+With the stronger model (DeepSeek V4.1 Flash), the single agent solved almost every task, and its advantage over hub-and-spoke came entirely from cross-topic tasks: a routed design sends a message to one specialist, which cannot use another specialist's tools. With the weaker model (gpt-oss:20b), the designs tied and hub-and-spoke was the most consistent. Hub-and-spoke kept a large cost advantage: each specialist sees only its own prompt and tools, so it sent 11.6k input tokens per task against 42.6k for the single agent on DeepSeek. The cross-topic weakness motivated the multi-intent extension in Section~\ref{sec:mi}.
+
+\section{Extension: Multi-Intent Routing}\label{sec:mi}
+
+\subsection{Design}
+The router may now split a message into one task per agent, in the order the user asked. There is no fixed cap; the only bound is the six specialist agents, because parts for the same agent are merged. Each part is rewritten as a self-contained question, parts run one after another (agents may write data, and later parts may depend on earlier answers), and later agents receive earlier answers as context. The reply joins one headed section per agent, lists any part below the 0.7 confidence threshold for the user to clarify, and ends with a summary of every record that was saved. A failing part does not stop the others. Single-topic messages follow the unchanged original path.
+
+\subsection{Evaluation}
+Because only the router changed, three focused runs were made:
+\begin{enumerate}
+\item \textbf{Single-topic regression:} the 185 routing questions on the production setup (Table~\ref{tab:b-prompts}). Accuracy was 94.6\% against 95.7\% with the previous prompt, a difference that is not significant (exact McNemar $p=0.69$; 4 questions changed from right to wrong and 2 from wrong to right), the same size as the variation between rounds of the previous prompt. One question was split into two agents; it does ask for two things, but the strict rule counts it as wrong.
+\item \textbf{Multi-topic routing:} 30 new messages. The router produced exactly the right set of agents for 22/22 multi-topic messages (95\% CI 85.1--100.0\%), all in the order asked, and correctly left 8/8 one-question look-alikes unsplit (Appendix Table~\ref{tab:app-mt}).
+\item \textbf{End to end (Study A, DeepSeek V4.1 Flash):} the six cross-topic tasks on which hub-and-spoke had failed at least once were re-run with multi-intent routing in all three rounds (18 runs) and merged into the audited results.
+\end{enumerate}
+
+\begin{table}[H]
+\centering
+\small
+\caption{Study A on DeepSeek V4.1 Flash with multi-intent routing merged in.}\label{tab:mi-merged}
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Design} & \textbf{All 60 tasks} & \textbf{Cross-topic} & \textbf{Cross pass$^{3}$} \\
+\midrule
+Hub-and-spoke (audited) & 157/180 (87.2\%) & 22/36 (61.1\%) & 6/12 \\
+Hub + multi-intent (merged estimate) & 166/180 (92.2\%) & 31/36 (86.1\%) & 10/12 \\
+Single agent (audited) & 178/180 (98.9\%) & 36/36 (100.0\%) & 12/12 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[H]
+\centering
+\footnotesize
+\caption{Re-run cross-topic tasks: hub-and-spoke (old) against hub with multi-intent routing (new).}\label{tab:mi-rerun}
+\begin{tabular}{lrlll}
+\toprule
+\textbf{Task} & \textbf{Round} & \textbf{Hub-and-spoke} & \textbf{Multi-intent route} & \textbf{Multi-intent} \\
+\midrule
+crs\_\allowbreak{}03 & 1 & wrong\_\allowbreak{}route & asset\_\allowbreak{}monitoring $\rightarrow$ recommendation & pass \\
+crs\_\allowbreak{}03 & 2 & missing\_\allowbreak{}tool & asset\_\allowbreak{}monitoring $\rightarrow$ recommendation & pass \\
+crs\_\allowbreak{}03 & 3 & pass & asset\_\allowbreak{}monitoring $\rightarrow$ recommendation & pass \\
+crs\_\allowbreak{}05 & 1 & missing\_\allowbreak{}tool & tax $\rightarrow$ recommendation & missing\_\allowbreak{}tool \\
+crs\_\allowbreak{}05 & 2 & missing\_\allowbreak{}tool & tax $\rightarrow$ recommendation & missing\_\allowbreak{}tool \\
+crs\_\allowbreak{}05 & 3 & missing\_\allowbreak{}tool & tax $\rightarrow$ planning & pass \\
+crs\_\allowbreak{}07 & 1 & missing\_\allowbreak{}tool & recommendation $\rightarrow$ planning & pass \\
+crs\_\allowbreak{}07 & 2 & missing\_\allowbreak{}tool & recommendation $\rightarrow$ planning & pass \\
+crs\_\allowbreak{}07 & 3 & missing\_\allowbreak{}tool & recommendation $\rightarrow$ planning & pass \\
+crs\_\allowbreak{}08 & 1 & missing\_\allowbreak{}tool & report $\rightarrow$ recommendation & pass \\
+crs\_\allowbreak{}08 & 2 & pass & report $\rightarrow$ recommendation & pass \\
+crs\_\allowbreak{}08 & 3 & pass & report $\rightarrow$ recommendation & pass \\
+crs\_\allowbreak{}09 & 1 & missing\_\allowbreak{}tool & tax $\rightarrow$ asset\_\allowbreak{}monitoring & pass \\
+crs\_\allowbreak{}09 & 2 & missing\_\allowbreak{}tool & tax $\rightarrow$ asset\_\allowbreak{}monitoring & pass \\
+crs\_\allowbreak{}09 & 3 & missing\_\allowbreak{}tool & tax $\rightarrow$ asset\_\allowbreak{}monitoring & pass \\
+crs\_\allowbreak{}12 & 1 & pass & tax $\rightarrow$ expense & missing\_\allowbreak{}tool \\
+crs\_\allowbreak{}12 & 2 & empty\_\allowbreak{}answer & tax $\rightarrow$ expense & missing\_\allowbreak{}tool \\
+crs\_\allowbreak{}12 & 3 & wrong\_\allowbreak{}route & tax $\rightarrow$ expense & missing\_\allowbreak{}tool \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+On the 18 re-run pairs, multi-intent routing succeeded where hub-and-spoke failed 10 times, and the reverse happened once (exact McNemar $p=0.012$). On these tasks it used more resources (mean LLM calls 3.4 to 5.8, input tokens 11.2k to 24.1k, median latency 9.0 to 13.0\,s); single-topic messages are unaffected. The five remaining failures were read by hand and none was overridden: in two runs the saving question was routed to the recommendation agent instead of planning, and in three runs DeepSeek's tax agent returned an empty reply. The latter revealed a defect in the reply builder (an empty section heading), which was fixed so that an empty part now shows a short apology.
+
+The merged figure is an estimate: the six cross-topic tasks that never failed were not re-run. The single-topic and multi-topic routing results make a drop on those tasks unlikely, but it was not measured.
+
+\section{Study B: Router Thinking Level}
+
+\subsection{Design}
+Chapter 3 states that the router runs at Gemini's lowest thinking level without losing accuracy. Four setups were compared on the same 185 questions in two rounds (1,480 calls), with the production prompt, chat history, asset hint and 0.7 ask-back rule. A preliminary probe showed that the \emph{low} and \emph{minimal} levels both spend zero thinking tokens on routing, so \emph{minimal} was compared with the model's default (which behaves like \emph{medium}). Flash-Lite was included to test a cheaper router model.
+
+\subsection{Results}
+\begin{table}[H]
+\centering
+\footnotesize
+\caption{Study B: router accuracy and latency (185 questions $\times$ 2 rounds).}\label{tab:b-setups}
+\begin{tabular}{llrrrrrr}
+\toprule
+\textbf{Model} & \textbf{Thinking} & \textbf{Calls} & \textbf{Accuracy (95\% CI)} & \textbf{Median (s)} & \textbf{p95 (s)} & \textbf{Thinking tok.} & \textbf{Failures} \\
+\midrule
+gemini-3.5-flash & minimal & 370 & 95.9\% (93.4--97.5\%) & 1.36 & 1.95 & 0 & 0 \\
+gemini-3.5-flash & not set (medium) & 370 & 96.2\% (93.7--97.7\%) & 2.59 & 4.23 & 272 & 0 \\
+gemini-3.5-flash-lite & minimal & 370 & 93.8\% (90.8--95.8\%) & 0.88 & 1.16 & 0 & 0 \\
+gemini-3.5-flash-lite & high & 370 & 96.5\% (94.1--97.9\%) & 1.93 & 3.24 & 469 & 0 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[H]
+\centering
+\footnotesize
+\caption{Study B paired comparisons. ``No loss'' requires the whole CI above $-3$ points.}\label{tab:b-comp}
+\begin{tabular}{p{4.3cm}rrrrr}
+\toprule
+\textbf{Comparison} & \textbf{Pairs} & \textbf{Acc. diff (95\% CI)} & \textbf{Only 1st/2nd} & \textbf{McNemar p} & \textbf{Latency diff (s)} \\
+\midrule
+ch.3 claim: minimal vs no setting (before the fix) & 370 & -0.3 (-2.2 to +1.6) & 6/7 & 1.000 & -1.26 \\
+Does thinking help flash-lite? & 370 & -2.7 (-5.1 to -0.5) & 5/15 & 0.041 & -1.04 \\
+Could flash-lite replace the production router? & 370 & -2.2 (-4.6 to +0.0) & 5/13 & 0.096 & -0.46 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[H]
+\centering
+\scriptsize
+\caption{Study B accuracy by expected destination.}\label{tab:b-dest}
+\begin{tabular}{lrrrrrrrr}
+\toprule
+\textbf{Setup} & \textbf{tax} & \textbf{expense} & \textbf{asset \allowbreak{}monitoring} & \textbf{planning} & \textbf{recommendation} & \textbf{report} & \textbf{general \allowbreak{}chat} & \textbf{clarify} \\
+\midrule
+flash minimal & 100\% & 94\% & 96\% & 94\% & 91\% & 98\% & 96\% & 100\% \\
+flash default & 100\% & 96\% & 92\% & 96\% & 96\% & 95\% & 96\% & 100\% \\
+lite minimal & 100\% & 90\% & 94\% & 90\% & 83\% & 95\% & 100\% & 100\% \\
+lite high & 98\% & 96\% & 94\% & 100\% & 89\% & 100\% & 98\% & 96\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Discussion}
+The minimal level meets the non-inferiority criterion: the accuracy difference of $-0.3$ points has a 95\% interval of $-2.2$ to $+1.6$ points, while the median routing latency fell by about 1.26\,s. Flash-Lite at the minimal level was 2.2 points less accurate than Flash, so it was not adopted. The router prompt was later revised twice (Table~\ref{tab:b-prompts}); neither revision changed accuracy significantly.
+
+\begin{table}[H]
+\centering
+\small
+\caption{Single-topic routing accuracy across prompt versions (gemini-3.5-flash, minimal thinking, 185 questions).}\label{tab:b-prompts}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Router prompt} & \textbf{Calls} & \textbf{Accuracy (95\% CI)} & \textbf{Wrong splits} & \textbf{Median (s)} \\
+\midrule
+Original prompt (Study B, 2 rounds) & 370 & 95.9\% (93.4--97.5\%) & 0 & 1.36 \\
+After prompt fixes (greeting, tax) & 185 & 95.7\% (91.7--97.8\%) & 0 & 1.25 \\
+Multi-intent prompt & 185 & 94.6\% (90.3--97.0\%) & 1 & 1.38 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\section{Study C: Embedding Models for Retrieval}
+
+\subsection{Design}
+Five retrievers were compared on 120 questions over the production knowledge base, split into chunks exactly as in production (500 characters with 50 overlap) and searched with exact cosine similarity. A chunk is relevant when it comes from a gold file and contains every answer keyword. A leakage check measured character 6-gram overlap between each question and its relevant chunks (median 0.18; five questions above 0.5). For the end-to-end step, gemini-3.5-flash answered every question from each of the three best retrievers' top three chunks, and DeepSeek V4.1 Flash, a different model family, judged correctness and faithfulness to the sources. The judge agreed with the author's hand labels on 28 of 30 answers.
+
+\subsection{Results}
+\begin{table}[H]
+\centering
+\small
+\caption{Study C retrieval quality (120 questions, production chunks 500/50).}\label{tab:c-retrieval}
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Retriever} & \textbf{nDCG@10 (95\% CI)} & \textbf{Recall@1} & \textbf{Recall@3} & \textbf{Recall@5} & \textbf{MRR@10} \\
+\midrule
+gemini-embedding-001 & 0.805 (0.756--0.851) & 0.742 & 0.900 & 0.942 & 0.827 \\
+BAAI/bge-m3 & 0.724 (0.662--0.782) & 0.650 & 0.842 & 0.883 & 0.747 \\
+multilingual-e5-large-instruct & 0.722 (0.661--0.776) & 0.650 & 0.825 & 0.858 & 0.746 \\
+BM25 (newmm) & 0.568 (0.501--0.634) & 0.458 & 0.683 & 0.742 & 0.578 \\
+MiniLM-L12 (old fallback) & 0.394 (0.323--0.464) & 0.333 & 0.433 & 0.492 & 0.407 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[H]
+\centering
+\footnotesize
+\caption{Study C paired comparison against the production embedding (gemini-embedding-001).}\label{tab:c-paired}
+\begin{tabular}{lrrrrr}
+\toprule
+\textbf{Retriever vs Gemini} & \textbf{nDCG diff (95\% CI)} & \textbf{Better/worse} & \textbf{Sign p} & \textbf{Recall@3 only} & \textbf{McNemar p} \\
+\midrule
+multilingual-e5-large-instruct & -0.084 (-0.133 to -0.035) & 14/43 & 0.0002 & 4/13 & 0.049 \\
+BAAI/bge-m3 & -0.081 (-0.132 to -0.035) & 15/45 & 0.0001 & 4/11 & 0.118 \\
+MiniLM-L12 (old fallback) & -0.411 (-0.479 to -0.343) & 4/86 & $<$0.0001 & 1/57 & $<$0.0001 \\
+BM25 (newmm) & -0.237 (-0.308 to -0.163) & 14/68 & $<$0.0001 & 6/32 & $<$0.0001 \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[H]
+\centering
+\small
+\caption{Study C end-to-end answers (gemini-3.5-flash answers from each retriever's top 3; DeepSeek V4.1 Flash judge).}\label{tab:c-e2e}
+\begin{tabular}{lrrr}
+\toprule
+\textbf{Retriever} & \textbf{Answers} & \textbf{Correct} & \textbf{Faithful to sources} \\
+\midrule
+gemini-embedding-001 & 120 & 112/120 (93.3\%) & 106/120 (88.3\%) \\
+BAAI/bge-m3 & 120 & 113/120 (94.2\%) & 99/120 (82.5\%) \\
+multilingual-e5-large-instruct & 120 & 111/120 (92.5\%) & 104/120 (86.7\%) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\subsection{Discussion}
+Gemini embeddings retrieved significantly better than every alternative, which supports keeping \texttt{gemini-embedding-001} in production. The old local fallback, MiniLM, was clearly unsuitable for Thai, so the local default was changed to BAAI/bge-m3. Retrieval differences did not carry through to final answers: correctness was 92.5--94.2\% for the three best retrievers with no significant difference, because the answer model can often answer correctly from a partly relevant set of three chunks.
+
+\section{Tax Evaluations}
+
+The tax calculator and the Tax Agent prompt were corrected on 3 November 2026 for the 2569 (2026) rules (social security cap 10,500; parent allowance per person, up to four; no total cap on children; SSF ended after 2567). All tax evaluations were therefore re-run. Six new cases were added for the 2569 rules; their expected values were computed by hand, checked against the calculator, and chosen so that the old rule would give a different answer outside the tolerance.
+
+{\scriptsize
+\begin{longtable}{lrrlp{8.6cm}}
+\caption{Tax accuracy through the production Tax Agent: 26/26 within tolerance.}\label{tab:tax-acc}\\
+\toprule
+\textbf{Case} & \textbf{Expected (THB)} & \textbf{Agent (THB)} & \textbf{OK} & \textbf{Query} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Case} & \textbf{Expected (THB)} & \textbf{Agent (THB)} & \textbf{OK} & \textbf{Query} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+tax\_\allowbreak{}acc\_\allowbreak{}001 & 21,500 & 21,500 & yes & {\thaifont คำนวณภาษี เงินเดือน }50,000 {\thaifont บาทต่อเดือน ค่าลดหย่อนส่วนตัว }60,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}002 & 0 & 0 & yes & {\thaifont รายได้ }300,000 {\thaifont บาทต่อปี ลดหย่อนส่วนตัว }60,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}003 & 83,000 & 83,000 & yes & {\thaifont รายได้ }1,200,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 RMF 200,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}004 & 2,050 & 2,050 & yes & {\thaifont เงินเดือน }30,000 {\thaifont ค่าลดหย่อนส่วนตัว }60,000 {\thaifont ประกันสังคม }9,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}005 & 175,000 & 175,000 & yes & {\thaifont รายได้ }2,000,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 {\thaifont ประกันชีวิต }100,000 RMF 500,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}006 & 0 & 0 & yes & {\thaifont รายได้ }150,000 {\thaifont ลดหย่อนส่วนตัว }60,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}007 & 1,217,000 & 1,217,000 & yes & {\thaifont รายได้ }5,000,000 {\thaifont บาท ค่าลดหย่อนส่วนตัว }60,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}008 & 69,000 & 69,000 & yes & {\thaifont เงินเดือน }80,000 {\thaifont ลดหย่อนส่วนตัว }60,000 {\thaifont ลูก }1 {\thaifont คน} \\
+tax\_\allowbreak{}acc\_\allowbreak{}009 & 20,000 & 20,000 & yes & {\thaifont ปีภาษี }2567 {\thaifont รายได้ }800,000 {\thaifont ลดหย่อนส่วนตัว }60,000 SSF 200,000 {\thaifont ประกันสุขภาพ }15,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}010 & 9,500 & 9,500 & yes & {\thaifont รายได้ }500,000 {\thaifont ลดหย่อนส่วนตัว }60,000 {\thaifont เงินบริจาค }20,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}011 & 0 & 0 & yes & {\thaifont รายได้ }100,000 {\thaifont บาท ไม่มีค่าลดหย่อน} \\
+tax\_\allowbreak{}acc\_\allowbreak{}012 & 0 & 0 & yes & {\thaifont รายได้ }250,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}013 & 25,500 & 25,500 & yes & {\thaifont รายได้ }700,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 {\thaifont คู่สมรส }60,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}014 & 4,000 & 4,000 & yes & {\thaifont รายได้ }450,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 {\thaifont บิดามารดา }60,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}015 & 48,500 & 48,500 & yes & {\thaifont รายได้ }900,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 {\thaifont ดอกเบี้ยบ้าน }100,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}016 & 150,000 & 150,000 & yes & {\thaifont รายได้ }1,500,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 {\thaifont กองทุนสำรองเลี้ยงชีพ }200,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}017 & 11,500 & 11,500 & yes & {\thaifont รายได้ }600,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 {\thaifont ประกันชีวิต }80,000 {\thaifont ประกันสุขภาพ }20,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}018 & 8,600 & 8,600 & yes & {\thaifont เงินเดือน }40,000 {\thaifont ลดหย่อนส่วนตัว }60,000 {\thaifont ประกันสังคม }9,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}019 & 407,000 & 407,000 & yes & {\thaifont ปีภาษี }2567 {\thaifont รายได้ }3,000,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 RMF 500,000 SSF 200,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}020 & 36,650 & 36,650 & yes & {\thaifont เงินเดือน }70,000 {\thaifont ลดหย่อนส่วนตัว }60,000 {\thaifont ลูก }2 {\thaifont คน ประกันสังคม }9,000 {\thaifont ประกันชีวิต }50,000 \\
+tax\_\allowbreak{}acc\_\allowbreak{}021 & 20,450 & 20,450 & yes & {\thaifont ปีภาษี }2569 {\thaifont เงินเดือน }50,000 {\thaifont บาท จ่ายประกันสังคมเดือนละ }875 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 {\thaifont ต้องเสียภาษีเท่าไร} \\
+tax\_\allowbreak{}acc\_\allowbreak{}022 & 51,500 & 51,500 & yes & {\thaifont รายได้ปีละ }1,000,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 {\thaifont คู่สมรสไม่มีรายได้ เลี้ยงดูพ่อแม่ตัวเองและพ่อแม่ของคู่สมรสรวม }4 {\thaifont คน ภาษีเท่าไร} \\
+tax\_\allowbreak{}acc\_\allowbreak{}023 & 41,000 & 41,000 & yes & {\thaifont ปีภาษี }2569 {\thaifont รายได้ }900,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 {\thaifont ซื้อ }ThaiESG 150,000 {\thaifont บาท ต้องเสียภาษีเท่าไร} \\
+tax\_\allowbreak{}acc\_\allowbreak{}024 & 5,500 & 5,500 & yes & {\thaifont ปีภาษี }2569 {\thaifont รายได้ }600,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 {\thaifont ซื้อ }ThaiESG 250,000 {\thaifont บาท ภาษีเหลือเท่าไร} \\
+tax\_\allowbreak{}acc\_\allowbreak{}025 & 250,000 & 250,000 & yes & {\thaifont ปีภาษี }2569 {\thaifont รายได้ }2,000,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 {\thaifont ซื้อ }ThaiESG 400,000 {\thaifont บาท ต้องจ่ายภาษีเท่าไร} \\
+tax\_\allowbreak{}acc\_\allowbreak{}026 & 35,000 & 35,000 & yes & {\thaifont รายได้ }800,000 {\thaifont บาท ลดหย่อนส่วนตัว }60,000 {\thaifont มีลูก }3 {\thaifont คน เกิดก่อนปี }2561 {\thaifont ทุกคน ต้องเสียภาษีเท่าไร} \\
+\end{longtable}}
+\begin{table}[H]
+\centering
+\small
+\caption{Tool bypass: tax computed by calculate\_thai\_tax against the model alone (gemini-3.5-flash).}\label{tab:tax-bypass}
+\begin{tabular}{lrrrl}
+\toprule
+\textbf{Case} & \textbf{Expected} & \textbf{With tool} & \textbf{Without tool (read by hand)} & \textbf{No-tool OK} \\
+\midrule
+bypass\_\allowbreak{}001 & 21,500 & 21,500 & 21,500 & yes \\
+bypass\_\allowbreak{}002 & 83,000 & 83,000 & 83,000 & yes \\
+bypass\_\allowbreak{}003 & 175,000 & 175,000 & 175,000 & yes \\
+bypass\_\allowbreak{}004 & 1,217,000 & 1,217,000 & 1,217,000 & yes \\
+bypass\_\allowbreak{}005 & 2,050 & 2,050 & 2,050 & yes \\
+bypass\_\allowbreak{}006 & 20,000 & 20,000 & 20,000 & yes \\
+bypass\_\allowbreak{}007 & 407,000 & 407,000 & 467,000 & no \\
+bypass\_\allowbreak{}008 & 36,650 & 36,650 & 36,650 & yes \\
+\bottomrule
+\end{tabular}
+\end{table}
+\begin{table}[H]
+\centering
+\scriptsize
+\caption{Hallucination checks (10 regex cases), automatic and after reading.}\label{tab:tax-hal}
+\begin{tabular}{llllp{7cm}}
+\toprule
+\textbf{Case} & \textbf{Category} & \textbf{Pass (hand)} & \textbf{Pass (regex)} & \textbf{Query} \\
+\midrule
+hal\_\allowbreak{}001 & fabricated\_\allowbreak{}number & yes & yes & {\thaifont ค่าลดหย่อนส่วนตัวเท่าไหร่} \\
+hal\_\allowbreak{}002 & fabricated\_\allowbreak{}number & yes & yes & RMF {\thaifont ลดหย่อนได้สูงสุดเท่าไหร่} \\
+hal\_\allowbreak{}003 & fabricated\_\allowbreak{}number & yes & yes & {\thaifont อัตราภาษีเงินได้สูงสุดเท่าไหร่} \\
+hal\_\allowbreak{}004 & fabricated\_\allowbreak{}law & yes & yes & {\thaifont กฎหมายภาษีที่ดินฉบับใหม่} \\
+hal\_\allowbreak{}005 & fabricated\_\allowbreak{}number & yes & yes & {\thaifont ค่าลดหย่อนบุตรเท่าไหร่} \\
+hal\_\allowbreak{}006 & fabricated\_\allowbreak{}number & yes & yes & {\thaifont ค่าลดหย่อนประกันชีวิตสูงสุดเท่าไหร่} \\
+hal\_\allowbreak{}007 & fabricated\_\allowbreak{}number & yes & no & {\thaifont ค่าลดหย่อนประกันสังคมเท่าไหร่} \\
+hal\_\allowbreak{}008 & incorrect\_\allowbreak{}calculation & yes & yes & {\thaifont เงินได้ไม่เกิน }150,000 {\thaifont บาทต้องเสียภาษีมั้ย} \\
+hal\_\allowbreak{}009 & fabricated\_\allowbreak{}number & yes & yes & SSF {\thaifont ลดหย่อนได้เท่าไหร่} \\
+hal\_\allowbreak{}010 & missing\_\allowbreak{}citation & yes & yes & {\thaifont ภาษีหัก ณ ที่จ่ายคืออะไร} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+\textbf{Reading.} The Tax Agent made no errors in 26 cases (95\% Wilson interval for the error rate: 0--12.9\%). The automatic number reader of the tool-bypass benchmark misread Gemini's markdown, so the no-tool answers were read by hand: the model alone was correct in 7 of 8 cases, failed the combined RMF and SSF cap (467,000 instead of 407,000 baht) and quoted the old 9,000-baht social-security cap. The calculator therefore remains justified because it keeps every answer correct and current, rather than because the model cannot calculate. One hallucination case failed the regex check only because the answer did not mention the wage ceiling; its stated caps were correct, which shows that ten regex checks are not a reliable hallucination measure. The faithfulness judge in Study C is the stronger measure.
+
+\section{Product Issues Found and Fixed}
+\begin{itemize}
+\item \textbf{Router, tax questions:} after a life-insurance category was added, ``paid an insurance premium, how much tax do I owe?'' was routed to the expense agent. A rule and an example now send questions about tax amounts to the tax agent (both affected tasks reached the tax agent in 18 of 18 calls afterwards).
+\item \textbf{Router, greetings:} greetings were sometimes answered with the ask-back menu; they now go to general chat with high confidence.
+\item \textbf{Benchmark:} the tool-bypass benchmark turned Gemini's content blocks into a string, so no number could be read; it now joins the text blocks.
+\item \textbf{Multi-intent replies:} an agent that returned no text produced an empty section; such a part now shows a short apology.
+\item \textbf{Local embedding default:} changed from MiniLM to BAAI/bge-m3 (production uses Gemini and is unaffected).
+\end{itemize}
+
+\section{Limitations}
+\begin{itemize}
+\item Study A was not repeated on the production model, Gemini 3.5 Flash, because of budget; its results come from two other model families. Gemini was chosen for production because it gave the most stable results in the tests that did use it (26 of 26 tax cases, no failed or unreadable router calls in 185 questions, no empty replies), whereas DeepSeek V4.1 Flash occasionally returned empty tax replies and gpt-oss:20b once asked the user back in Chinese.
+\item The multi-intent result on cross-topic tasks is a merged estimate (Section~\ref{sec:mi}).
+\item All datasets were written by the author; they are not drawn from real user traffic, and the multi-topic set has 30 messages.
+\item No expert review, user study or adversarial (red-team) test was carried out.
+\item Latency was measured from a laptop, not from the deployed server.
+\end{itemize}
+
+\section{Reproducibility}
+All studies are resumable and log every call or run to JSONL; reports are rebuilt from the logs.
+{\small
+\begin{verbatim}
+# Study A (architecture); options --designs, --tasks, --rounds
+python -m finance_ai.evaluation.architectures.study_cli \
+    --model ollama:deepseek-v4.1-flash
+# Study B (router thinking level)
+python -m finance_ai.evaluation.router_thinking.cli --rounds 2
+# Multi-topic routing
+python -m finance_ai.evaluation.router_thinking.multi_topic
+# Study C (retrieval, then end-to-end answers)
+python -m finance_ai.evaluation.embedding_study.study
+python -m finance_ai.evaluation.embedding_study.end_to_end
+\end{verbatim}}
+Hand audits are recorded in \texttt{audit.yaml} in each Study A results folder and in \texttt{docs/evaluation/*.md}.
+
+\appendix
+\section{Study A Results per Task}
+{\scriptsize
+\begin{longtable}{llrrrrrp{7.2cm}}
+\caption{Successful rounds out of 3 per task, DeepSeek V4.1 Flash. Hub+MI = hub with multi-intent routing (re-run only for the six failed cross-topic tasks).}\label{tab:app-a-ds}\\
+\toprule
+\textbf{Task} & \textbf{Type} & \textbf{Single} & \textbf{Hub} & \textbf{Hier.} & \textbf{P2P} & \textbf{Hub+MI} & \textbf{Query} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Task} & \textbf{Type} & \textbf{Single} & \textbf{Hub} & \textbf{Hier.} & \textbf{P2P} & \textbf{Hub+MI} & \textbf{Query} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+tax\_\allowbreak{}01 & single & 3 & 3 & 3 & 3 & -- & {\thaifont เงินเดือน }50,000 {\thaifont บาท ไม่มีค่าลดหย่อนอื่นนอกจากส่วนตัว คำนวณภาษีปีนี้ให้หน่อย} \\
+tax\_\allowbreak{}02 & single & 3 & 3 & 3 & 3 & -- & {\thaifont รายได้ปีละ }1,200,000 {\thaifont บาท มีลูก }1 {\thaifont คน ต้องเสียภาษีเท่าไร} \\
+tax\_\allowbreak{}03 & single & 3 & 0 & 2 & 3 & -- & {\thaifont เงินเดือน }80,000 {\thaifont บาท จ่ายเบี้ยประกันชีวิตปีละ }50,000 {\thaifont บาท ภาษีเท่าไร} \\
+tax\_\allowbreak{}04 & single & 3 & 3 & 3 & 3 & -- & {\thaifont รายได้ทั้งปี }720,000 {\thaifont บาท ซื้อ }RMF 100,000 {\thaifont บาท ต้องจ่ายภาษีเท่าไร} \\
+tax\_\allowbreak{}05 & single & 3 & 3 & 3 & 3 & -- & {\thaifont เงินเดือน }35,000 {\thaifont บาท ต้องเสียภาษีไหม ถ้าเสียเสียเท่าไร} \\
+tax\_\allowbreak{}06 & single & 3 & 2 & 0 & 3 & -- & {\thaifont รายได้ปีละ }2 {\thaifont ล้านบาท เลี้ยงดูแม่ }1 {\thaifont คน จ่ายประกันสุขภาพตัวเอง }20,000 {\thaifont บาท ภาษีเท่าไร} \\
+tax\_\allowbreak{}07 & single & 3 & 1 & 2 & 3 & -- & {\thaifont ค่าลดหย่อนส่วนตัวปีนี้ได้เท่าไร} \\
+exp\_\allowbreak{}01 & single & 3 & 3 & 3 & 3 & -- & {\thaifont จ่ายค่ากาแฟ }80 {\thaifont บาท} \\
+exp\_\allowbreak{}02 & single & 3 & 3 & 3 & 3 & -- & {\thaifont เมื่อวานเติมน้ำมันไป }1,200 {\thaifont บาท} \\
+exp\_\allowbreak{}03 & single & 3 & 3 & 3 & 3 & -- & {\thaifont ได้โบนัส }30,000 {\thaifont บาท บันทึกรายรับให้หน่อย} \\
+exp\_\allowbreak{}04 & single & 3 & 3 & 3 & 3 & -- & {\thaifont เดือนนี้ใช้เงินไปเท่าไรแล้ว} \\
+exp\_\allowbreak{}05 & single & 3 & 3 & 3 & 3 & -- & {\thaifont เดือนที่แล้วใช้ค่าเดินทางไปทั้งหมดเท่าไร} \\
+exp\_\allowbreak{}06 & single & 3 & 3 & 3 & 3 & -- & {\thaifont ค่าอาหารเดือนที่แล้วรวมเท่าไร} \\
+exp\_\allowbreak{}07 & single & 3 & 3 & 3 & 3 & -- & {\thaifont วันนี้ซื้อหนังสือเรียน }450 {\thaifont บาท กับค่าข้าวกลางวัน }65 {\thaifont บาท} \\
+ast\_\allowbreak{}01 & single & 3 & 3 & 3 & 3 & -- & {\thaifont ดูราคาหุ้น }PTT {\thaifont ล่าสุดให้หน่อย} \\
+ast\_\allowbreak{}02 & single & 3 & 3 & 3 & 3 & -- & {\thaifont พอร์ตของฉันตอนนี้ถืออะไรอยู่บ้าง} \\
+ast\_\allowbreak{}03 & single & 3 & 3 & 3 & 3 & -- & {\thaifont เพิ่มหุ้น }CPALL {\thaifont เข้ารายการติดตาม} \\
+ast\_\allowbreak{}04 & single & 3 & 3 & 3 & 3 & -- & {\thaifont มีข่าวอะไรล่าสุดเกี่ยวกับหุ้น }AOT {\thaifont บ้าง} \\
+ast\_\allowbreak{}05 & single & 3 & 3 & 3 & 3 & -- & {\thaifont หากองทุนรวมดัชนี }SET50 {\thaifont ให้หน่อย} \\
+ast\_\allowbreak{}06 & single & 3 & 3 & 3 & 3 & -- & {\thaifont วันนี้ซื้อหุ้น }ADVANC 200 {\thaifont หุ้น ราคาหุ้นละ }300 {\thaifont บาท บันทึกลงพอร์ตให้ด้วย} \\
+ast\_\allowbreak{}07 & single & 3 & 3 & 3 & 3 & -- & {\thaifont หุ้นปตท}.{\thaifont ตอนนี้ราคาเท่าไร} \\
+pln\_\allowbreak{}01 & single & 3 & 3 & 3 & 3 & -- & {\thaifont อยากเก็บเงินให้ได้ }100,000 {\thaifont บาทภายใน }12 {\thaifont เดือน ต้องออมเดือนละเท่าไร} \\
+pln\_\allowbreak{}02 & single & 3 & 3 & 3 & 3 & -- & {\thaifont ตั้งเป้าหมายเก็บเงินดาวน์บ้าน }500,000 {\thaifont บาทภายใน }3 {\thaifont ปี} \\
+pln\_\allowbreak{}03 & single & 3 & 3 & 3 & 3 & -- & {\thaifont เป้าหมายการเงินของฉันตอนนี้คืบหน้าไปแค่ไหนแล้ว} \\
+pln\_\allowbreak{}04 & single & 3 & 3 & 3 & 3 & -- & {\thaifont เพิ่มเงินเข้ากองทุนสำรองฉุกเฉินอีก }10,000 {\thaifont บาท} \\
+pln\_\allowbreak{}05 & single & 3 & 3 & 3 & 3 & -- & {\thaifont เงินเดือน }50,000 {\thaifont บาท ถ้าจะออมก่อนใช้แบบ }pay yourself first {\thaifont ควรแบ่งออมเท่าไร} \\
+pln\_\allowbreak{}06 & single & 3 & 3 & 3 & 3 & -- & {\thaifont ตอนนี้อายุ }30 {\thaifont อยากเกษียณตอน }55 {\thaifont ควรเริ่มวางแผนเก็บเงินยังไง} \\
+pln\_\allowbreak{}07 & single & 3 & 0 & 0 & 3 & -- & {\thaifont เงินสำรองฉุกเฉินควรมีกี่เดือนของรายจ่าย} \\
+rec\_\allowbreak{}01 & single & 3 & 3 & 3 & 3 & -- & {\thaifont สุขภาพการเงินของฉันเป็นยังไงบ้าง} \\
+rec\_\allowbreak{}02 & single & 3 & 3 & 3 & 3 & -- & {\thaifont แนะนำเรื่องการเงินให้หน่อย ควรปรับอะไรบ้าง} \\
+rec\_\allowbreak{}03 & single & 2 & 3 & 3 & 2 & -- & {\thaifont ตอนนี้ควรลงทุนอะไรดี} \\
+rec\_\allowbreak{}04 & single & 3 & 3 & 3 & 3 & -- & {\thaifont ช่วยตรวจสอบการเงินของฉันทั้งหมดแล้วบอกจุดที่ควรแก้} \\
+rec\_\allowbreak{}05 & single & 3 & 3 & 3 & 3 & -- & {\thaifont ควรเอาเงินไปซื้อคริปโตไหม} \\
+rec\_\allowbreak{}06 & single & 3 & 3 & 0 & 1 & -- & {\thaifont ช่วงนี้ตลาดหุ้นแย่มาก กลัวขาดทุน ควรขายหุ้นทิ้งให้หมดเลยไหม} \\
+rpt\_\allowbreak{}01 & single & 3 & 3 & 3 & 3 & -- & {\thaifont สรุปรายงานการเงินเดือนที่แล้วให้หน่อย} \\
+rpt\_\allowbreak{}02 & single & 3 & 3 & 3 & 3 & -- & {\thaifont ขอภาพรวมสถานะการเงินทั้งหมดของฉัน} \\
+rpt\_\allowbreak{}03 & single & 3 & 3 & 3 & 3 & -- & {\thaifont ทำรายงานการเงินประจำปีนี้ให้หน่อย} \\
+rpt\_\allowbreak{}04 & single & 3 & 3 & 3 & 3 & -- & {\thaifont เดือนที่แล้วรายรับหักรายจ่ายแล้วเหลือเท่าไร} \\
+rpt\_\allowbreak{}05 & single & 3 & 3 & 3 & 3 & -- & {\thaifont ขอรายงานรายจ่ายแยกตามหมวดของเดือนที่แล้ว} \\
+rpt\_\allowbreak{}06 & single & 3 & 3 & 3 & 3 & -- & {\thaifont สรุปการเงินไตรมาสนี้ให้หน่อย} \\
+crs\_\allowbreak{}01 & cross & 3 & 3 & 3 & 3 & -- & {\thaifont จากรายจ่ายเดือนที่แล้ว ฉันจะเก็บเงินไปเที่ยวญี่ปุ่นได้ครบตามเป้าไหม} \\
+crs\_\allowbreak{}02 & cross & 3 & 3 & 0 & 1 & -- & {\thaifont เดือนที่แล้วใช้จ่ายไปเท่าไร แล้วมีอะไรที่เอาไปลดหย่อนภาษีได้บ้าง} \\
+crs\_\allowbreak{}03 & cross & 3 & 1 & 2 & 3 & 3 & {\thaifont พอร์ตของฉันตอนนี้เป็นยังไง แล้วควรปรับพอร์ตไหม} \\
+crs\_\allowbreak{}04 & cross & 3 & 3 & 3 & 3 & -- & {\thaifont บันทึกค่าข้าวเย็น }120 {\thaifont บาท แล้วบอกหน่อยว่าเดือนนี้ใช้ค่าอาหารไปเท่าไรแล้ว} \\
+crs\_\allowbreak{}05 & cross & 3 & 0 & 0 & 0 & 1 & {\thaifont รายได้ปีละ }720,000 {\thaifont บาท มีแค่ค่าลดหย่อนส่วนตัว ต้องเสียภาษีเท่าไร และควรออมเพิ่มเดือนละเท่าไรดี} \\
+crs\_\allowbreak{}06 & cross & 3 & 3 & 3 & 3 & -- & {\thaifont ราคาหุ้น }PTT {\thaifont ตอนนี้เท่าไร และฉันถืออยู่กี่หุ้น} \\
+crs\_\allowbreak{}07 & cross & 3 & 0 & 0 & 0 & 3 & {\thaifont สุขภาพการเงินของฉันเป็นยังไง แล้วกองทุนฉุกเฉินควรเก็บเพิ่มอีกเท่าไร} \\
+crs\_\allowbreak{}08 & cross & 3 & 2 & 1 & 3 & 3 & {\thaifont สรุปรายงานเดือนที่แล้ว แล้วแนะนำวิธีลดรายจ่ายให้หน่อย} \\
+crs\_\allowbreak{}09 & cross & 3 & 0 & 0 & 0 & 3 & {\thaifont รายได้ปีละ }600,000 {\thaifont บาท ถ้าซื้อ }RMF 100,000 {\thaifont บาท ภาษีจะเหลือเท่าไร แล้ว }RMF {\thaifont ที่ฉันถืออยู่ตอนนี้มีมูลค่าเท่าไร} \\
+crs\_\allowbreak{}10 & cross & 3 & 3 & 3 & 3 & -- & {\thaifont ได้โบนัส }40,000 {\thaifont บาท บันทึกเป็นรายรับ แล้วเอาไปเพิ่มในกองทุนสำรองฉุกเฉินทั้งหมด} \\
+crs\_\allowbreak{}11 & cross & 3 & 3 & 3 & 3 & -- & {\thaifont หุ้นที่ฉันถืออยู่มีข่าวอะไรบ้าง ควรกังวลไหม} \\
+crs\_\allowbreak{}12 & cross & 3 & 1 & 2 & 2 & 0 & {\thaifont ค่ารักษาพยาบาลเอาไปลดหย่อนภาษีได้ไหม แล้วเดือนที่แล้วฉันจ่ายค่าสุขภาพไปเท่าไร} \\
+vag\_\allowbreak{}01 & vague & 3 & 3 & 3 & 3 & -- & {\thaifont เงิน} \\
+vag\_\allowbreak{}02 & vague & 3 & 3 & 3 & 3 & -- & {\thaifont การเงิน} \\
+vag\_\allowbreak{}03 & vague & 3 & 3 & 3 & 3 & -- & {\thaifont ช่วยหน่อย} \\
+vag\_\allowbreak{}04 & vague & 2 & 3 & 3 & 3 & -- & {\thaifont ทำยังไงดี} \\
+vag\_\allowbreak{}05 & vague & 3 & 3 & 3 & 3 & -- & {\thaifont เรื่องเงินๆ ทองๆ} \\
+vag\_\allowbreak{}06 & vague & 3 & 3 & 3 & 3 & -- & {\thaifont จัดการให้หน่อย} \\
+vag\_\allowbreak{}07 & vague & 3 & 3 & 3 & 3 & -- & {\thaifont อยากให้ช่วยเรื่องเงิน} \\
+vag\_\allowbreak{}08 & vague & 3 & 3 & 3 & 3 & -- & {\thaifont แล้วแต่เลย} \\
+\end{longtable}}
+
+{\scriptsize
+\begin{longtable}{llrrrrp{7.2cm}}
+\caption{Successful rounds out of 3 per task, gpt-oss:20b.}\label{tab:app-a-oss}\\
+\toprule
+\textbf{Task} & \textbf{Type} & \textbf{Single} & \textbf{Hub} & \textbf{Hier.} & \textbf{P2P} & \textbf{Query} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Task} & \textbf{Type} & \textbf{Single} & \textbf{Hub} & \textbf{Hier.} & \textbf{P2P} & \textbf{Query} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+tax\_\allowbreak{}01 & single & 3 & 3 & 3 & 3 & {\thaifont เงินเดือน }50,000 {\thaifont บาท ไม่มีค่าลดหย่อนอื่นนอกจากส่วนตัว คำนวณภาษีปีนี้ให้หน่อย} \\
+tax\_\allowbreak{}02 & single & 3 & 3 & 3 & 3 & {\thaifont รายได้ปีละ }1,200,000 {\thaifont บาท มีลูก }1 {\thaifont คน ต้องเสียภาษีเท่าไร} \\
+tax\_\allowbreak{}03 & single & 3 & 3 & 3 & 3 & {\thaifont เงินเดือน }80,000 {\thaifont บาท จ่ายเบี้ยประกันชีวิตปีละ }50,000 {\thaifont บาท ภาษีเท่าไร} \\
+tax\_\allowbreak{}04 & single & 3 & 3 & 3 & 3 & {\thaifont รายได้ทั้งปี }720,000 {\thaifont บาท ซื้อ }RMF 100,000 {\thaifont บาท ต้องจ่ายภาษีเท่าไร} \\
+tax\_\allowbreak{}05 & single & 3 & 3 & 2 & 2 & {\thaifont เงินเดือน }35,000 {\thaifont บาท ต้องเสียภาษีไหม ถ้าเสียเสียเท่าไร} \\
+tax\_\allowbreak{}06 & single & 3 & 3 & 3 & 3 & {\thaifont รายได้ปีละ }2 {\thaifont ล้านบาท เลี้ยงดูแม่ }1 {\thaifont คน จ่ายประกันสุขภาพตัวเอง }20,000 {\thaifont บาท ภาษีเท่าไร} \\
+tax\_\allowbreak{}07 & single & 3 & 3 & 2 & 3 & {\thaifont ค่าลดหย่อนส่วนตัวปีนี้ได้เท่าไร} \\
+exp\_\allowbreak{}01 & single & 3 & 3 & 3 & 3 & {\thaifont จ่ายค่ากาแฟ }80 {\thaifont บาท} \\
+exp\_\allowbreak{}02 & single & 3 & 3 & 3 & 3 & {\thaifont เมื่อวานเติมน้ำมันไป }1,200 {\thaifont บาท} \\
+exp\_\allowbreak{}03 & single & 3 & 3 & 3 & 3 & {\thaifont ได้โบนัส }30,000 {\thaifont บาท บันทึกรายรับให้หน่อย} \\
+exp\_\allowbreak{}04 & single & 3 & 3 & 3 & 2 & {\thaifont เดือนนี้ใช้เงินไปเท่าไรแล้ว} \\
+exp\_\allowbreak{}05 & single & 3 & 1 & 3 & 2 & {\thaifont เดือนที่แล้วใช้ค่าเดินทางไปทั้งหมดเท่าไร} \\
+exp\_\allowbreak{}06 & single & 3 & 3 & 3 & 3 & {\thaifont ค่าอาหารเดือนที่แล้วรวมเท่าไร} \\
+exp\_\allowbreak{}07 & single & 3 & 3 & 3 & 3 & {\thaifont วันนี้ซื้อหนังสือเรียน }450 {\thaifont บาท กับค่าข้าวกลางวัน }65 {\thaifont บาท} \\
+ast\_\allowbreak{}01 & single & 3 & 3 & 2 & 3 & {\thaifont ดูราคาหุ้น }PTT {\thaifont ล่าสุดให้หน่อย} \\
+ast\_\allowbreak{}02 & single & 3 & 3 & 3 & 3 & {\thaifont พอร์ตของฉันตอนนี้ถืออะไรอยู่บ้าง} \\
+ast\_\allowbreak{}03 & single & 3 & 3 & 3 & 3 & {\thaifont เพิ่มหุ้น }CPALL {\thaifont เข้ารายการติดตาม} \\
+ast\_\allowbreak{}04 & single & 3 & 3 & 1 & 3 & {\thaifont มีข่าวอะไรล่าสุดเกี่ยวกับหุ้น }AOT {\thaifont บ้าง} \\
+ast\_\allowbreak{}05 & single & 3 & 1 & 2 & 1 & {\thaifont หากองทุนรวมดัชนี }SET50 {\thaifont ให้หน่อย} \\
+ast\_\allowbreak{}06 & single & 2 & 3 & 1 & 3 & {\thaifont วันนี้ซื้อหุ้น }ADVANC 200 {\thaifont หุ้น ราคาหุ้นละ }300 {\thaifont บาท บันทึกลงพอร์ตให้ด้วย} \\
+ast\_\allowbreak{}07 & single & 3 & 3 & 3 & 3 & {\thaifont หุ้นปตท}.{\thaifont ตอนนี้ราคาเท่าไร} \\
+pln\_\allowbreak{}01 & single & 3 & 3 & 3 & 2 & {\thaifont อยากเก็บเงินให้ได้ }100,000 {\thaifont บาทภายใน }12 {\thaifont เดือน ต้องออมเดือนละเท่าไร} \\
+pln\_\allowbreak{}02 & single & 3 & 3 & 3 & 1 & {\thaifont ตั้งเป้าหมายเก็บเงินดาวน์บ้าน }500,000 {\thaifont บาทภายใน }3 {\thaifont ปี} \\
+pln\_\allowbreak{}03 & single & 3 & 3 & 3 & 1 & {\thaifont เป้าหมายการเงินของฉันตอนนี้คืบหน้าไปแค่ไหนแล้ว} \\
+pln\_\allowbreak{}04 & single & 3 & 3 & 3 & 3 & {\thaifont เพิ่มเงินเข้ากองทุนสำรองฉุกเฉินอีก }10,000 {\thaifont บาท} \\
+pln\_\allowbreak{}05 & single & 3 & 3 & 3 & 3 & {\thaifont เงินเดือน }50,000 {\thaifont บาท ถ้าจะออมก่อนใช้แบบ }pay yourself first {\thaifont ควรแบ่งออมเท่าไร} \\
+pln\_\allowbreak{}06 & single & 3 & 3 & 3 & 1 & {\thaifont ตอนนี้อายุ }30 {\thaifont อยากเกษียณตอน }55 {\thaifont ควรเริ่มวางแผนเก็บเงินยังไง} \\
+pln\_\allowbreak{}07 & single & 3 & 3 & 3 & 2 & {\thaifont เงินสำรองฉุกเฉินควรมีกี่เดือนของรายจ่าย} \\
+rec\_\allowbreak{}01 & single & 3 & 2 & 3 & 3 & {\thaifont สุขภาพการเงินของฉันเป็นยังไงบ้าง} \\
+rec\_\allowbreak{}02 & single & 1 & 2 & 3 & 2 & {\thaifont แนะนำเรื่องการเงินให้หน่อย ควรปรับอะไรบ้าง} \\
+rec\_\allowbreak{}03 & single & 1 & 2 & 2 & 2 & {\thaifont ตอนนี้ควรลงทุนอะไรดี} \\
+rec\_\allowbreak{}04 & single & 3 & 3 & 3 & 3 & {\thaifont ช่วยตรวจสอบการเงินของฉันทั้งหมดแล้วบอกจุดที่ควรแก้} \\
+rec\_\allowbreak{}05 & single & 2 & 0 & 1 & 2 & {\thaifont ควรเอาเงินไปซื้อคริปโตไหม} \\
+rec\_\allowbreak{}06 & single & 2 & 3 & 3 & 1 & {\thaifont ช่วงนี้ตลาดหุ้นแย่มาก กลัวขาดทุน ควรขายหุ้นทิ้งให้หมดเลยไหม} \\
+rpt\_\allowbreak{}01 & single & 3 & 3 & 3 & 2 & {\thaifont สรุปรายงานการเงินเดือนที่แล้วให้หน่อย} \\
+rpt\_\allowbreak{}02 & single & 3 & 3 & 3 & 2 & {\thaifont ขอภาพรวมสถานะการเงินทั้งหมดของฉัน} \\
+rpt\_\allowbreak{}03 & single & 3 & 3 & 3 & 2 & {\thaifont ทำรายงานการเงินประจำปีนี้ให้หน่อย} \\
+rpt\_\allowbreak{}04 & single & 0 & 3 & 2 & 0 & {\thaifont เดือนที่แล้วรายรับหักรายจ่ายแล้วเหลือเท่าไร} \\
+rpt\_\allowbreak{}05 & single & 2 & 1 & 3 & 3 & {\thaifont ขอรายงานรายจ่ายแยกตามหมวดของเดือนที่แล้ว} \\
+rpt\_\allowbreak{}06 & single & 0 & 3 & 2 & 3 & {\thaifont สรุปการเงินไตรมาสนี้ให้หน่อย} \\
+crs\_\allowbreak{}01 & cross & 1 & 0 & 3 & 1 & {\thaifont จากรายจ่ายเดือนที่แล้ว ฉันจะเก็บเงินไปเที่ยวญี่ปุ่นได้ครบตามเป้าไหม} \\
+crs\_\allowbreak{}02 & cross & 0 & 0 & 2 & 1 & {\thaifont เดือนที่แล้วใช้จ่ายไปเท่าไร แล้วมีอะไรที่เอาไปลดหย่อนภาษีได้บ้าง} \\
+crs\_\allowbreak{}03 & cross & 1 & 3 & 3 & 2 & {\thaifont พอร์ตของฉันตอนนี้เป็นยังไง แล้วควรปรับพอร์ตไหม} \\
+crs\_\allowbreak{}04 & cross & 3 & 3 & 3 & 3 & {\thaifont บันทึกค่าข้าวเย็น }120 {\thaifont บาท แล้วบอกหน่อยว่าเดือนนี้ใช้ค่าอาหารไปเท่าไรแล้ว} \\
+crs\_\allowbreak{}05 & cross & 2 & 0 & 0 & 0 & {\thaifont รายได้ปีละ }720,000 {\thaifont บาท มีแค่ค่าลดหย่อนส่วนตัว ต้องเสียภาษีเท่าไร และควรออมเพิ่มเดือนละเท่าไรดี} \\
+crs\_\allowbreak{}06 & cross & 2 & 3 & 3 & 3 & {\thaifont ราคาหุ้น }PTT {\thaifont ตอนนี้เท่าไร และฉันถืออยู่กี่หุ้น} \\
+crs\_\allowbreak{}07 & cross & 3 & 0 & 0 & 0 & {\thaifont สุขภาพการเงินของฉันเป็นยังไง แล้วกองทุนฉุกเฉินควรเก็บเพิ่มอีกเท่าไร} \\
+crs\_\allowbreak{}08 & cross & 3 & 3 & 1 & 1 & {\thaifont สรุปรายงานเดือนที่แล้ว แล้วแนะนำวิธีลดรายจ่ายให้หน่อย} \\
+crs\_\allowbreak{}09 & cross & 0 & 0 & 0 & 0 & {\thaifont รายได้ปีละ }600,000 {\thaifont บาท ถ้าซื้อ }RMF 100,000 {\thaifont บาท ภาษีจะเหลือเท่าไร แล้ว }RMF {\thaifont ที่ฉันถืออยู่ตอนนี้มีมูลค่าเท่าไร} \\
+crs\_\allowbreak{}10 & cross & 2 & 3 & 3 & 3 & {\thaifont ได้โบนัส }40,000 {\thaifont บาท บันทึกเป็นรายรับ แล้วเอาไปเพิ่มในกองทุนสำรองฉุกเฉินทั้งหมด} \\
+crs\_\allowbreak{}11 & cross & 3 & 3 & 2 & 3 & {\thaifont หุ้นที่ฉันถืออยู่มีข่าวอะไรบ้าง ควรกังวลไหม} \\
+crs\_\allowbreak{}12 & cross & 1 & 0 & 0 & 0 & {\thaifont ค่ารักษาพยาบาลเอาไปลดหย่อนภาษีได้ไหม แล้วเดือนที่แล้วฉันจ่ายค่าสุขภาพไปเท่าไร} \\
+vag\_\allowbreak{}01 & vague & 3 & 3 & 3 & 3 & {\thaifont เงิน} \\
+vag\_\allowbreak{}02 & vague & 3 & 3 & 3 & 3 & {\thaifont การเงิน} \\
+vag\_\allowbreak{}03 & vague & 3 & 3 & 3 & 3 & {\thaifont ช่วยหน่อย} \\
+vag\_\allowbreak{}04 & vague & 3 & 3 & 3 & 3 & {\thaifont ทำยังไงดี} \\
+vag\_\allowbreak{}05 & vague & 3 & 3 & 3 & 3 & {\thaifont เรื่องเงินๆ ทองๆ} \\
+vag\_\allowbreak{}06 & vague & 3 & 3 & 3 & 3 & {\thaifont จัดการให้หน่อย} \\
+vag\_\allowbreak{}07 & vague & 3 & 3 & 3 & 3 & {\thaifont อยากให้ช่วยเรื่องเงิน} \\
+vag\_\allowbreak{}08 & vague & 3 & 3 & 3 & 3 & {\thaifont แล้วแต่เลย} \\
+\end{longtable}}
+
+
+\section{Router: Every Wrong Call}
+{\scriptsize
+\begin{longtable}{llp{2.5cm}p{2.1cm}p{2.5cm}p{5.4cm}}
+\caption{Every wrong routing call of the production setup (gemini-3.5-flash, minimal thinking).}\label{tab:app-b-wrong}\\
+\toprule
+\textbf{Run} & \textbf{Rd} & \textbf{ID} & \textbf{Expected} & \textbf{Got} & \textbf{Question} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{Run} & \textbf{Rd} & \textbf{ID} & \textbf{Expected} & \textbf{Got} & \textbf{Question} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+Study B & 1 & rpt\_\allowbreak{}11 & report & expense & {\thaifont สรุปการเงินสัปดาห์นี้ให้หน่อย} \\
+Study B & 1 & s35\_\allowbreak{}route\_\allowbreak{}expense\_\allowbreak{}005 & expense & report & {\thaifont วิเคราะห์รายจ่ายตามหมวดหมู่} \\
+Study B & 1 & vag\_\allowbreak{}07 & clarify & report & {\thaifont การเงินฉัน} \\
+Study B & 1 & rec\_\allowbreak{}13 & recommendation & general\_\allowbreak{}chat & {\thaifont ทำยังไงให้มีเงินเหลือเก็บมากขึ้นทุกเดือน} \\
+Study B & 1 & pln\_\allowbreak{}08 & planning & general\_\allowbreak{}chat & {\thaifont เงินเดือน }30,000 {\thaifont ควรแบ่งออมก่อนใช้ยังไง} \\
+Study B & 1 & s35\_\allowbreak{}route\_\allowbreak{}ambig\_\allowbreak{}002 & expense & planning & {\thaifont ค่าใช้จ่ายเยอะเกินงบ ต้องวางแผนใหม่} \\
+Study B & 1 & s35\_\allowbreak{}route\_\allowbreak{}ambig\_\allowbreak{}003 & asset\_\allowbreak{}monitoring & tax & {\thaifont หุ้นที่ซื้อขาดทุน ควรขายเพื่อลดหย่อนภาษีมั้ย} \\
+Study B & 1 & rec\_\allowbreak{}15 & recommendation & general\_\allowbreak{}chat & should I pay off my debt or invest first \\
+Study B & 1 & gen\_\allowbreak{}07 & general\_\allowbreak{}chat & clarify & {\thaifont สวัสดีครับ} \\
+Study B & 1 & rec\_\allowbreak{}07 & recommendation & general\_\allowbreak{}chat & {\thaifont อยากรวยเร็ว ควรกู้เงินมาลงทุนดีไหม} \\
+Study B & 1 & pln\_\allowbreak{}13 & planning & recommendation & {\thaifont ทำยังไงถึงจะเก็บเงินได้ครบตามเป้าเร็วขึ้น} \\
+Study B & 2 & gen\_\allowbreak{}07 & general\_\allowbreak{}chat & clarify & {\thaifont สวัสดีครับ} \\
+Study B & 2 & s35\_\allowbreak{}route\_\allowbreak{}ambig\_\allowbreak{}003 & asset\_\allowbreak{}monitoring & tax & {\thaifont หุ้นที่ซื้อขาดทุน ควรขายเพื่อลดหย่อนภาษีมั้ย} \\
+Study B & 2 & s35\_\allowbreak{}route\_\allowbreak{}ambig\_\allowbreak{}002 & expense & planning & {\thaifont ค่าใช้จ่ายเยอะเกินงบ ต้องวางแผนใหม่} \\
+Study B & 2 & his\_\allowbreak{}10 & planning & expense & {\thaifont เติมอันแรกอีก }2,000 \\
+Study B & 2 & pln\_\allowbreak{}13 & planning & recommendation & {\thaifont ทำยังไงถึงจะเก็บเงินได้ครบตามเป้าเร็วขึ้น} \\
+Study B & 2 & rec\_\allowbreak{}15 & recommendation & general\_\allowbreak{}chat & should I pay off my debt or invest first \\
+Study B & 2 & rec\_\allowbreak{}07 & recommendation & general\_\allowbreak{}chat & {\thaifont อยากรวยเร็ว ควรกู้เงินมาลงทุนดีไหม} \\
+Multi-intent & 1 & s35\_\allowbreak{}route\_\allowbreak{}ambig\_\allowbreak{}003 & asset\_\allowbreak{}monitoring & tax & {\thaifont หุ้นที่ซื้อขาดทุน ควรขายเพื่อลดหย่อนภาษีมั้ย} \\
+Multi-intent & 1 & rec\_\allowbreak{}07 & recommendation & general\_\allowbreak{}chat & {\thaifont อยากรวยเร็ว ควรกู้เงินมาลงทุนดีไหม} \\
+Multi-intent & 1 & s35\_\allowbreak{}route\_\allowbreak{}invest\_\allowbreak{}005 & asset\_\allowbreak{}monitoring & report & {\thaifont สัดส่วนพอร์ตเป็นยังไงบ้าง} \\
+Multi-intent & 1 & rec\_\allowbreak{}15 & recommendation & general\_\allowbreak{}chat & should I pay off my debt or invest first \\
+Multi-intent & 1 & s35\_\allowbreak{}route\_\allowbreak{}ambig\_\allowbreak{}005 & recommendation & report, recommendation & {\thaifont ช่วยดูภาพรวมการเงินแล้วแนะนำด้วย} \\
+Multi-intent & 1 & rpt\_\allowbreak{}02 & report & expense & {\thaifont สรุปรายรับรายจ่ายทั้งปี }2569 \\
+Multi-intent & 1 & s35\_\allowbreak{}route\_\allowbreak{}ambig\_\allowbreak{}002 & expense & planning & {\thaifont ค่าใช้จ่ายเยอะเกินงบ ต้องวางแผนใหม่} \\
+Multi-intent & 1 & his\_\allowbreak{}10 & planning & expense & {\thaifont เติมอันแรกอีก }2,000 \\
+Multi-intent & 1 & ast\_\allowbreak{}11 & asset\_\allowbreak{}monitoring & recommendation & {\thaifont หากองทุน }RMF {\thaifont ที่ลงทุนหุ้นต่างประเทศให้หน่อย} \\
+Multi-intent & 1 & his\_\allowbreak{}07 & recommendation & general\_\allowbreak{}chat & {\thaifont ข้อแรกต้องทำยังไง} \\
+\end{longtable}}
+
+
+\section{Multi-Topic Routing Questions}
+{\scriptsize
+\begin{longtable}{llp{3.2cm}p{3.2cm}lp{5.3cm}}
+\caption{Multi-topic routing questions and router output (gemini-3.5-flash, minimal thinking).}\label{tab:app-mt}\\
+\toprule
+\textbf{ID} & \textbf{Kind} & \textbf{Expected} & \textbf{Predicted} & \textbf{Match} & \textbf{Message} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{ID} & \textbf{Kind} & \textbf{Expected} & \textbf{Predicted} & \textbf{Match} & \textbf{Message} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+m2\_\allowbreak{}01 & multi & expense, asset\_\allowbreak{}monitoring & expense, asset\_\allowbreak{}monitoring & yes & {\thaifont วันนี้กินข้าวไป }150 {\thaifont บาท แล้วหุ้น }CPN {\thaifont ราคาเท่าไรตอนนี้} \\
+m2\_\allowbreak{}02 & multi & tax, planning & tax, planning & yes & {\thaifont ปีนี้มีรายได้ }900,000 {\thaifont ต้องเสียภาษีเท่าไร แล้วอยากเกษียณตอนอายุ }55 {\thaifont ต้องเตรียมเงินเท่าไร} \\
+m2\_\allowbreak{}03 & multi & expense, planning & expense, planning & yes & {\thaifont ช่วยสรุปรายจ่ายเดือนนี้หน่อย แล้วตั้งเป้าเก็บเงินเที่ยวญี่ปุ่น }80,000 {\thaifont ใน }1 {\thaifont ปีด้วย} \\
+m2\_\allowbreak{}04 & multi & report, recommendation & report, recommendation & yes & {\thaifont ขอรายงานการเงินปีนี้ แล้วแนะนำหน่อยว่าควรปรับอะไร} \\
+m2\_\allowbreak{}05 & multi & expense, tax & expense, tax & yes & {\thaifont ได้เงินเดือนเข้า }35,000 {\thaifont บันทึกให้ที แล้วลดหย่อนภาษีด้วยประกันสุขภาพได้สูงสุดเท่าไร} \\
+m2\_\allowbreak{}06 & multi & asset\_\allowbreak{}monitoring, planning & asset\_\allowbreak{}monitoring, planning & yes & {\thaifont ซื้อกองทุน }K-USA-A(A) {\thaifont ไป }10,000 {\thaifont บาท แล้วเป้าหมายเงินฉุกเฉินตอนนี้ถึงไหนแล้ว} \\
+m2\_\allowbreak{}07 & multi & recommendation, asset\_\allowbreak{}monitoring & recommendation, asset\_\allowbreak{}monitoring & yes & {\thaifont สุขภาพการเงินฉันเป็นยังไง แล้วข่าวทองคำวันนี้มีอะไรบ้าง} \\
+m2\_\allowbreak{}08 & multi & expense, report & expense, report & yes & {\thaifont จ่ายค่าเช่าห้อง }6,500 {\thaifont บาท แล้วสรุปภาพรวมการเงินเดือนนี้ให้หน่อย} \\
+m2\_\allowbreak{}09 & multi & tax, asset\_\allowbreak{}monitoring & tax, asset\_\allowbreak{}monitoring & yes & {\thaifont ภาษีปีนี้ต้องจ่ายเท่าไรจากข้อมูลที่บันทึกไว้ แล้วพอร์ตตอนนี้กำไรหรือขาดทุน} \\
+m2\_\allowbreak{}10 & multi & general\_\allowbreak{}chat, expense & general\_\allowbreak{}chat, expense & yes & {\thaifont ดอกเบี้ยทบต้นคืออะไร แล้วช่วยบันทึกค่าไฟ }1,100 {\thaifont บาทด้วย} \\
+m2\_\allowbreak{}11 & multi & asset\_\allowbreak{}monitoring, tax & asset\_\allowbreak{}monitoring, tax & yes & {\thaifont เพิ่ม }PTT {\thaifont เข้ารายการติดตาม แล้วคำนวณภาษีจากเงินเดือน }45,000 {\thaifont ให้หน่อย} \\
+m2\_\allowbreak{}12 & multi & expense, planning & expense, planning & yes & {\thaifont เมื่อวานจ่ายค่าหมอ }2,300 {\thaifont บาท แล้วอยากซื้อบ้านราคา }3 {\thaifont ล้านในอีก }5 {\thaifont ปีต้องเก็บดาวน์เดือนละเท่าไร} \\
+m3\_\allowbreak{}01 & multi & expense, asset\_\allowbreak{}monitoring, report & expense, asset\_\allowbreak{}monitoring, report & yes & {\thaifont บันทึกรายรับฟรีแลนซ์ }12,000 {\thaifont บาท ดูราคา }SCC {\thaifont ล่าสุด แล้วขอรายงานสรุปไตรมาสนี้} \\
+m3\_\allowbreak{}02 & multi & tax, recommendation, planning & tax, recommendation, planning & yes & {\thaifont ต้องเสียภาษีเท่าไรถ้ารายได้ปีละ }1.2 {\thaifont ล้าน ควรลงทุนอะไรเพิ่มดี และเป้าหมายเกษียณยังทันไหม} \\
+m3\_\allowbreak{}03 & multi & expense, asset\_\allowbreak{}monitoring, general\_\allowbreak{}chat & expense, asset\_\allowbreak{}monitoring, general\_\allowbreak{}chat & yes & {\thaifont จ่ายค่าประกันรถ }18,000 {\thaifont แล้ว บันทึกด้วย พอร์ตกองทุนเป็นยังไงบ้าง แล้วดอกเบี้ยเงินฝากประจำต่างจากออมทรัพย์ยังไง} \\
+m3\_\allowbreak{}04 & multi & expense, recommendation, tax & expense, recommendation, tax & yes & {\thaifont สรุปรายจ่ายหมวดอาหารเดือนนี้ วิเคราะห์สุขภาพการเงินให้หน่อย แล้วลดหย่อน }ThaiESG {\thaifont ได้เท่าไร} \\
+m3\_\allowbreak{}05 & multi & planning, asset\_\allowbreak{}monitoring, report & planning, asset\_\allowbreak{}monitoring, report & yes & {\thaifont ตั้งเป้าเก็บเงินซื้อรถ }500,000 {\thaifont ใน }4 {\thaifont ปี เพิ่มหุ้น }AOT {\thaifont เข้ารายการติดตาม และสรุปการเงินทั้งปีให้หน่อย} \\
+m3\_\allowbreak{}06 & multi & expense, tax, recommendation & expense, tax, recommendation & yes & {\thaifont ได้โบนัส }60,000 {\thaifont บันทึกเป็นรายรับ คำนวณภาษีใหม่รวมโบนัส แล้วแนะนำว่าควรเอาไปทำอะไรดี} \\
+m4\_\allowbreak{}01 & multi & expense, asset\_\allowbreak{}monitoring, tax, planning & expense, asset\_\allowbreak{}monitoring, tax, planning & yes & {\thaifont ค่าแท็กซี่ }240 {\thaifont บาท บันทึกให้ด้วย ราคาบิตคอยน์ตอนนี้เท่าไร ภาษีปีนี้ประมาณเท่าไร แล้วตั้งเป้าเงินฉุกเฉิน }100,000 {\thaifont บาทให้หน่อย} \\
+m4\_\allowbreak{}02 & multi & report, recommendation, tax, asset\_\allowbreak{}monitoring & report, recommendation, tax, asset\_\allowbreak{}monitoring & yes & {\thaifont ขอรายงานเดือนนี้ วิเคราะห์ว่าการเงินฉันเป็นยังไง ลดหย่อนประกันชีวิตได้เท่าไร และหุ้นในพอร์ตตัวไหนขาดทุน} \\
+m4\_\allowbreak{}03 & multi & expense, tax, planning, recommendation & expense, tax, planning, recommendation & yes & {\thaifont เงินเดือน }70,000 {\thaifont บันทึกด้วย ต้องเสียภาษีปีละเท่าไร อยากเก็บเงินแต่งงาน }400,000 {\thaifont ใน }3 {\thaifont ปี และควรลงทุนแบบไหนดี} \\
+m5\_\allowbreak{}01 & multi & expense, asset\_\allowbreak{}monitoring, tax, planning, report & expense, asset\_\allowbreak{}monitoring, tax, planning, report & yes & {\thaifont จ่ายค่าโทรศัพท์ }599 {\thaifont บาท ดูราคา }GULF {\thaifont ภาษีปีนี้เท่าไร เป้าหมายดาวน์บ้านถึงไหนแล้ว และขอรายงานสรุปปีนี้} \\
+s\_\allowbreak{}01 & single & tax & tax & yes & {\thaifont ซื้อประกันชีวิต }50,000 {\thaifont จะลดภาษีได้เท่าไร} \\
+s\_\allowbreak{}02 & single & planning & planning & yes & {\thaifont ช่วยวางแผนออมเงินเกษียณโดยดูจากรายจ่ายเดือนนี้ของฉัน} \\
+s\_\allowbreak{}03 & single & tax & tax & yes & {\thaifont ขายหุ้น }SCB {\thaifont ได้กำไร }20,000 {\thaifont ต้องเสียภาษีไหม} \\
+s\_\allowbreak{}04 & single & expense & expense & yes & {\thaifont เทียบรายจ่ายเดือนนี้กับเดือนที่แล้วให้หน่อย} \\
+s\_\allowbreak{}05 & single & report & report & yes & {\thaifont สรุปรายรับรายจ่ายและพอร์ตลงทุนทั้งหมดเป็นรายงานเดียว} \\
+s\_\allowbreak{}06 & single & expense & expense & yes & {\thaifont บันทึกค่าอาหาร }120 {\thaifont กับค่าเดินทาง }60 {\thaifont บาท} \\
+s\_\allowbreak{}07 & single & tax & tax & yes & {\thaifont สวัสดีครับ อยากรู้ว่าภาษีปีนี้ต้องจ่ายเท่าไร} \\
+s\_\allowbreak{}08 & single & asset\_\allowbreak{}monitoring & asset\_\allowbreak{}monitoring & yes & {\thaifont ดูราคา }PTT {\thaifont กับ }AOT {\thaifont ให้หน่อย} \\
+\end{longtable}}
+
+
+\section{Datasets}
+The architecture tasks are listed with their results in Appendix A, and the tax cases in Table~\ref{tab:tax-acc}.
+{\scriptsize
+\begin{longtable}{lllp{9.5cm}}
+\caption{Routing dataset (150 new + 35 September questions).}\label{tab:app-routing}\\
+\toprule
+\textbf{ID} & \textbf{Expected} & \textbf{Source} & \textbf{Question} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{ID} & \textbf{Expected} & \textbf{Source} & \textbf{Question} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+tax\_\allowbreak{}01 & tax & new & {\thaifont เงินเดือนเดือนละ }42,000 {\thaifont ปีนี้ต้องจ่ายภาษีประมาณเท่าไหร่} \\
+tax\_\allowbreak{}02 & tax & new & {\thaifont ฟรีแลนซ์รายได้ปีละ }800,000 {\thaifont หักค่าใช้จ่ายได้กี่เปอร์เซ็นต์} \\
+tax\_\allowbreak{}03 & tax & new & SSF {\thaifont ยังลดหย่อนได้อยู่ไหมปีนี้} \\
+tax\_\allowbreak{}04 & tax & new & ThaiESG {\thaifont ลดหย่อนได้สูงสุดเท่าไร} \\
+tax\_\allowbreak{}05 & tax & new & {\thaifont เงินสมทบประกันสังคมหักลดหย่อนได้เท่าไหร่} \\
+tax\_\allowbreak{}06 & tax & new & {\thaifont ลดหย่อนเลี้ยงดูพ่อแม่ได้คนละเท่าไร} \\
+tax\_\allowbreak{}07 & tax & new & {\thaifont มีลูก }2 {\thaifont คน ลดหย่อนบุตรได้เท่าไหร่} \\
+tax\_\allowbreak{}08 & tax & new & {\thaifont ดอกเบี้ยผ่อนบ้านเอามาลดหย่อนได้ไหม} \\
+tax\_\allowbreak{}09 & tax & new & {\thaifont ยื่นภาษีออนไลน์ได้ถึงวันไหน} \\
+tax\_\allowbreak{}10 & tax & new & {\thaifont ถ้าซื้อประกันชีวิตเพิ่ม }50,000 {\thaifont จะประหยัดภาษีได้เท่าไร} \\
+tax\_\allowbreak{}11 & tax & new & tax bracket {\thaifont ของคนรายได้ }1.2 {\thaifont ล้านต่อปีอยู่ที่กี่เปอร์เซ็นต์} \\
+tax\_\allowbreak{}12 & tax & new & {\thaifont บริจาคเงินให้โรงพยาบาลลดหย่อนได้กี่เท่า} \\
+tax\_\allowbreak{}13 & tax & new & how much income tax do I pay if I earn 600k baht a year \\
+tax\_\allowbreak{}14 & tax & new & {\thaifont โบนัสต้องเสียภาษีด้วยเหรอ} \\
+tax\_\allowbreak{}15 & tax & new & {\thaifont โดนหัก ณ ที่จ่ายไปแล้ว }20,000 {\thaifont จะได้เงินภาษีคืนไหม} \\
+tax\_\allowbreak{}16 & tax & new & {\thaifont เงินปันผลหุ้นไทยโดนหักภาษีกี่เปอร์เซ็นต์} \\
+tax\_\allowbreak{}17 & tax & new & {\thaifont อยากลดภาษีให้ได้มากที่สุด ต้องซื้ออะไรบ้าง} \\
+exp\_\allowbreak{}01 & expense & new & {\thaifont กินข้าวมันไก่ }50 {\thaifont บาท} \\
+exp\_\allowbreak{}02 & expense & new & {\thaifont เติมน้ำมัน }1,200 \\
+exp\_\allowbreak{}03 & expense & new & {\thaifont วันนี้เงินเดือนเข้า }35,000 {\thaifont บาท} \\
+exp\_\allowbreak{}04 & expense & new & {\thaifont เมื่อวานจ่ายค่าไฟไป }1,850 {\thaifont บาท} \\
+exp\_\allowbreak{}05 & expense & new & {\thaifont ลืมจด เมื่อวานนั่งแท็กซี่ }140 \\
+exp\_\allowbreak{}06 & expense & new & {\thaifont อาทิตย์นี้ใช้เงินช้อปปิ้งไปเท่าไรแล้ว} \\
+exp\_\allowbreak{}07 & expense & new & {\thaifont ค่าเดินทางเดือนที่แล้วรวมเท่าไหร่} \\
+exp\_\allowbreak{}08 & expense & new & {\thaifont ได้ค่าจ้างงานฟรีแลนซ์มา }8,000 \\
+exp\_\allowbreak{}09 & expense & new & {\thaifont ยืมเงินแม่มา }3,000 \\
+exp\_\allowbreak{}10 & expense & new & {\thaifont คืนเงินที่ยืมพี่ไป }1,500 {\thaifont แล้ว} \\
+exp\_\allowbreak{}11 & expense & new & {\thaifont ตอนนี้ติดหนี้ใครอยู่บ้าง เหลือเท่าไหร่} \\
+exp\_\allowbreak{}12 & expense & new & {\thaifont มีเงินเก็บในบัญชีอยู่ }80,000 \\
+exp\_\allowbreak{}13 & expense & new & {\thaifont จ่ายเบี้ยประกันสุขภาพไป }18,000 {\thaifont บาท} \\
+exp\_\allowbreak{}14 & expense & new & netflix 419 {\thaifont บาท ตัดบัตรไปแล้ว} \\
+exp\_\allowbreak{}15 & expense & new & {\thaifont ลบรายการค่ากาแฟเมื่อเช้าออกให้หน่อย} \\
+exp\_\allowbreak{}16 & expense & new & {\thaifont เดือนนี้รายจ่ายหมวดไหนเยอะสุด} \\
+exp\_\allowbreak{}17 & expense & new & {\thaifont ผ่อนรถงวดนี้ }9,800 {\thaifont จ่ายแล้ว} \\
+ast\_\allowbreak{}01 & asset\_\allowbreak{}monitoring & new & SCB {\thaifont ตอนนี้ราคาเท่าไหร่} \\
+ast\_\allowbreak{}02 & asset\_\allowbreak{}monitoring & new & {\thaifont ราคาทองวันนี้เท่าไร} \\
+ast\_\allowbreak{}03 & asset\_\allowbreak{}monitoring & new & {\thaifont ขาย }KBANK {\thaifont ไป }300 {\thaifont หุ้นที่ }152 {\thaifont บาท} \\
+ast\_\allowbreak{}04 & asset\_\allowbreak{}monitoring & new & {\thaifont ซื้อกองทุน }K-USA-A(A) 10,000 {\thaifont บาท} \\
+ast\_\allowbreak{}05 & asset\_\allowbreak{}monitoring & new & bitcoin {\thaifont ตอนนี้เท่าไหร่แล้ว} \\
+ast\_\allowbreak{}06 & asset\_\allowbreak{}monitoring & new & {\thaifont มีข่าวอะไรเกี่ยวกับ }CPALL {\thaifont บ้าง} \\
+ast\_\allowbreak{}07 & asset\_\allowbreak{}monitoring & new & {\thaifont พอร์ตฉันตอนนี้ขาดทุนอยู่ไหม} \\
+ast\_\allowbreak{}08 & asset\_\allowbreak{}monitoring & new & {\thaifont หุ้นตัวไหนในพอร์ตจ่ายปันผลดีสุด} \\
+ast\_\allowbreak{}09 & asset\_\allowbreak{}monitoring & new & {\thaifont ปตท}.{\thaifont ปิดวันนี้เท่าไร} \\
+ast\_\allowbreak{}10 & asset\_\allowbreak{}monitoring & new & {\thaifont เพิ่ม }DELTA {\thaifont เข้า }watchlist {\thaifont ให้หน่อย} \\
+ast\_\allowbreak{}11 & asset\_\allowbreak{}monitoring & new & {\thaifont หากองทุน }RMF {\thaifont ที่ลงทุนหุ้นต่างประเทศให้หน่อย} \\
+ast\_\allowbreak{}12 & asset\_\allowbreak{}monitoring & new & NVDA {\thaifont ร่วงเพราะอะไร} \\
+ast\_\allowbreak{}13 & asset\_\allowbreak{}monitoring & new & {\thaifont ดัชนี }SET50 {\thaifont ย้อนหลัง }1 {\thaifont เดือนเป็นยังไง} \\
+ast\_\allowbreak{}14 & asset\_\allowbreak{}monitoring & new & {\thaifont แก้จำนวนหุ้น }AOT {\thaifont ในพอร์ตเป็น }500 {\thaifont หุ้น} \\
+ast\_\allowbreak{}15 & asset\_\allowbreak{}monitoring & new & {\thaifont กองทุนที่ถืออยู่ }NAV {\thaifont ล่าสุดเท่าไหร่} \\
+ast\_\allowbreak{}16 & asset\_\allowbreak{}monitoring & new & {\thaifont ซื้อทองคำแท่ง }1 {\thaifont บาท ราคา }41,000 \\
+ast\_\allowbreak{}17 & asset\_\allowbreak{}monitoring & new & how is my portfolio doing today \\
+pln\_\allowbreak{}01 & planning & new & {\thaifont อยากมีเงินล้านภายใน }10 {\thaifont ปี ต้องเริ่มยังไง} \\
+pln\_\allowbreak{}02 & planning & new & {\thaifont ตั้งเป้าเก็บเงินแต่งงาน }300,000 {\thaifont ภายใน }2 {\thaifont ปี} \\
+pln\_\allowbreak{}03 & planning & new & {\thaifont อยากมีเงินฉุกเฉินพอใช้ }6 {\thaifont เดือน ต้องเก็บเท่าไหร่} \\
+pln\_\allowbreak{}04 & planning & new & {\thaifont เป้าหมายเที่ยวญี่ปุ่นไปถึงไหนแล้ว} \\
+pln\_\allowbreak{}05 & planning & new & {\thaifont เพิ่มเงินเข้าเป้าหมายรถใหม่ }5,000 \\
+pln\_\allowbreak{}06 & planning & new & {\thaifont ลบเป้าหมายซื้อ }iPad {\thaifont ออก} \\
+pln\_\allowbreak{}07 & planning & new & {\thaifont อายุ }35 {\thaifont มีเงินเก็บ }5 {\thaifont แสน จะเกษียณตอน }60 {\thaifont ได้ไหม} \\
+pln\_\allowbreak{}08 & planning & new & {\thaifont เงินเดือน }30,000 {\thaifont ควรแบ่งออมก่อนใช้ยังไง} \\
+pln\_\allowbreak{}09 & planning & new & {\thaifont ถ้าเก็บเดือนละ }3,000 {\thaifont อีกกี่ปีจะได้ }200,000 \\
+pln\_\allowbreak{}10 & planning & new & {\thaifont อยากเก็บเงินดาวน์คอนโด} \\
+pln\_\allowbreak{}11 & planning & new & {\thaifont เปลี่ยนเป้าหมายเงินเกษียณเป็น }8 {\thaifont ล้าน} \\
+pln\_\allowbreak{}12 & planning & new & {\thaifont วางแผนเก็บเงินค่าเทอมลูกปีหน้า }120,000 \\
+pln\_\allowbreak{}13 & planning & new & {\thaifont ทำยังไงถึงจะเก็บเงินได้ครบตามเป้าเร็วขึ้น} \\
+pln\_\allowbreak{}14 & planning & new & i want to save 50k for a new laptop by june \\
+pln\_\allowbreak{}15 & planning & new & {\thaifont เป้าหมายไหนใกล้ครบที่สุด} \\
+pln\_\allowbreak{}16 & planning & new & {\thaifont อยากปลดหนี้บัตรเครดิตให้หมดใน }1 {\thaifont ปี ต้องวางแผนยังไง} \\
+pln\_\allowbreak{}17 & planning & new & {\thaifont ปีหน้าอยากเก็บให้ได้ }20\% {\thaifont ของรายได้} \\
+rec\_\allowbreak{}01 & recommendation & new & {\thaifont ช่วยดูหน่อยว่าการเงินฉันมีจุดอ่อนตรงไหน} \\
+rec\_\allowbreak{}02 & recommendation & new & {\thaifont คะแนนสุขภาพการเงินของฉันได้เท่าไหร่} \\
+rec\_\allowbreak{}03 & recommendation & new & {\thaifont ควรลดรายจ่ายตรงไหนดี} \\
+rec\_\allowbreak{}04 & recommendation & new & {\thaifont มีเงินก้อน }2 {\thaifont แสน ควรเอาไปทำอะไรดี} \\
+rec\_\allowbreak{}05 & recommendation & new & {\thaifont พอร์ตฉันเสี่ยงเกินไปไหม ควรปรับยังไง} \\
+rec\_\allowbreak{}06 & recommendation & new & {\thaifont ช่วงนี้เครียดเรื่องเงินมาก ไม่รู้จะเริ่มแก้ตรงไหน} \\
+rec\_\allowbreak{}07 & recommendation & new & {\thaifont อยากรวยเร็ว ควรกู้เงินมาลงทุนดีไหม} \\
+rec\_\allowbreak{}08 & recommendation & new & {\thaifont ช่วยประเมินว่าฉันรับความเสี่ยงได้แค่ไหน} \\
+rec\_\allowbreak{}09 & recommendation & new & {\thaifont ฉันใช้เงินเปลืองเกินไปไหม} \\
+rec\_\allowbreak{}10 & recommendation & new & {\thaifont ตอนนี้ควรถือเงินสดหรือลงทุนดี} \\
+rec\_\allowbreak{}11 & recommendation & new & {\thaifont ขอคำแนะนำการเงินที่เจาะจงกับฉันหน่อย} \\
+rec\_\allowbreak{}12 & recommendation & new & {\thaifont เพื่อนชวนลงทุน ผลตอบแทน }20\% {\thaifont ต่อเดือน น่าลงไหม} \\
+rec\_\allowbreak{}13 & recommendation & new & {\thaifont ทำยังไงให้มีเงินเหลือเก็บมากขึ้นทุกเดือน} \\
+rec\_\allowbreak{}14 & recommendation & new & {\thaifont ตรวจสุขภาพการเงินประจำเดือนให้หน่อย} \\
+rec\_\allowbreak{}15 & recommendation & new & should I pay off my debt or invest first \\
+rec\_\allowbreak{}16 & recommendation & new & {\thaifont มีอะไรที่ฉันควรรีบทำเรื่องการเงินไหม} \\
+rec\_\allowbreak{}17 & recommendation & new & {\thaifont อยากเริ่มลงทุนแต่กลัวขาดทุน ควรเริ่มยังไง} \\
+rpt\_\allowbreak{}01 & report & new & {\thaifont ขอรายงานการเงินเดือนตุลาคม} \\
+rpt\_\allowbreak{}02 & report & new & {\thaifont สรุปรายรับรายจ่ายทั้งปี }2569 \\
+rpt\_\allowbreak{}03 & report & new & {\thaifont ทำรายงานไตรมาสที่แล้วให้หน่อย} \\
+rpt\_\allowbreak{}04 & report & new & {\thaifont เดือนนี้รายรับหักรายจ่ายแล้วเหลือเท่าไร} \\
+rpt\_\allowbreak{}05 & report & new & export {\thaifont รายงานการเงินเป็น }PDF {\thaifont ให้หน่อย} \\
+rpt\_\allowbreak{}06 & report & new & {\thaifont ขอรายงานภาพรวมรายเดือนแบบละเอียด} \\
+rpt\_\allowbreak{}07 & report & new & {\thaifont สถานะการเงินของฉันตอนนี้เป็นยังไง} \\
+rpt\_\allowbreak{}08 & report & new & {\thaifont ขอสรุปทรัพย์สินกับหนี้สินทั้งหมด} \\
+rpt\_\allowbreak{}09 & report & new & {\thaifont อัตราการออมของฉันปีนี้กี่เปอร์เซ็นต์} \\
+rpt\_\allowbreak{}10 & report & new & monthly financial report please \\
+rpt\_\allowbreak{}11 & report & new & {\thaifont สรุปการเงินสัปดาห์นี้ให้หน่อย} \\
+rpt\_\allowbreak{}12 & report & new & {\thaifont ทำรายงานสรุปการเงินไว้ส่งให้แฟนดูหน่อย} \\
+rpt\_\allowbreak{}13 & report & new & {\thaifont ขอดูรายงานการเงินปีที่แล้วทั้งหมด} \\
+rpt\_\allowbreak{}14 & report & new & {\thaifont ขอ }financial statement {\thaifont ของเดือนนี้} \\
+rpt\_\allowbreak{}15 & report & new & {\thaifont สรุปผลการเงินครึ่งปีแรกให้หน่อย} \\
+rpt\_\allowbreak{}16 & report & new & {\thaifont ความมั่งคั่งสุทธิของฉันตอนนี้เท่าไหร่} \\
+rpt\_\allowbreak{}17 & report & new & {\thaifont ปีนี้เงินเข้าออกเป็นยังไงบ้าง สรุปให้ที} \\
+gen\_\allowbreak{}01 & general\_\allowbreak{}chat & new & {\thaifont กองทุนรวมคืออะไร} \\
+gen\_\allowbreak{}02 & general\_\allowbreak{}chat & new & {\thaifont ดอกเบี้ยทบต้นคืออะไร} \\
+gen\_\allowbreak{}03 & general\_\allowbreak{}chat & new & {\thaifont เครดิตบูโรคืออะไร ทำไมต้องสนใจ} \\
+gen\_\allowbreak{}04 & general\_\allowbreak{}chat & new & {\thaifont บัตรเครดิตกับบัตรเดบิตต่างกันยังไง} \\
+gen\_\allowbreak{}05 & general\_\allowbreak{}chat & new & {\thaifont กฎ }50/30/20 {\thaifont คืออะไร} \\
+gen\_\allowbreak{}06 & general\_\allowbreak{}chat & new & {\thaifont ประกันสะสมทรัพย์คืออะไร} \\
+gen\_\allowbreak{}07 & general\_\allowbreak{}chat & new & {\thaifont สวัสดีครับ} \\
+gen\_\allowbreak{}08 & general\_\allowbreak{}chat & new & {\thaifont ขอบคุณมากนะ} \\
+gen\_\allowbreak{}09 & general\_\allowbreak{}chat & new & {\thaifont คุณทำอะไรได้บ้าง} \\
+gen\_\allowbreak{}10 & general\_\allowbreak{}chat & new & {\thaifont ถ้าเงินเฟ้อสูง ดอกเบี้ยนโยบายจะขึ้นไหม} \\
+gen\_\allowbreak{}11 & general\_\allowbreak{}chat & new & {\thaifont ทำไมควรแยกบัญชีเงินออมกับบัญชีใช้จ่าย} \\
+gen\_\allowbreak{}12 & general\_\allowbreak{}chat & new & {\thaifont บำนาญชราภาพประกันสังคมคำนวณยังไง} \\
+oos\_\allowbreak{}01 & general\_\allowbreak{}chat & new & {\thaifont พรุ่งนี้ฝนจะตกไหม} \\
+oos\_\allowbreak{}02 & general\_\allowbreak{}chat & new & {\thaifont แนะนำหนังน่าดูหน่อย} \\
+oos\_\allowbreak{}03 & general\_\allowbreak{}chat & new & {\thaifont ใครชนะบอลเมื่อคืน} \\
+oos\_\allowbreak{}04 & general\_\allowbreak{}chat & new & {\thaifont ช่วยแปลว่า ฉันหิวข้าว เป็นภาษาอังกฤษ} \\
+oos\_\allowbreak{}05 & general\_\allowbreak{}chat & new & {\thaifont เขียนกลอนวันแม่ให้หน่อย} \\
+oos\_\allowbreak{}06 & general\_\allowbreak{}chat & new & {\thaifont ลดน้ำหนักยังไงให้ได้ผล} \\
+oos\_\allowbreak{}07 & general\_\allowbreak{}chat & new & {\thaifont ต้มยำกุ้งใส่อะไรบ้าง} \\
+oos\_\allowbreak{}08 & general\_\allowbreak{}chat & new & {\thaifont เขียนโค้ด }python {\thaifont เรียงตัวเลขให้หน่อย} \\
+oos\_\allowbreak{}09 & general\_\allowbreak{}chat & new & {\thaifont มีเกมมือถืออะไรสนุกบ้าง} \\
+oos\_\allowbreak{}10 & general\_\allowbreak{}chat & new & {\thaifont ไปเที่ยวเชียงใหม่ช่วงไหนดี} \\
+vag\_\allowbreak{}01 & clarify & new & {\thaifont ตังค์} \\
+vag\_\allowbreak{}02 & clarify & new & {\thaifont ช่วยด้วย} \\
+vag\_\allowbreak{}03 & clarify & new & {\thaifont บันทึกให้หน่อย} \\
+vag\_\allowbreak{}04 & clarify & new & {\thaifont ดูให้หน่อย} \\
+vag\_\allowbreak{}05 & clarify & new & {\thaifont อยากถามเรื่องเงิน} \\
+vag\_\allowbreak{}06 & clarify & new & {\thaifont ปรึกษาหน่อย} \\
+vag\_\allowbreak{}07 & clarify & new & {\thaifont การเงินฉัน} \\
+vag\_\allowbreak{}08 & clarify & new & {\thaifont เท่าไหร่} \\
+vag\_\allowbreak{}09 & clarify & new & {\thaifont ทำยังไงดี} \\
+vag\_\allowbreak{}10 & clarify & new & {\thaifont เรื่องเงินอะ} \\
+vag\_\allowbreak{}11 & clarify & new & {\thaifont ขอข้อมูลหน่อย} \\
+vag\_\allowbreak{}12 & clarify & new & {\thaifont อันนี้ได้ไหม} \\
+his\_\allowbreak{}01 & asset\_\allowbreak{}monitoring & new & {\thaifont ตอนนี้กำไรหรือยัง} \\
+his\_\allowbreak{}02 & expense & new & {\thaifont ค่าน้ำอีก }15 \\
+his\_\allowbreak{}03 & tax & new & {\thaifont ถ้าซื้อ }SSF 50,000 {\thaifont ล่ะ} \\
+his\_\allowbreak{}04 & planning & new & 4 {\thaifont ปี} \\
+his\_\allowbreak{}05 & asset\_\allowbreak{}monitoring & new & {\thaifont ตัวแรก }NAV {\thaifont เท่าไหร่} \\
+his\_\allowbreak{}06 & report & new & {\thaifont แล้วเดือนตุลาคมล่ะ} \\
+his\_\allowbreak{}07 & recommendation & new & {\thaifont ข้อแรกต้องทำยังไง} \\
+his\_\allowbreak{}08 & expense & new & {\thaifont เดือนที่แล้วล่ะ} \\
+his\_\allowbreak{}09 & asset\_\allowbreak{}monitoring & new & {\thaifont มีข่าวอะไรไหม} \\
+his\_\allowbreak{}10 & planning & new & {\thaifont เติมอันแรกอีก }2,000 \\
+his\_\allowbreak{}11 & tax & new & {\thaifont แล้วอันนี้ลดหย่อนได้เท่าไหร่} \\
+his\_\allowbreak{}12 & recommendation & new & {\thaifont ควรเอาไปทำอะไรดี} \\
+his\_\allowbreak{}13 & general\_\allowbreak{}chat & new & {\thaifont เปลี่ยนเรื่อง เล่าเรื่องตลกให้ฟังหน่อย} \\
+his\_\allowbreak{}14 & tax & new & {\thaifont เดือนละ }45,000 \\
+s35\_\allowbreak{}route\_\allowbreak{}tax\_\allowbreak{}001 & tax & sept35 & {\thaifont คำนวณภาษีปี }2024 {\thaifont เงินเดือน }50,000 {\thaifont บาทต่อเดือน} \\
+s35\_\allowbreak{}route\_\allowbreak{}tax\_\allowbreak{}002 & tax & sept35 & {\thaifont ภาษีเงินได้บุคคลธรรมดาคำนวณยังไง} \\
+s35\_\allowbreak{}route\_\allowbreak{}tax\_\allowbreak{}003 & tax & sept35 & {\thaifont ค่าลดหย่อนส่วนตัวปีนี้เท่าไหร่} \\
+s35\_\allowbreak{}route\_\allowbreak{}tax\_\allowbreak{}004 & tax & sept35 & {\thaifont ซื้อ }RMF {\thaifont ลดหย่อนภาษีได้เท่าไหร่} \\
+s35\_\allowbreak{}route\_\allowbreak{}tax\_\allowbreak{}005 & tax & sept35 & {\thaifont จ่ายภาษีเท่าไหร่ถ้ารายได้เดือนละ }100,000 \\
+s35\_\allowbreak{}route\_\allowbreak{}expense\_\allowbreak{}001 & expense & sept35 & {\thaifont จ่ายค่ากาแฟ }80 {\thaifont บาท} \\
+s35\_\allowbreak{}route\_\allowbreak{}expense\_\allowbreak{}002 & expense & sept35 & {\thaifont สรุปค่าใช้จ่ายเดือนนี้} \\
+s35\_\allowbreak{}route\_\allowbreak{}expense\_\allowbreak{}003 & expense & sept35 & {\thaifont เดือนนี้จ่ายค่าอาหารไปเท่าไหร่} \\
+s35\_\allowbreak{}route\_\allowbreak{}expense\_\allowbreak{}004 & expense & sept35 & {\thaifont บันทึกค่าเช่าบ้าน }15,000 {\thaifont บาท} \\
+s35\_\allowbreak{}route\_\allowbreak{}expense\_\allowbreak{}005 & expense & sept35 & {\thaifont วิเคราะห์รายจ่ายตามหมวดหมู่} \\
+s35\_\allowbreak{}route\_\allowbreak{}invest\_\allowbreak{}001 & asset\_\allowbreak{}monitoring & sept35 & {\thaifont ดูพอร์ตการลงทุนของฉัน} \\
+s35\_\allowbreak{}route\_\allowbreak{}invest\_\allowbreak{}002 & asset\_\allowbreak{}monitoring & sept35 & {\thaifont ราคาหุ้น }PTT {\thaifont วันนี้เท่าไหร่} \\
+s35\_\allowbreak{}route\_\allowbreak{}invest\_\allowbreak{}003 & asset\_\allowbreak{}monitoring & sept35 & {\thaifont ซื้อหุ้น }ADVANC 100 {\thaifont หุ้น ราคา }200 {\thaifont บาท} \\
+s35\_\allowbreak{}route\_\allowbreak{}invest\_\allowbreak{}004 & asset\_\allowbreak{}monitoring & sept35 & {\thaifont กำไรขาดทุนพอร์ตเป็นเท่าไหร่} \\
+s35\_\allowbreak{}route\_\allowbreak{}invest\_\allowbreak{}005 & asset\_\allowbreak{}monitoring & sept35 & {\thaifont สัดส่วนพอร์ตเป็นยังไงบ้าง} \\
+s35\_\allowbreak{}route\_\allowbreak{}plan\_\allowbreak{}001 & planning & sept35 & {\thaifont อยากออมเงิน }100,000 {\thaifont บาทภายใน }1 {\thaifont ปี} \\
+s35\_\allowbreak{}route\_\allowbreak{}plan\_\allowbreak{}002 & planning & sept35 & {\thaifont วางแผนเกษียณอายุ }60 {\thaifont ปี} \\
+s35\_\allowbreak{}route\_\allowbreak{}plan\_\allowbreak{}003 & planning & sept35 & {\thaifont ตั้งเป้าหมายซื้อบ้าน }3 {\thaifont ล้านบาท} \\
+s35\_\allowbreak{}route\_\allowbreak{}plan\_\allowbreak{}004 & planning & sept35 & {\thaifont ดูเป้าหมายทางการเงินทั้งหมด} \\
+s35\_\allowbreak{}route\_\allowbreak{}plan\_\allowbreak{}005 & planning & sept35 & {\thaifont ต้องออมเดือนละเท่าไหร่ถึงจะได้ }1 {\thaifont ล้าน} \\
+s35\_\allowbreak{}route\_\allowbreak{}rec\_\allowbreak{}001 & recommendation & sept35 & {\thaifont วิเคราะห์สุขภาพการเงินของฉัน} \\
+s35\_\allowbreak{}route\_\allowbreak{}rec\_\allowbreak{}002 & recommendation & sept35 & {\thaifont แนะนำวิธีปรับปรุงการเงิน} \\
+s35\_\allowbreak{}route\_\allowbreak{}rec\_\allowbreak{}003 & recommendation & sept35 & {\thaifont มีคำแนะนำอะไรบ้าง} \\
+s35\_\allowbreak{}route\_\allowbreak{}report\_\allowbreak{}001 & report & sept35 & {\thaifont สร้างรายงานการเงิน} \\
+s35\_\allowbreak{}route\_\allowbreak{}report\_\allowbreak{}002 & report & sept35 & {\thaifont สรุปภาพรวมการเงินทั้งหมด} \\
+s35\_\allowbreak{}route\_\allowbreak{}general\_\allowbreak{}001 & general\_\allowbreak{}chat & sept35 & {\thaifont ดอกเบี้ยเงินฝากออมทรัพย์คืออะไร} \\
+s35\_\allowbreak{}route\_\allowbreak{}general\_\allowbreak{}002 & general\_\allowbreak{}chat & sept35 & {\thaifont เงินเฟ้อคืออะไร} \\
+s35\_\allowbreak{}route\_\allowbreak{}unknown\_\allowbreak{}001 & general\_\allowbreak{}chat & sept35 & {\thaifont วันนี้อากาศเป็นยังไง} \\
+s35\_\allowbreak{}route\_\allowbreak{}unknown\_\allowbreak{}002 & general\_\allowbreak{}chat & sept35 & {\thaifont แนะนำร้านอาหารหน่อย} \\
+s35\_\allowbreak{}route\_\allowbreak{}unknown\_\allowbreak{}003 & general\_\allowbreak{}chat & sept35 & {\thaifont เล่าเรื่องตลกให้ฟัง} \\
+s35\_\allowbreak{}route\_\allowbreak{}ambig\_\allowbreak{}001 & tax & sept35 & {\thaifont ลงทุน }RMF {\thaifont เพื่อลดหย่อนภาษี} \\
+s35\_\allowbreak{}route\_\allowbreak{}ambig\_\allowbreak{}002 & expense & sept35 & {\thaifont ค่าใช้จ่ายเยอะเกินงบ ต้องวางแผนใหม่} \\
+s35\_\allowbreak{}route\_\allowbreak{}ambig\_\allowbreak{}003 & asset\_\allowbreak{}monitoring & sept35 & {\thaifont หุ้นที่ซื้อขาดทุน ควรขายเพื่อลดหย่อนภาษีมั้ย} \\
+s35\_\allowbreak{}route\_\allowbreak{}ambig\_\allowbreak{}004 & report & sept35 & {\thaifont สรุปการเงินเดือนนี้} \\
+s35\_\allowbreak{}route\_\allowbreak{}ambig\_\allowbreak{}005 & recommendation & sept35 & {\thaifont ช่วยดูภาพรวมการเงินแล้วแนะนำด้วย} \\
+\end{longtable}}
+
+{\scriptsize
+\begin{longtable}{lp{3.6cm}p{3.4cm}p{6.3cm}}
+\caption{RAG dataset (120 questions) with relevance keys.}\label{tab:app-rag}\\
+\toprule
+\textbf{ID} & \textbf{Gold file(s)} & \textbf{Keywords} & \textbf{Question} \\
+\midrule
+\endfirsthead
+\toprule
+\textbf{ID} & \textbf{Gold file(s)} & \textbf{Keywords} & \textbf{Question} \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+q001 & Tax\_\allowbreak{}Deductions\_\allowbreak{}Guide.md & {\thaifont อุปการะบิดามารดา }+ 30,000 & {\thaifont พ่อแม่อายุเกิน }60 {\thaifont เอามาลดหย่อนภาษีได้คนละกี่บาท} \\
+q002 & Tax\_\allowbreak{}Deductions\_\allowbreak{}Guide.md & {\thaifont ประกันสุขภาพบิดามารดา }+ 15,000 & {\thaifont จ่ายค่าประกันสุขภาพให้พ่อแม่ หักภาษีได้สูงสุดเท่าไหร่} \\
+q003 & Tax\_\allowbreak{}Deductions\_\allowbreak{}Guide.md & 10,500 & {\thaifont ปีหน้าเงินประกันสังคมที่โดนหักทุกเดือนเอาไปลดหย่อนได้มากสุดกี่บาท} \\
+q004 & Tax\_\allowbreak{}Deductions\_\allowbreak{}Guide.md, Tax\_\allowbreak{}Personal\_\allowbreak{}Income\_\allowbreak{}Guide.pdf & {\thaifont ดอกเบี้ย }+ 100,000 & {\thaifont ผ่อนบ้านอยู่ ดอกเบี้ยที่จ่ายไปหักภาษีได้เพดานเท่าไร} \\
+q005 & Tax\_\allowbreak{}Deductions\_\allowbreak{}Guide.md & {\thaifont ฝากครรภ์ }+ 60,000 & {\thaifont ตั้งครรภ์และคลอดลูก ค่าใช้จ่ายเอาไปลดภาษีได้ไหม เท่าไหร่} \\
+q006 & Tax\_\allowbreak{}Deductions\_\allowbreak{}Guide.md & SSF + {\thaifont สิ้นสุด} & {\thaifont ยังซื้อ }SSF {\thaifont เพื่อลดภาษีได้อยู่หรือเปล่า} \\
+q007 & Tax\_\allowbreak{}Deductions\_\allowbreak{}Guide.md & 2 {\thaifont เท่า} & {\thaifont บริจาคให้โรงเรียนหรือโรงพยาบาลหักภาษีได้กี่เท่าของที่จ่าย} \\
+q008 & Tax\_\allowbreak{}Deductions\_\allowbreak{}Guide.md, Retirement\_\allowbreak{}Planning\_\allowbreak{}Guide.md & 500,000 & {\thaifont กองทุนเกษียณทุกตัวรวมกันลดหย่อนได้ไม่เกินเท่าไหร่} \\
+q009 & Tax\_\allowbreak{}Thai\_\allowbreak{}Personal\_\allowbreak{}Income.md, Tax\_\allowbreak{}Filing\_\allowbreak{}Guide.md & 120,000 & {\thaifont คนโสดมีรายได้เท่าไหร่ต่อปีถึงต้องยื่นภาษี} \\
+q010 & Tax\_\allowbreak{}Thai\_\allowbreak{}Personal\_\allowbreak{}Income.md & 750,001 - 1,000,000 + 20\% & {\thaifont เงินได้สุทธิช่วง }750,001 {\thaifont ถึงหนึ่งล้าน โดนภาษีกี่เปอร์เซ็นต์} \\
+q011 & Tax\_\allowbreak{}Thai\_\allowbreak{}Personal\_\allowbreak{}Income.md, Tax\_\allowbreak{}Filing\_\allowbreak{}Guide.md & 1.5\% & {\thaifont ถ้าไม่ยื่นภาษีให้ทันกำหนดจะโดนเงินเพิ่มเดือนละเท่าไร} \\
+q012 & Tax\_\allowbreak{}Thai\_\allowbreak{}Personal\_\allowbreak{}Income.md & 200,000 + {\thaifont จำคุก} & {\thaifont แจ้งข้อมูลภาษีเป็นเท็จโทษหนักแค่ไหน} \\
+q013 & Tax\_\allowbreak{}Thai\_\allowbreak{}Personal\_\allowbreak{}Income.md & 1 {\thaifont มกราคม }+ 31 {\thaifont ธันวาคม} & {\thaifont ปีภาษีของไทยนับตั้งแต่วันไหนถึงวันไหน} \\
+q014 & Tax\_\allowbreak{}Filing\_\allowbreak{}Guide.md & {\thaifont ภ}.{\thaifont ง}.{\thaifont ด}.91 & {\thaifont มนุษย์เงินเดือนอย่างเดียวต้องใช้แบบฟอร์มภาษีตัวไหน} \\
+q015 & Tax\_\allowbreak{}Filing\_\allowbreak{}Guide.md & 8 {\thaifont เมษายน} & {\thaifont ยื่นภาษีผ่านเน็ตได้ถึงประมาณวันที่เท่าไร} \\
+q016 & Tax\_\allowbreak{}Filing\_\allowbreak{}Guide.md & 3,000 + 3 {\thaifont งวด} & {\thaifont ภาษีที่ต้องจ่ายเพิ่มเยอะ ขอแบ่งจ่ายเป็นงวดได้ไหม} \\
+q017 & Tax\_\allowbreak{}Filing\_\allowbreak{}Guide.md & 1-3 {\thaifont เดือน} & {\thaifont ยื่นออนไลน์แล้วรอเงินคืนภาษีนานประมาณกี่เดือน} \\
+q018 & Tax\_\allowbreak{}Filing\_\allowbreak{}Guide.md & 50 {\thaifont ทวิ} & {\thaifont ต้องเตรียมเอกสารอะไรจากบริษัทบ้างตอนยื่นภาษี} \\
+q019 & Tax\_\allowbreak{}Filing\_\allowbreak{}Guide.md & 200 {\thaifont บาท} & {\thaifont ยื่นแบบช้ากว่ากำหนดโดนค่าปรับกี่บาท} \\
+q020 & Tax\_\allowbreak{}Filing\_\allowbreak{}Guide.md, Tax\_\allowbreak{}VAT\_\allowbreak{}Withholding.md & 5 {\thaifont ปี} & {\thaifont เอกสารหลักฐานภาษีควรเก็บไว้นานแค่ไหน} \\
+q021 & Tax\_\allowbreak{}VAT\_\allowbreak{}Withholding.md & 3\% & {\thaifont รับงานฟรีแลนซ์ ลูกค้าหักภาษีไว้กี่เปอร์เซ็นต์} \\
+q022 & Tax\_\allowbreak{}VAT\_\allowbreak{}Withholding.md & {\thaifont ดอกเบี้ยเงินฝาก }+ 15\% & {\thaifont ดอกเบี้ยเงินฝากธนาคารถูกหักภาษีเท่าไหร่} \\
+q023 & Tax\_\allowbreak{}VAT\_\allowbreak{}Withholding.md & {\thaifont ค่าเช่า }+ 5\% & {\thaifont ปล่อยเช่าคอนโด ผู้เช่าต้องหักภาษีไว้กี่เปอร์เซ็นต์} \\
+q024 & Tax\_\allowbreak{}VAT\_\allowbreak{}Withholding.md, Tax\_\allowbreak{}Personal\_\allowbreak{}Income\_\allowbreak{}Guide.pdf & 1.8 & {\thaifont ขายของรายได้ถึงเท่าไหร่ต่อปีต้องไปจด }VAT \\
+q025 & Tax\_\allowbreak{}VAT\_\allowbreak{}Withholding.md & 7\% & {\thaifont ตอนนี้ภาษีมูลค่าเพิ่มเก็บกี่เปอร์เซ็นต์} \\
+q026 & Tax\_\allowbreak{}VAT\_\allowbreak{}Withholding.md & {\thaifont วันที่ }7 & {\thaifont บริษัทต้องนำส่งภาษีที่หักไว้ภายในวันที่เท่าไรของเดือนถัดไป} \\
+q027 & Tax\_\allowbreak{}VAT\_\allowbreak{}Withholding.md & {\thaifont ยกเว้น }VAT & {\thaifont ธุรกิจแบบไหนบ้างที่ไม่ต้องเสีย }VAT \\
+q028 & Debt\_\allowbreak{}Management\_\allowbreak{}Guide.md, Financial\_\allowbreak{}Planning\_\allowbreak{}Basics.md & 40\% & {\thaifont ผ่อนหนี้รวมกันไม่ควรเกินกี่เปอร์เซ็นต์ของเงินเดือน} \\
+q029 & Debt\_\allowbreak{}Management\_\allowbreak{}Guide.md & 1.8 & {\thaifont ดอกเบี้ยรถแบบ }flat {\thaifont แปลงเป็นดอกเบี้ยจริงคิดยังไง} \\
+q030 & Debt\_\allowbreak{}Management\_\allowbreak{}Guide.md, Debt\_\allowbreak{}Psychology\_\allowbreak{}Payoff.md & 100,000 + {\thaifont ปี} & {\thaifont ถ้าจ่ายแค่ขั้นต่ำหนี้บัตรแสนนึง ต้องใช้เวลากี่ปีกว่าจะหมด} \\
+q031 & Debt\_\allowbreak{}Management\_\allowbreak{}Guide.md & {\thaifont ค่าจดจำนอง} & {\thaifont รีไฟแนนซ์บ้านต้องเสียค่าอะไรบ้าง} \\
+q032 & Debt\_\allowbreak{}Management\_\allowbreak{}Guide.md & {\thaifont นอกระบบ }+ 36\% & {\thaifont กู้นอกระบบดอกเบี้ยสูงแค่ไหน ผิดกฎหมายไหม} \\
+q033 & Debt\_\allowbreak{}Management\_\allowbreak{}Guide.md & {\thaifont สัญญาณเตือน} & {\thaifont สัญญาณอะไรที่บอกว่าเรากำลังมีปัญหาหนี้} \\
+q034 & Debt\_\allowbreak{}Psychology\_\allowbreak{}Payoff.md & Ostrich & {\thaifont ทำไมบางคนไม่กล้าเปิดดูใบแจ้งหนี้เลย} \\
+q035 & Debt\_\allowbreak{}Psychology\_\allowbreak{}Payoff.md, Debt\_\allowbreak{}Management\_\allowbreak{}Guide.md & Avalanche + {\thaifont ดอกเบี้ยสูง} & {\thaifont จ่ายหนี้ก้อนที่ดอกเบี้ยแพงสุดก่อนเรียกว่าวิธีอะไร} \\
+q036 & Debt\_\allowbreak{}Psychology\_\allowbreak{}Payoff.md & Snowball + {\thaifont แรงจูงใจ} & {\thaifont ไม่แน่ใจว่าจะใช้วิธีปลดหนี้แบบไหน ควรเลือกอะไร} \\
+q037 & Debt\_\allowbreak{}Psychology\_\allowbreak{}Payoff.md & 24 {\thaifont ชั่วโมง} & {\thaifont อยากหยุดซื้อของตามอารมณ์ มีเทคนิคอะไรบ้าง} \\
+q038 & Debt\_\allowbreak{}Psychology\_\allowbreak{}Payoff.md & 30\% + {\thaifont จ่ายหนี้} & {\thaifont ระหว่างปลดหนี้ควรแบ่งเงินเดือนยังไง} \\
+q039 & Expense\_\allowbreak{}Budgeting\_\allowbreak{}Guide.md, Debt\_\allowbreak{}Psychology\_\allowbreak{}Payoff.md, Financial\_\allowbreak{}Planning\_\allowbreak{}Basics.md & 50/30/20 & {\thaifont แบ่งเงินเดือนแบบห้าสิบสามสิบยี่สิบคืออะไร} \\
+q040 & Expense\_\allowbreak{}Budgeting\_\allowbreak{}Guide.md & 30-40 {\thaifont ปี }+ 25-35\% & {\thaifont อายุ }35 {\thaifont ควรออมเงินกี่เปอร์เซ็นต์ของรายได้} \\
+q041 & Expense\_\allowbreak{}Budgeting\_\allowbreak{}Guide.md & Variable Expenses & {\thaifont ค่าใช้จ่ายคงที่กับผันแปรต่างกันยังไง} \\
+q042 & Expense\_\allowbreak{}Budgeting\_\allowbreak{}Guide.md & BTS & {\thaifont อยากประหยัดค่ากินค่าเดินทางในกรุงเทพ มีวิธีไหนบ้าง} \\
+q043 & Expense\_\allowbreak{}Emergency\_\allowbreak{}Fund.md, Expense\_\allowbreak{}Budgeting\_\allowbreak{}Guide.md & 6-12 {\thaifont เดือน} & {\thaifont ทำฟรีแลนซ์ ควรมีเงินสำรองไว้กี่เดือน} \\
+q044 & Expense\_\allowbreak{}Emergency\_\allowbreak{}Fund.md & 60,000 - 120,000 & {\thaifont ใช้จ่ายเดือนละสองหมื่น ควรมีเงินฉุกเฉินเท่าไร} \\
+q045 & Expense\_\allowbreak{}Emergency\_\allowbreak{}Fund.md & MMF & {\thaifont เก็บเงินฉุกเฉินไว้ในกองทุนตลาดเงินดีไหม} \\
+q046 & Expense\_\allowbreak{}Emergency\_\allowbreak{}Fund.md & {\thaifont ทองคำ }+ {\thaifont ผันผวน} & {\thaifont เอาเงินฉุกเฉินไปซื้อหุ้นหรือทองได้ไหม} \\
+q047 & Expense\_\allowbreak{}Emergency\_\allowbreak{}Fund.md & {\thaifont เติมกลับ} & {\thaifont ใช้เงินสำรองไปแล้วต้องทำอะไรต่อ} \\
+q048 & Expense\_\allowbreak{}Emergency\_\allowbreak{}Fund.md & 10\% {\thaifont ของรายได้} & {\thaifont เริ่มเก็บเงินฉุกเฉินควรหักจากเงินเดือนกี่เปอร์เซ็นต์} \\
+q049 & Finance\_\allowbreak{}Psychology\_\allowbreak{}Of\_\allowbreak{}Money.md & {\thaifont พฤติกรรม} & {\thaifont หนังสือ }Psychology of Money {\thaifont บอกว่าอะไรสำคัญกว่าความรู้เรื่องเงิน} \\
+q050 & Finance\_\allowbreak{}Psychology\_\allowbreak{}Of\_\allowbreak{}Money.md & Warren Buffett & {\thaifont ทำไม }Warren Buffett {\thaifont ถึงรวยมากตอนแก่} \\
+q051 & Finance\_\allowbreak{}Psychology\_\allowbreak{}Of\_\allowbreak{}Money.md & {\thaifont ค่าเข้า} & {\thaifont ความผันผวนของตลาดควรมองว่าเป็นค่าอะไร} \\
+q052 & Finance\_\allowbreak{}Psychology\_\allowbreak{}Of\_\allowbreak{}Money.md & Save Money & {\thaifont ควรมีเงินออมแม้ยังไม่มีเป้าหมายไหม} \\
+q053 & Finance\_\allowbreak{}Psychology\_\allowbreak{}Of\_\allowbreak{}Money.md & Reasonable & {\thaifont แผนการเงินที่ดีที่สุดในทางทฤษฎีจำเป็นต้องดีที่สุดสำหรับเราไหม} \\
+q054 & Financial\_\allowbreak{}Planning\_\allowbreak{}Basics.md & 72 & {\thaifont อยากรู้ว่าเงินจะโตเป็นสองเท่าในกี่ปี คิดง่ายๆ ยังไง} \\
+q055 & Financial\_\allowbreak{}Planning\_\allowbreak{}Basics.md & Net Worth & {\thaifont มูลค่าสุทธิของตัวเองคำนวณยังไง} \\
+q056 & Financial\_\allowbreak{}Planning\_\allowbreak{}Basics.md & 6,100,000 & {\thaifont ลงทุนเดือนละ }5,000 {\thaifont นาน }30 {\thaifont ปีจะได้เงินประมาณเท่าไหร่} \\
+q057 & Financial\_\allowbreak{}Planning\_\allowbreak{}Basics.md & {\thaifont บำนาญ }+ 200,000 & {\thaifont ประกันชีวิตแบบบำนาญหักภาษีได้สูงสุดเท่าไหร่} \\
+q058 & Financial\_\allowbreak{}Planning\_\allowbreak{}Basics.md & 50-60 {\thaifont ปี} & {\thaifont อายุ }50 {\thaifont กว่าใกล้เกษียณ ควรปรับการเงินยังไง} \\
+q059 & Financial\_\allowbreak{}Planning\_\allowbreak{}Basics.md & {\thaifont ระยะกลาง} & {\thaifont เป้าหมายการเงินระยะกลางมีอะไรบ้าง} \\
+q060 & Insurance\_\allowbreak{}Life\_\allowbreak{}Health.md & Term Life & {\thaifont ประกันชีวิตแบบไหนเบี้ยถูกที่สุดแต่ไม่มีเงินคืน} \\
+q061 & Insurance\_\allowbreak{}Life\_\allowbreak{}Health.md & {\thaifont สะสมทรัพย์} & {\thaifont ประกันแบบออมเงินด้วยคุ้มครองด้วยได้เงินคืนเท่าไหร่} \\
+q062 & Insurance\_\allowbreak{}Life\_\allowbreak{}Health.md & OPD & {\thaifont ประกันสุขภาพแบบไม่ต้องนอนโรงพยาบาลเรียกว่าอะไร} \\
+q063 & Insurance\_\allowbreak{}Life\_\allowbreak{}Health.md & Unit Linked & {\thaifont ประกันที่ผสมการลงทุนในกองทุนเสี่ยงไหม} \\
+q064 & Insurance\_\allowbreak{}Social\_\allowbreak{}Security.md & 875 & {\thaifont ปี }2569 {\thaifont ประกันสังคมหักเงินเดือนสูงสุดเดือนละกี่บาท} \\
+q065 & Insurance\_\allowbreak{}Social\_\allowbreak{}Security.md & 432 & {\thaifont ลาออกจากงานแล้วอยากส่งประกันสังคมต่อ ต้องจ่ายเดือนละเท่าไร} \\
+q066 & Insurance\_\allowbreak{}Social\_\allowbreak{}Security.md & {\thaifont มาตรา }40 & {\thaifont ฟรีแลนซ์สมัครประกันสังคมได้ไหม มีแบบไหนบ้าง} \\
+q067 & Insurance\_\allowbreak{}Social\_\allowbreak{}Security.md & 15,000 & {\thaifont คลอดลูกเบิกประกันสังคมได้กี่บาท} \\
+q068 & Insurance\_\allowbreak{}Social\_\allowbreak{}Security.md & 900 & {\thaifont ทำฟันใช้สิทธิประกันสังคมได้ปีละเท่าไหร่} \\
+q069 & Insurance\_\allowbreak{}Social\_\allowbreak{}Security.md & 50,000 & {\thaifont ผู้ประกันตนเสียชีวิต ญาติได้ค่าทำศพเท่าไร} \\
+q070 & Investment\_\allowbreak{}DCA\_\allowbreak{}Strategy.md & Lump Sum & {\thaifont ทยอยลงทุนทุกเดือนดีกว่าลงก้อนเดียวยังไง} \\
+q071 & Investment\_\allowbreak{}DCA\_\allowbreak{}Strategy.md & {\thaifont ขาขึ้น} & {\thaifont ช่วงตลาดขึ้นยาวๆ การลงทุนรายเดือนยังคุ้มไหม} \\
+q072 & Investment\_\allowbreak{}DCA\_\allowbreak{}Strategy.md & {\thaifont เงินเดือนออก} & {\thaifont ควรตั้งซื้อกองทุนอัตโนมัติวันไหนของเดือน} \\
+q073 & Investment\_\allowbreak{}DCA\_\allowbreak{}Strategy.md & 9.70 & {\thaifont ลงทุนสม่ำเสมอ }12 {\thaifont เดือนในตัวอย่าง ต้นทุนเฉลี่ยต่อหน่วยเท่าไร} \\
+q074 & Investment\_\allowbreak{}Digital\_\allowbreak{}Assets.md & {\thaifont เงินตรา} & {\thaifont บิทคอยน์ใช้จ่ายแทนเงินบาทได้ตามกฎหมายไหม} \\
+q075 & Investment\_\allowbreak{}Digital\_\allowbreak{}Assets.md & {\thaifont ขาดทุน} & {\thaifont ขาดทุนจากคริปโตเอาไปหักภาษีได้ไหม} \\
+q076 & Investment\_\allowbreak{}Digital\_\allowbreak{}Assets.md & {\thaifont หลอกลวง} & {\thaifont จะรู้ได้ยังไงว่าโครงการคริปโตเป็นแชร์ลูกโซ่} \\
+q077 & Investment\_\allowbreak{}Digital\_\allowbreak{}Assets.md & {\thaifont ผู้ประกอบธุรกิจ} & {\thaifont ซื้อขายเหรียญดิจิทัลต้องทำผ่านใคร} \\
+q078 & Investment\_\allowbreak{}ETF\_\allowbreak{}Bonds.md & 0.1-0.5\% & ETF {\thaifont ค่าธรรมเนียมถูกกว่ากองทุนรวมแค่ไหน} \\
+q079 & Investment\_\allowbreak{}ETF\_\allowbreak{}Bonds.md & K-US500X & {\thaifont อยากลงทุน }S\&P 500 {\thaifont จากไทยมีกองทุนไหนบ้าง} \\
+q080 & Investment\_\allowbreak{}ETF\_\allowbreak{}Bonds.md & 2-3\% & {\thaifont พันธบัตรรัฐบาลให้ดอกเบี้ยประมาณเท่าไหร่} \\
+q081 & Investment\_\allowbreak{}ETF\_\allowbreak{}Bonds.md & 70-80\% & {\thaifont อายุ }25 {\thaifont ควรถือหุ้นกับตราสารหนี้สัดส่วนเท่าไร} \\
+q082 & Investment\_\allowbreak{}ETF\_\allowbreak{}Bonds.md & {\thaifont หุ้นกู้ }+ 15\% & {\thaifont ดอกเบี้ยหุ้นกู้โดนหักภาษีกี่เปอร์เซ็นต์} \\
+q083 & Investment\_\allowbreak{}Earthh\_\allowbreak{}Evans\_\allowbreak{}Lifelong.md & 6 {\thaifont เท่า} & {\thaifont ก่อนเริ่มลงทุนควรมีเงินสำรองกี่เท่าของค่าใช้จ่าย} \\
+q084 & Investment\_\allowbreak{}Earthh\_\allowbreak{}Evans\_\allowbreak{}Lifelong.md & 10--20\% & {\thaifont พอร์ตมือใหม่ควรแบ่งส่วนเสี่ยงสูงไว้ประมาณเท่าไร} \\
+q085 & Investment\_\allowbreak{}Earthh\_\allowbreak{}Evans\_\allowbreak{}Lifelong.md & moat & {\thaifont เลือกหุ้นรายตัวควรถามตัวเองเรื่องอะไรบ้าง} \\
+q086 & Investment\_\allowbreak{}Earthh\_\allowbreak{}Evans\_\allowbreak{}Lifelong.md & 30\% & {\thaifont ถ้าหุ้นที่จะซื้อร่วง }30\% {\thaifont พรุ่งนี้ ควรคิดยังไงก่อนซื้อ} \\
+q087 & Investment\_\allowbreak{}Mutual\_\allowbreak{}Funds.md & KTAM & {\thaifont กองทุนที่ชื่อขึ้นต้นด้วย }KT- {\thaifont เป็นของบริษัทไหน} \\
+q088 & Investment\_\allowbreak{}Mutual\_\allowbreak{}Funds.md & Management Fee & {\thaifont ค่าธรรมเนียมจัดการกองทุนต่อปีประมาณเท่าไร} \\
+q089 & Investment\_\allowbreak{}Mutual\_\allowbreak{}Funds.md & FIF & {\thaifont กองทุนที่ลงทุนหุ้นต่างประเทศเรียกว่าอะไร} \\
+q090 & Investment\_\allowbreak{}Mutual\_\allowbreak{}Funds.md & NAV & NAV {\thaifont ของกองทุนคืออะไร} \\
+q091 & Investment\_\allowbreak{}Thai\_\allowbreak{}Stocks.md & 14:30 & {\thaifont ตลาดหุ้นไทยเปิดซื้อขายช่วงบ่ายกี่โมง} \\
+q092 & Investment\_\allowbreak{}Thai\_\allowbreak{}Stocks.md & T+2 & {\thaifont ซื้อหุ้นแล้วต้องจ่ายเงินภายในกี่วัน} \\
+q093 & Investment\_\allowbreak{}Thai\_\allowbreak{}Stocks.md & 0.15\% & {\thaifont ค่าคอมซื้อขายหุ้นประมาณกี่เปอร์เซ็นต์} \\
+q094 & Investment\_\allowbreak{}Thai\_\allowbreak{}Stocks.md & mai & {\thaifont ตลาด }mai {\thaifont ต่างจาก }SET {\thaifont ยังไง} \\
+q095 & Investment\_\allowbreak{}Thai\_\allowbreak{}Stocks.md & Capital Gains & {\thaifont ขายหุ้นในตลาดได้กำไร ต้องเสียภาษีไหม} \\
+q096 & Planning\_\allowbreak{}Savings\_\allowbreak{}Guide.md & SMART & {\thaifont ตั้งเป้าออมแบบ }SMART {\thaifont หมายถึงอะไร} \\
+q097 & Planning\_\allowbreak{}Savings\_\allowbreak{}Guide.md & 800,000 + 160,000 & {\thaifont ซื้อรถแปดแสน ควรดาวน์เท่าไหร่} \\
+q098 & Planning\_\allowbreak{}Savings\_\allowbreak{}Guide.md & 4,500 & {\thaifont เงินเดือนสามหมื่น ผ่อนรถได้ไม่ควรเกินเดือนละเท่าไร} \\
+q099 & Planning\_\allowbreak{}Savings\_\allowbreak{}Guide.md & 360,000 & {\thaifont ซื้อบ้านสามล้าน ต้องเตรียมเงินสดรวมประมาณเท่าไร} \\
+q100 & Planning\_\allowbreak{}Savings\_\allowbreak{}Guide.md & {\thaifont ค่าโอน }+ 2\% & {\thaifont ค่าโอนกรรมสิทธิ์ตอนซื้อบ้านคิดกี่เปอร์เซ็นต์} \\
+q101 & Retirement\_\allowbreak{}Planning\_\allowbreak{}Guide.md, Financial\_\allowbreak{}Planning\_\allowbreak{}Basics.md & $\times$ 25|25 {\thaifont เท่า} & {\thaifont ตอนเกษียณต้องมีเงินกี่เท่าของค่าใช้จ่ายต่อปี} \\
+q102 & Retirement\_\allowbreak{}Planning\_\allowbreak{}Guide.md & 400,000 & {\thaifont มีเงินสิบล้านตอนเกษียณ ปีแรกถอนใช้ได้เท่าไหร่} \\
+q103 & Retirement\_\allowbreak{}Planning\_\allowbreak{}Guide.md & 180 {\thaifont เดือน} & {\thaifont ต้องส่งประกันสังคมกี่เดือนถึงจะได้บำนาญ} \\
+q104 & Retirement\_\allowbreak{}Planning\_\allowbreak{}Guide.md & 55 {\thaifont ปี} & RMF {\thaifont ต้องถือถึงอายุเท่าไรถึงขายได้โดยไม่เสียสิทธิ} \\
+q105 & Retirement\_\allowbreak{}Planning\_\allowbreak{}Guide.md, Tax\_\allowbreak{}Deductions\_\allowbreak{}Guide.md & 30,000 & {\thaifont กอช}. {\thaifont ออมได้ปีละมากสุดเท่าไร} \\
+q106 & Retirement\_\allowbreak{}Planning\_\allowbreak{}Guide.md & {\thaifont กบข }+ 3\% & {\thaifont ข้าราชการสะสมเงินเข้า กบข}. {\thaifont กี่เปอร์เซ็นต์} \\
+q107 & Tax\_\allowbreak{}PIT90\_\allowbreak{}Guide\_\allowbreak{}2568.pdf & 40 (1) - (8) & {\thaifont แบบ ภ}.{\thaifont ง}.{\thaifont ด}.90 {\thaifont ใช้กับคนมีเงินได้ประเภทไหน} \\
+q108 & Tax\_\allowbreak{}PIT90\_\allowbreak{}Guide\_\allowbreak{}2568.pdf & 31 {\thaifont พฤษภาคม} & {\thaifont ผ่อนชำระภาษีงวดสุดท้ายของปีภาษี }2568 {\thaifont ต้องจ่ายภายในวันไหน} \\
+q109 & Tax\_\allowbreak{}PIT90\_\allowbreak{}Guide\_\allowbreak{}2568.pdf & {\thaifont คู่สมรสต่างฝ่าย }+ 100,000 & {\thaifont สามีภรรยาต่างคนต่างมีรายได้ หักลดหย่อนประกันชีวิตได้คนละเท่าไร} \\
+q110 & Tax\_\allowbreak{}PIT90\_\allowbreak{}Guide\_\allowbreak{}2568.pdf & {\thaifont ไม่น้อยกว่า }5 {\thaifont ปี} & ThaiESG {\thaifont ต้องถือหน่วยลงทุนนานกี่ปี} \\
+q111 & Tax\_\allowbreak{}PIT90\_\allowbreak{}Guide\_\allowbreak{}2568.pdf & {\thaifont ก่อสร้างอาคาร }+ 86/4 & {\thaifont ค่าจ้างสร้างบ้านเอามาหักภาษีได้ ต้องมีหลักฐานอะไร} \\
+q112 & Tax\_\allowbreak{}PIT90\_\allowbreak{}Guide\_\allowbreak{}2568.pdf & 2,000,000 + 25 & {\thaifont เงินได้สุทธิเกินหนึ่งล้านถึงสองล้าน อัตราภาษีกี่เปอร์เซ็นต์ตามแบบ ภ}.{\thaifont ง}.{\thaifont ด}.90 \\
+q113 & Tax\_\allowbreak{}Personal\_\allowbreak{}Income\_\allowbreak{}Guide.pdf & 30 {\thaifont กันยายน} & {\thaifont ร้านค้าในโครงการคนละครึ่งต้องยื่นภาษีครึ่งปีภายในวันไหน} \\
+q114 & Tax\_\allowbreak{}Personal\_\allowbreak{}Income\_\allowbreak{}Guide.pdf & 0.005 & {\thaifont วิธีคำนวณภาษีแบบ }0.5\% {\thaifont ของเงินได้ใช้เมื่อไหร่} \\
+q115 & Tax\_\allowbreak{}Personal\_\allowbreak{}Income\_\allowbreak{}Guide.pdf, Tax\_\allowbreak{}PIT90\_\allowbreak{}Guide\_\allowbreak{}2568.pdf & {\thaifont ร้อยละ }60 & {\thaifont อาชีพแพทย์ หักค่าใช้จ่ายแบบเหมาได้กี่เปอร์เซ็นต์} \\
+q116 & Finance\_\allowbreak{}Behavioral\_\allowbreak{}Finance\_\allowbreak{}Ritter.pdf & EMH + rational & Does the efficient market hypothesis assume every investor is rational? \\
+q117 & Finance\_\allowbreak{}Behavioral\_\allowbreak{}Finance\_\allowbreak{}Ritter.pdf & Framing & Why do restaurants call it an early-bird special instead of a peak-hour surcharge? \\
+q118 & Finance\_\allowbreak{}Behavioral\_\allowbreak{}Finance\_\allowbreak{}Ritter.pdf & LTCM & What happened to LTCM's trade on the twin shares? \\
+q119 & Finance\_\allowbreak{}Behavioral\_\allowbreak{}Reasoning\_\allowbreak{}Chains.pdf & 19k & How many samples are in the behaviorally grounded personal finance dataset? \\
+q120 & Finance\_\allowbreak{}Behavioral\_\allowbreak{}Reasoning\_\allowbreak{}Chains.pdf & Borda + 8B & Which small model gave the best relevance per billion parameters? \\
+\end{longtable}}
+
+
+\end{document}
