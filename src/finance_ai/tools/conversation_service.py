@@ -88,6 +88,7 @@ def save_assistant_message(
     content: str,
     intent: Optional[str] = None,
     sources: Optional[list[dict[str, Any]]] = None,
+    intents: Optional[list[str]] = None,
 ) -> ConversationMessage:
     """Save an assistant message to a conversation.
 
@@ -97,6 +98,8 @@ def save_assistant_message(
         content: Message text.
         intent: Optional intent label (e.g., "tax", "expense").
         sources: Citation source cards for the answer; empty is stored as None.
+        intents: Every agent that answered a multi-topic message; stored only
+            when there are two or more.
 
     Returns:
         Created ConversationMessage instance.
@@ -111,10 +114,31 @@ def save_assistant_message(
         content=content,
         intent=intent,
         sources=sources or None,
+        intents=intents if intents and len(intents) > 1 else None,
     )
     session.commit()
     session.refresh(message)
     return message
+
+
+def get_last_reply_intents(session: Session, conversation_id: str) -> list[str]:
+    """Return the topics of the latest assistant reply when it covered several.
+
+    Args:
+        session: Database session.
+        conversation_id: UUID of the conversation.
+
+    Returns:
+        Agent keys of the latest assistant reply, or [] when it had one topic
+        or there is no reply yet.
+
+    Example:
+        >>> get_last_reply_intents(session, conv_id)
+        ['tax', 'planning']
+    """
+    messages = _message_crud.get_recent_by_conversation(session, conversation_id, limit=2)
+    replies = [message for message in messages if message.role == "assistant"]
+    return list(replies[-1].intents or []) if replies else []
 
 
 def get_recent_history_as_tuples(
@@ -182,6 +206,8 @@ def _message_to_dict(message: ConversationMessage) -> dict[str, Any]:
         result["intent"] = message.intent
     if message.sources:
         result["sources"] = message.sources
+    if message.intents:
+        result["intents"] = message.intents
     return result
 
 

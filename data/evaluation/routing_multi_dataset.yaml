@@ -1,0 +1,42 @@
+# Multi-topic routing questions (2026-11-07), written for the multi-intent router.
+# expected: every place production should send the message, in the order asked.
+# kind: multi = several topics (should split); single = one question that only
+# sounds like several topics (must NOT split).
+# None of these copy a router prompt example or another evaluation set.
+name: routing_multi
+version: "1.0"
+questions:
+  # ── 2 topics ──
+  - {question_id: m2_01, kind: multi, query: "วันนี้กินข้าวไป 150 บาท แล้วหุ้น CPN ราคาเท่าไรตอนนี้", expected: [expense, asset_monitoring]}
+  - {question_id: m2_02, kind: multi, query: "ปีนี้มีรายได้ 900,000 ต้องเสียภาษีเท่าไร แล้วอยากเกษียณตอนอายุ 55 ต้องเตรียมเงินเท่าไร", expected: [tax, planning]}
+  - {question_id: m2_03, kind: multi, query: "ช่วยสรุปรายจ่ายเดือนนี้หน่อย แล้วตั้งเป้าเก็บเงินเที่ยวญี่ปุ่น 80,000 ใน 1 ปีด้วย", expected: [expense, planning]}
+  - {question_id: m2_04, kind: multi, query: "ขอรายงานการเงินปีนี้ แล้วแนะนำหน่อยว่าควรปรับอะไร", expected: [report, recommendation]}
+  - {question_id: m2_05, kind: multi, query: "ได้เงินเดือนเข้า 35,000 บันทึกให้ที แล้วลดหย่อนภาษีด้วยประกันสุขภาพได้สูงสุดเท่าไร", expected: [expense, tax]}
+  - {question_id: m2_06, kind: multi, query: "ซื้อกองทุน K-USA-A(A) ไป 10,000 บาท แล้วเป้าหมายเงินฉุกเฉินตอนนี้ถึงไหนแล้ว", expected: [asset_monitoring, planning]}
+  - {question_id: m2_07, kind: multi, query: "สุขภาพการเงินฉันเป็นยังไง แล้วข่าวทองคำวันนี้มีอะไรบ้าง", expected: [recommendation, asset_monitoring]}
+  - {question_id: m2_08, kind: multi, query: "จ่ายค่าเช่าห้อง 6,500 บาท แล้วสรุปภาพรวมการเงินเดือนนี้ให้หน่อย", expected: [expense, report]}
+  - {question_id: m2_09, kind: multi, query: "ภาษีปีนี้ต้องจ่ายเท่าไรจากข้อมูลที่บันทึกไว้ แล้วพอร์ตตอนนี้กำไรหรือขาดทุน", expected: [tax, asset_monitoring]}
+  - {question_id: m2_10, kind: multi, query: "ดอกเบี้ยทบต้นคืออะไร แล้วช่วยบันทึกค่าไฟ 1,100 บาทด้วย", expected: [general_chat, expense]}
+  - {question_id: m2_11, kind: multi, query: "เพิ่ม PTT เข้ารายการติดตาม แล้วคำนวณภาษีจากเงินเดือน 45,000 ให้หน่อย", expected: [asset_monitoring, tax]}
+  - {question_id: m2_12, kind: multi, query: "เมื่อวานจ่ายค่าหมอ 2,300 บาท แล้วอยากซื้อบ้านราคา 3 ล้านในอีก 5 ปีต้องเก็บดาวน์เดือนละเท่าไร", expected: [expense, planning]}
+  # ── 3 topics ──
+  - {question_id: m3_01, kind: multi, query: "บันทึกรายรับฟรีแลนซ์ 12,000 บาท ดูราคา SCC ล่าสุด แล้วขอรายงานสรุปไตรมาสนี้", expected: [expense, asset_monitoring, report]}
+  - {question_id: m3_02, kind: multi, query: "ต้องเสียภาษีเท่าไรถ้ารายได้ปีละ 1.2 ล้าน ควรลงทุนอะไรเพิ่มดี และเป้าหมายเกษียณยังทันไหม", expected: [tax, recommendation, planning]}
+  - {question_id: m3_03, kind: multi, query: "จ่ายค่าประกันรถ 18,000 แล้ว บันทึกด้วย พอร์ตกองทุนเป็นยังไงบ้าง แล้วดอกเบี้ยเงินฝากประจำต่างจากออมทรัพย์ยังไง", expected: [expense, asset_monitoring, general_chat]}
+  - {question_id: m3_04, kind: multi, query: "สรุปรายจ่ายหมวดอาหารเดือนนี้ วิเคราะห์สุขภาพการเงินให้หน่อย แล้วลดหย่อน ThaiESG ได้เท่าไร", expected: [expense, recommendation, tax]}
+  - {question_id: m3_05, kind: multi, query: "ตั้งเป้าเก็บเงินซื้อรถ 500,000 ใน 4 ปี เพิ่มหุ้น AOT เข้ารายการติดตาม และสรุปการเงินทั้งปีให้หน่อย", expected: [planning, asset_monitoring, report]}
+  - {question_id: m3_06, kind: multi, query: "ได้โบนัส 60,000 บันทึกเป็นรายรับ คำนวณภาษีใหม่รวมโบนัส แล้วแนะนำว่าควรเอาไปทำอะไรดี", expected: [expense, tax, recommendation]}
+  # ── 4 and 5 topics ──
+  - {question_id: m4_01, kind: multi, query: "ค่าแท็กซี่ 240 บาท บันทึกให้ด้วย ราคาบิตคอยน์ตอนนี้เท่าไร ภาษีปีนี้ประมาณเท่าไร แล้วตั้งเป้าเงินฉุกเฉิน 100,000 บาทให้หน่อย", expected: [expense, asset_monitoring, tax, planning]}
+  - {question_id: m4_02, kind: multi, query: "ขอรายงานเดือนนี้ วิเคราะห์ว่าการเงินฉันเป็นยังไง ลดหย่อนประกันชีวิตได้เท่าไร และหุ้นในพอร์ตตัวไหนขาดทุน", expected: [report, recommendation, tax, asset_monitoring]}
+  - {question_id: m4_03, kind: multi, query: "เงินเดือน 70,000 บันทึกด้วย ต้องเสียภาษีปีละเท่าไร อยากเก็บเงินแต่งงาน 400,000 ใน 3 ปี และควรลงทุนแบบไหนดี", expected: [expense, tax, planning, recommendation]}
+  - {question_id: m5_01, kind: multi, query: "จ่ายค่าโทรศัพท์ 599 บาท ดูราคา GULF ภาษีปีนี้เท่าไร เป้าหมายดาวน์บ้านถึงไหนแล้ว และขอรายงานสรุปปีนี้", expected: [expense, asset_monitoring, tax, planning, report]}
+  # ── one question that only sounds like several (must not split) ──
+  - {question_id: s_01, kind: single, query: "ซื้อประกันชีวิต 50,000 จะลดภาษีได้เท่าไร", expected: [tax]}
+  - {question_id: s_02, kind: single, query: "ช่วยวางแผนออมเงินเกษียณโดยดูจากรายจ่ายเดือนนี้ของฉัน", expected: [planning]}
+  - {question_id: s_03, kind: single, query: "ขายหุ้น SCB ได้กำไร 20,000 ต้องเสียภาษีไหม", expected: [tax]}
+  - {question_id: s_04, kind: single, query: "เทียบรายจ่ายเดือนนี้กับเดือนที่แล้วให้หน่อย", expected: [expense]}
+  - {question_id: s_05, kind: single, query: "สรุปรายรับรายจ่ายและพอร์ตลงทุนทั้งหมดเป็นรายงานเดียว", expected: [report]}
+  - {question_id: s_06, kind: single, query: "บันทึกค่าอาหาร 120 กับค่าเดินทาง 60 บาท", expected: [expense]}
+  - {question_id: s_07, kind: single, query: "สวัสดีครับ อยากรู้ว่าภาษีปีนี้ต้องจ่ายเท่าไร", expected: [tax]}
+  - {question_id: s_08, kind: single, query: "ดูราคา PTT กับ AOT ให้หน่อย", expected: [asset_monitoring]}

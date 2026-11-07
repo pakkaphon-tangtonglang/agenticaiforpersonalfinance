@@ -18,6 +18,7 @@ from finance_ai.evaluation.router_thinking.questions import (
     RoutingQuestion,
     accepted_destinations,
     load_all_questions,
+    routed_correctly,
 )
 from finance_ai.evaluation.router_thinking.runner import RouterCallRow, read_log
 from finance_ai.evaluation.router_thinking.setups import COMPARISONS, SETUPS
@@ -36,6 +37,7 @@ class SetupSummary(BaseModel):
     accuracy_new: float
     accuracy_sept35: float
     parse_failures: int
+    splits: int
     errors: int
     latency_median: float
     latency_p95: float
@@ -96,6 +98,7 @@ def summarize_setup(setup: str, rows: list[RouterCallRow]) -> SetupSummary:
         accuracy_new=_rate([row for row in rows if row.source == "new"]),
         accuracy_sept35=_rate([row for row in rows if row.source == "sept35"]),
         parse_failures=sum(row.parse_failed for row in rows),
+        splits=sum(len(row.destinations) > 1 for row in rows),
         errors=len(rows) - len(answered),
         latency_median=percentile(latencies, 0.5),
         latency_p95=percentile(latencies, 0.95),
@@ -223,8 +226,8 @@ def _setup_lines(summaries: list[SetupSummary]) -> list[str]:
     """Markdown table of per-setup headline numbers."""
     lines = [
         "| Setup | Model | Thinking | Calls | Accuracy (95% CI) | New 150 | Sept 35 "
-        "| Latency median / p95 (s) | Tokens in / out / thinking | Parse fails | Errors |",
-        "|---|---|---|---:|---|---:|---:|---|---|---:|---:|",
+        "| Latency median / p95 (s) | Tokens in / out / thinking | Parse fails | Split | Errors |",
+        "|---|---|---|---:|---|---:|---:|---|---|---:|---:|---:|",
     ]
     for item in summaries:
         setup = SETUPS[item.setup]
@@ -234,7 +237,7 @@ def _setup_lines(summaries: list[SetupSummary]) -> list[str]:
             f"| {_pct(item.accuracy_new)} | {_pct(item.accuracy_sept35)} "
             f"| {item.latency_median:.2f} / {item.latency_p95:.2f} "
             f"| {item.input_tokens:,.0f} / {item.output_tokens:.1f} / {item.thinking_tokens:.1f} "
-            f"| {item.parse_failures} | {item.errors} |"
+            f"| {item.parse_failures} | {item.splits} | {item.errors} |"
         )
     return lines
 
@@ -346,7 +349,8 @@ def rescore(rows: list[RouterCallRow], questions: list[RoutingQuestion]) -> list
     rescored: list[RouterCallRow] = []
     for row in rows:
         if row.question_id in accepted and row.error is None:
-            ok = not row.parse_failed and row.destination in accepted[row.question_id]
+            destinations = row.destinations or [row.destination]
+            ok = not row.parse_failed and routed_correctly(destinations, accepted[row.question_id])
             row = row.model_copy(update={"correct": ok})
         rescored.append(row)
     return rescored

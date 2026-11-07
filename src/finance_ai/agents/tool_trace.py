@@ -8,7 +8,7 @@ reply (ToolMessage). ToolCallTracker joins the two into a ToolTrace.
 import json
 from typing import Any
 
-from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
+from langchain_core.messages import AIMessage, AIMessageChunk, HumanMessage, ToolMessage
 from pydantic import BaseModel, Field
 
 MAX_PREVIEW_LINES = 3
@@ -99,6 +99,33 @@ def summarize_tool_result(text: str) -> list[str]:
     if not lines:
         lines = [_shorten(line.strip()) for line in text.splitlines() if line.strip()]
     return lines[:MAX_PREVIEW_LINES]
+
+
+def traces_from_messages(messages: list[Any]) -> list[ToolTrace]:
+    """Build tool traces from a finished graph run's latest turn.
+
+    Args:
+        messages: Final graph messages (history, then this turn).
+
+    Returns:
+        One trace per tool reply after the last human message, in order.
+
+    Example:
+        >>> traces_from_messages([])
+        []
+    """
+    last_human = max(
+        (index for index, message in enumerate(messages) if isinstance(message, HumanMessage)),
+        default=-1,
+    )
+    tracker = ToolCallTracker()
+    traces: list[ToolTrace] = []
+    for message in messages[last_human + 1 :]:
+        if isinstance(message, ToolMessage):
+            traces.append(tracker.trace_for(message))
+        else:
+            tracker.observe(message)
+    return traces
 
 
 class ToolCallTracker:

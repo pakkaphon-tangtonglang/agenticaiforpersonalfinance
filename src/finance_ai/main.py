@@ -136,6 +136,7 @@ from finance_ai.tools.expense_constants import VALID_EXPENSE_CATEGORIES
 from finance_ai.tools.conversation_service import (
     create_conversation,
     get_or_create_active_conversation,
+    get_last_reply_intents,
     get_owned_guru_conversation,
     get_recent_history_as_tuples,
     list_user_conversations,
@@ -377,6 +378,7 @@ class MessageOut(BaseModel):
     role: str
     content: str
     intent: str = ""
+    intents: list[str] = Field(default_factory=list)
     sources: list[dict[str, Any]] = Field(default_factory=list)
 
 
@@ -637,6 +639,7 @@ def chat(req: ChatRequest, session: Session = Depends(get_session)) -> ChatRespo
     """
     conversation_id = _resolve_conversation_id(session, req.conversation_id, req.user_id)
     history = _load_history(session, conversation_id)
+    previous_intents = get_last_reply_intents(session, conversation_id)
     save_user_message(session, conversation_id, req.query)
 
     result = orchestrate_query(
@@ -645,9 +648,16 @@ def chat(req: ChatRequest, session: Session = Depends(get_session)) -> ChatRespo
         user_id=req.user_id,
         db_session_factory=_session_factory,
         chat_history=history,
+        previous_intents=previous_intents,
     )
 
-    save_assistant_message(session, conversation_id, result["response"], result["intent"])
+    save_assistant_message(
+        session,
+        conversation_id,
+        result["response"],
+        result["intent"],
+        intents=result.get("intents"),
+    )
     return ChatResponse(intent=result["intent"], response=result["response"])
 
 
@@ -671,10 +681,11 @@ def chat_stream(
     """
     conversation_id = _resolve_conversation_id(session, conversation_id, user_id)
     history = _load_history(session, conversation_id)
+    previous_intents = get_last_reply_intents(session, conversation_id)
     save_user_message(session, conversation_id, query)
 
     return StreamingResponse(
-        _stream_generator(query, user_id, history, conversation_id, session),
+        _stream_generator(query, user_id, (history, previous_intents), conversation_id, session),
         media_type="text/event-stream",
     )
 
@@ -682,7 +693,7 @@ def chat_stream(
 def _stream_generator(
     query: str,
     user_id: str,
-    history: list[tuple[str, str]],
+    context: tuple[list[tuple[str, str]], list[str]],
     conversation_id: str,
     session: Session,
 ) -> Generator[str, None, None]:
@@ -691,19 +702,21 @@ def _stream_generator(
     Args:
         query: User query.
         user_id: User UUID.
-        history: Chat history tuples.
+        context: Chat history tuples and the previous reply's topics.
         conversation_id: Conversation UUID.
         session: Database session.
 
     Yields:
         SSE-formatted event strings.
     """
+    history, previous_intents = context
     events = orchestrate_query_stream(
         query=query,
         chat_model=get_chat_model(),
         user_id=user_id,
         db_session_factory=_session_factory,
         chat_history=history,
+        previous_intents=previous_intents,
     )
     yield from _relay_events_and_save(events, conversation_id, session)
 
@@ -724,20 +737,22 @@ def _relay_events_and_save(
         SSE-formatted event strings.
     """
     full_response = ""
-    intent = "unknown"
+    complete = StreamEvent(event_type="complete", intent="unknown")
     sources: list[dict[str, Any]] = []
     for event in events:
         sse_data = _format_sse_event(event)
         if sse_data:
             yield sse_data
         if event.event_type == "complete":
-            intent = event.intent
+            complete = event
         if event.event_type == "token":
             full_response += event.content
         if event.event_type == "sources":
             sources = [source.model_dump() for source in event.sources]
 
-    save_assistant_message(session, conversation_id, full_response, intent, sources)
+    save_assistant_message(
+        session, conversation_id, full_response, complete.intent, sources, complete.intents
+    )
 
 
 def _format_sse_event(event: StreamEvent) -> str | None:
@@ -755,7 +770,8 @@ def _format_sse_event(event: StreamEvent) -> str | None:
         # the event early and drop the rest of the token.
         return f"data: {json.dumps(event.content, ensure_ascii=False)}\n\n"
     if event.event_type == "complete":
-        return "event: complete\n" f"data: {json.dumps(event.intent, ensure_ascii=False)}\n\n"
+        intents = _sse("intents", event.intents) if event.intents else ""
+        return intents + _sse("complete", event.intent)
     if event.event_type == "sources":
         return _sse("sources", [source.model_dump() for source in event.sources])
     if event.event_type == "tool" and event.tool is not None:
@@ -947,6 +963,7 @@ def get_messages(conversation_id: str, session: Session = Depends(get_session)) 
             role=msg.get("role", "user"),
             content=msg.get("content", ""),
             intent=msg.get("intent", ""),
+            intents=msg.get("intents", []),
             sources=msg.get("sources", []),
         )
         for msg in messages

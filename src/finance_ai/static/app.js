@@ -595,7 +595,7 @@
       const msgs = await api("GET", `/conversations/${id}/messages`);
       if (msgs.length) {
         enterThreadMode();
-        for (const m of msgs) appendMessage(m.role, m.content, m.intent, m.sources);
+        for (const m of msgs) appendMessage(m.role, m.content, m.intent, m.sources, m.intents);
       }
     } catch (e) { toast("โหลดข้อความไม่สำเร็จ", true); }
     loadConversations();
@@ -628,7 +628,8 @@
     window.Citations.decorate(bubble, list, host);
   }
 
-  function appendMessage(role, content, intent, sources) {
+  // intents lists every agent of a multi-topic answer (empty for one topic).
+  function appendMessage(role, content, intent, sources, intents) {
     const thread = $("chatThread");
     const cfg = intent ? INTENT_CONFIG[intent] || INTENT_CONFIG.unknown : null;
     const bubble = el("div", { class: "msg-bubble" });
@@ -639,11 +640,23 @@
     );
     if (role === "assistant" && content) attachSources(bubble, content, sources);
     if (cfg && role === "assistant") {
-      appendIntentExtras(msg, intent);
+      for (const each of answerIntents(intent, intents)) appendIntentExtras(msg, each);
     }
     thread.append(msg);
     thread.scrollTop = thread.scrollHeight;
     return bubble;
+  }
+
+  // A multi-topic answer names every agent; otherwise just the one intent.
+  function answerIntents(intent, intents) {
+    return intents && intents.length ? intents : [intent];
+  }
+
+  function agentLabels(intents) {
+    return intents
+      .filter((each) => INTENT_CONFIG[each] && each !== "unknown")
+      .map((each) => `ผู้ช่วยด้าน${INTENT_CONFIG[each].label}`)
+      .join(" + ");
   }
 
   function intentBadge(cfg) {
@@ -686,10 +699,12 @@
     };
   }
 
-  function traceDetails(seconds, intent, sourceCount) {
-    const cfg = INTENT_CONFIG[intent];
+  function traceDetails(seconds, intents, sourceCount) {
     const steps = [];
-    if (cfg && intent !== "unknown") steps.push(el("li", {}, `${cfg.icon} ผู้ช่วยด้าน${cfg.label} `, el("span", {}, "ตอบคำถามนี้")));
+    for (const intent of intents) {
+      const cfg = INTENT_CONFIG[intent];
+      if (cfg && intent !== "unknown") steps.push(el("li", {}, `${cfg.icon} ผู้ช่วยด้าน${cfg.label} `, el("span", {}, "ตอบคำถามนี้")));
+    }
     if (sourceCount) steps.push(el("li", {}, "ค้นคลังความรู้ ", el("span", {}, `ใช้ ${sourceCount} แหล่ง`)));
     const details = el("details", { class: "trace" },
       el("summary", {}, `✦ ใช้เวลา ${Math.max(1, Math.round(seconds))} วินาที`));
@@ -729,11 +744,10 @@
   function settleTrace(live) {
     if (!live.chips.count) {
       live.chips.node.remove();
-      live.thinking.settle(traceDetails(live.seconds, live.intent, live.sources.length));
+      live.thinking.settle(traceDetails(live.seconds, answerIntents(live.intent, live.intents), live.sources.length));
       return;
     }
-    const cfg = INTENT_CONFIG[live.intent];
-    const agentLabel = cfg && live.intent !== "unknown" ? `ผู้ช่วยด้าน${cfg.label}` : "";
+    const agentLabel = agentLabels(answerIntents(live.intent, live.intents));
     live.chips.finish({ seconds: live.seconds, agentLabel });
     live.thinking.settle(live.chips.node);
   }
@@ -742,7 +756,7 @@
   function finishLiveAnswer(bubble, live) {
     const msg = bubble.closest(".msg");
     settleTrace(live);
-    appendIntentExtras(msg, live.intent, { badge: false });
+    for (const each of answerIntents(live.intent, live.intents)) appendIntentExtras(msg, each, { badge: false });
     msg.append(answerActions(() => bubble.innerText));
     const more = followUps(live.intent);
     if (more) msg.append(more);
@@ -764,6 +778,7 @@
 
     let full = "";
     let intent = "unknown";
+    let intents = [];
     let sources = [];
     try {
       const params = new URLSearchParams({ query: text, user_id: state.userId });
@@ -784,6 +799,9 @@
         source.addEventListener("sources", (ev) => {
           try { sources = JSON.parse(ev.data) || []; } catch (_) { /* noop */ }
         });
+        source.addEventListener("intents", (ev) => {
+          try { intents = JSON.parse(ev.data) || []; } catch (_) { /* noop */ }
+        });
         source.addEventListener("complete", (ev) => {
           try { intent = JSON.parse(ev.data) || "unknown"; } catch (_) { /* noop */ }
           source.close();
@@ -794,7 +812,7 @@
 
       assistantBubble.classList.remove("msg-cursor");
       attachSources(assistantBubble, full, sources);
-      finishLiveAnswer(assistantBubble, { intent, sources, thinking, chips, seconds: (performance.now() - thinking.started) / 1000 });
+      finishLiveAnswer(assistantBubble, { intent, intents, sources, thinking, chips, seconds: (performance.now() - thinking.started) / 1000 });
       maybeAutoTitle();
     } catch (e) {
       thinking.stop();

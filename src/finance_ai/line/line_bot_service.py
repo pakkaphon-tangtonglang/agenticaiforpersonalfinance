@@ -28,6 +28,7 @@ from finance_ai.line.messaging_client import (
     show_line_loading,
 )
 from finance_ai.tools.conversation_service import (
+    get_last_reply_intents,
     get_recent_history_as_tuples,
     save_assistant_message,
     save_user_message,
@@ -79,6 +80,7 @@ def process_line_message(
         if link_reply is not None:
             return link_reply
         history = get_recent_history_as_tuples(session, mapping.conversation_id)
+        previous_intents = get_last_reply_intents(session, mapping.conversation_id)
         save_user_message(session, mapping.conversation_id, text)
         chat_model = chat_model_provider() if chat_model_provider is not None else None
         result = orchestrate_query(
@@ -87,9 +89,14 @@ def process_line_message(
             user_id=mapping.user_id,
             db_session_factory=session_factory,
             chat_history=history,
+            previous_intents=previous_intents,
         )
         save_assistant_message(
-            session, mapping.conversation_id, result["response"], result["intent"]
+            session,
+            mapping.conversation_id,
+            result["response"],
+            result["intent"],
+            intents=result.get("intents"),
         )
         return str(result["response"])
 

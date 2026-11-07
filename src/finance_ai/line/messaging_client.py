@@ -15,6 +15,7 @@ from linebot.v3.messaging import (
 )
 
 from finance_ai.core.logging import get_logger
+from finance_ai.line.text_split import split_line_text
 
 logger = get_logger(__name__)
 
@@ -45,18 +46,20 @@ def send_line_push(
     Args:
         access_token: LINE channel access token.
         line_user_id: LINE platform userId of the recipient.
-        text: Answer text (in Thai) to deliver.
-        quick_reply_labels: Tappable buttons (defaults to the clarify menu).
+        text: Answer text (in Thai) to deliver; a long text is split into
+            several messages (see split_line_text).
+        quick_reply_labels: Tappable buttons (defaults to the clarify menu),
+            attached to the last message.
 
     Example:
         >>> send_line_push(token, "U4af4980629...", "คำตอบ")
     """
+    chunks = split_line_text(text)
+    messages = [TextMessage(text=chunk) for chunk in chunks[:-1]]
+    messages.append(TextMessage(text=chunks[-1], quick_reply=_quick_reply(quick_reply_labels)))
     messaging_api = MessagingApi(ApiClient(Configuration(access_token=access_token)))
     messaging_api.push_message(
-        push_message_request=PushMessageRequest(
-            to=line_user_id,
-            messages=[TextMessage(text=text, quick_reply=_quick_reply(quick_reply_labels))],
-        )
+        push_message_request=PushMessageRequest(to=line_user_id, messages=messages)
     )
 
 

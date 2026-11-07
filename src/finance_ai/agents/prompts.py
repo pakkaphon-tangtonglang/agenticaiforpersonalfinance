@@ -147,12 +147,50 @@ ORCHESTRATOR_EXAMPLES_SECTION: str = (
     "\n"
 )
 
+ORCHESTRATOR_MULTI_INTENT_SECTION: str = (
+    "ข้อความที่ถามหลายเรื่อง:\n"
+    '- ถ้าข้อความเดียวมีหลายคำถามหรือหลายคำสั่งที่เป็นคนละหมวด ให้เพิ่ม "tasks"'
+    " เป็นรายการงาน งานละ 1 หมวด เรียงตามลำดับที่ผู้ใช้พูด ไม่จำกัดจำนวนงาน"
+    " (หมวดเดียวกันให้รวมเป็นงานเดียว)\n"
+    "- sub_query ของแต่ละงานต้องอ่านเข้าใจได้เองโดยไม่ต้องดูส่วนอื่น"
+    " ใส่ตัวเลข ชื่อหุ้น หรือชื่อเป้าหมายที่งานนั้นใช้ให้ครบ"
+    " และแทนคำอ้างถึง เช่น 'อันนั้น' 'ตัวนั้น' ด้วยสิ่งที่หมายถึงจากข้อความก่อนหน้า\n"
+    '- "intent" และ "confidence" ด้านนอกให้ใช้ของงานแรก\n'
+    "- ถ้าเป็นคำถามเดียวที่แค่ต้องใช้ข้อมูลหลายด้าน ถือเป็นเรื่องเดียว ไม่ต้องใส่ tasks\n"
+    "- คำทักทายหรือขอบคุณที่มากับคำถาม ไม่ต้องแยกเป็นงาน\n"
+    "ตัวอย่างหลายเรื่อง:\n"
+    '- "จ่ายค่าอาหาร 250 บาท แล้วช่วยดูราคา BDMS ให้หน่อย" →'
+    ' {"intent": "expense", "confidence": 0.9, "tasks": ['
+    '{"intent": "expense", "sub_query": "จ่ายค่าอาหาร 250 บาท", "confidence": 0.9},'
+    ' {"intent": "asset_monitoring", "sub_query": "ดูราคา BDMS", "confidence": 0.9}]}\n'
+    '- "เงินเดือน 40,000 ต้องเสียภาษีปีละเท่าไร อยากเก็บเงินดาวน์บ้าน 300,000 ใน 3 ปี'
+    ' แล้วขอรายงานเดือนนี้ด้วย" →'
+    ' {"intent": "tax", "confidence": 0.9, "tasks": ['
+    '{"intent": "tax", "sub_query": "เงินเดือน 40,000 บาท ต้องเสียภาษีปีละเท่าไร",'
+    ' "confidence": 0.9},'
+    ' {"intent": "planning", "sub_query": "อยากเก็บเงินดาวน์บ้าน 300,000 บาท ภายใน 3 ปี",'
+    ' "confidence": 0.9},'
+    ' {"intent": "report", "sub_query": "ขอรายงานการเงินเดือนนี้", "confidence": 0.85}]}\n'
+    '- "ซื้อ RMF 50,000 จะลดภาษีได้เท่าไร" → {"intent": "tax", "confidence": 0.9}'
+    "  (คำถามเดียว ไม่ต้องแยก)\n"
+    "\n"
+)
+
 ORCHESTRATOR_PROMPT_TAIL: str = (
     'ตอบเป็น JSON เท่านั้น: {"intent": "<category>", "confidence": <0.0-1.0>}'
+    ' และเพิ่ม "tasks" เฉพาะเมื่อข้อความมีหลายเรื่อง'
 )
 
 ORCHESTRATOR_SYSTEM_PROMPT: str = (
-    ORCHESTRATOR_PROMPT_HEAD + ORCHESTRATOR_EXAMPLES_SECTION + ORCHESTRATOR_PROMPT_TAIL
+    ORCHESTRATOR_PROMPT_HEAD
+    + ORCHESTRATOR_EXAMPLES_SECTION
+    + ORCHESTRATOR_MULTI_INTENT_SECTION
+    + ORCHESTRATOR_PROMPT_TAIL
+)
+
+ORCHESTRATOR_PREVIOUS_TOPICS_HINT: str = (
+    "คำตอบก่อนหน้าของผู้ช่วยตอบหลายเรื่อง: {topics}\n"
+    "ถ้าข้อความล่าสุดถามต่อโดยอ้างถึงเรื่องใดในนี้ ให้จำแนกตามเรื่องที่อ้างถึง"
 )
 
 
@@ -170,9 +208,13 @@ def build_orchestrator_system_prompt(include_examples: bool = True) -> str:
         >>> "ตัวอย่าง:" in prompt
         False
     """
-    if include_examples:
-        return ORCHESTRATOR_PROMPT_HEAD + ORCHESTRATOR_EXAMPLES_SECTION + ORCHESTRATOR_PROMPT_TAIL
-    return ORCHESTRATOR_PROMPT_HEAD + ORCHESTRATOR_PROMPT_TAIL
+    examples = ORCHESTRATOR_EXAMPLES_SECTION if include_examples else ""
+    return (
+        ORCHESTRATOR_PROMPT_HEAD
+        + examples
+        + ORCHESTRATOR_MULTI_INTENT_SECTION
+        + ORCHESTRATOR_PROMPT_TAIL
+    )
 
 
 TAX_AGENT_SYSTEM_PROMPT: str = (

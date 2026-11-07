@@ -18,7 +18,10 @@ from sqlalchemy.orm import Session
 from finance_ai.agents.citation_sources import CitationSource, collect_turn_citations
 from finance_ai.agents.graph_cache import get_compiled_graph
 from finance_ai.agents.llm_error_messages import describe_llm_error
+from finance_ai.agents.multi_intent import merge_tasks_by_agent
+from finance_ai.agents.schemas import RoutedTask
 from finance_ai.agents.router_agent import (
+    RunContext,
     _build_clarify_response,
     _build_messages,
     _should_clarify,
@@ -40,6 +43,8 @@ class StreamEvent(BaseModel):
         intent: The classified intent (set on 'complete' event).
         sources: Numbered citation sources (set on 'sources' event).
         tool: Finished tool call summary (set on 'tool' event).
+        intents: Every agent that answered a multi-topic message (set on
+            'complete'; empty for a single-topic reply).
 
     Example:
         >>> e = StreamEvent(event_type="token", content="สวัสดี")
@@ -50,6 +55,7 @@ class StreamEvent(BaseModel):
     intent: str = Field(default="")
     sources: list[CitationSource] = Field(default_factory=list)
     tool: ToolTrace | None = None
+    intents: list[str] = Field(default_factory=list)
 
 
 @dataclass
@@ -301,10 +307,12 @@ def orchestrate_query_stream(
     user_id: str = "",
     db_session_factory: Callable[[], Session] | None = None,
     chat_history: list[tuple[str, str]] | None = None,
+    previous_intents: list[str] | None = None,
 ) -> Generator[StreamEvent, None, None]:
     """Route and stream a user query response.
 
-    Classifies intent (non-streaming), then streams the agent.
+    Classifies intent (non-streaming), then streams the agent. A message
+    about several topics streams one agent per topic into one reply.
 
     Args:
         query: The user's natural language query.
@@ -312,17 +320,25 @@ def orchestrate_query_stream(
         user_id: UUID of the user.
         db_session_factory: Session factory for DB access.
         chat_history: Previous messages for context.
+        previous_intents: Topics of the previous reply when it covered several.
 
     Yields:
         StreamEvent objects.
     """
     try:
-        decision = classify_query(query, chat_model, chat_history)
+        decision = classify_query(
+            query, chat_model, chat_history, previous_intents=previous_intents
+        )
     except Exception as exc:  # noqa: BLE001
         logger.error("Stream routing failed: %s", exc, exc_info=True)
         yield from _stream_error_response(exc)
         return
     logger.info("Stream routing to: %s", decision.intent)
+    tasks = merge_tasks_by_agent(decision.tasks)
+    if len(tasks) >= 2:
+        context = RunContext(chat_model, user_id, db_session_factory, chat_history)
+        yield from _stream_multi_intent(query, tasks, context)
+        return
     if _should_clarify(decision):
         yield from _stream_clarify_response()
         return
@@ -338,6 +354,24 @@ def orchestrate_query_stream(
         "db_session_factory": db_session_factory,
     }
     yield from stream_agent_response(graph, input_state, decision.intent)
+
+
+def _stream_multi_intent(
+    query: str, tasks: list[RoutedTask], context: RunContext
+) -> Generator[StreamEvent, None, None]:
+    """Stream a multi-topic reply (imported lazily: that module imports this one).
+
+    Args:
+        query: The user's whole message.
+        tasks: Merged tasks (two or more agents).
+        context: Shared request context.
+
+    Yields:
+        StreamEvent objects for the combined reply.
+    """
+    from finance_ai.agents.multi_intent_stream import stream_multi_intent  # noqa: PLC0415
+
+    yield from stream_multi_intent(query, tasks, context)
 
 
 def _stream_error_response(error: Exception) -> Generator[StreamEvent, None, None]:
