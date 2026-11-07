@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 
 from finance_ai.agents.schemas import TaxAgentState
 from finance_ai.evaluation.accuracy_evaluator import extract_tax_from_response
+from finance_ai.evaluation.architectures.design_context import content_to_text
 from finance_ai.tools.tax_calculator import calculate_tax
 
 # ---------------------------------------------------------------------------
@@ -232,7 +233,7 @@ def _run_notool(graph: Any, query: str) -> tuple[str, float]:
         )
         latency = time.perf_counter() - start
         messages = result.get("messages", [])
-        response = str(messages[-1].content) if messages else ""
+        response = content_to_text(messages[-1].content) if messages else ""
         return response, latency
     except Exception as exc:  # noqa: BLE001
         latency = time.perf_counter() - start

@@ -43,6 +43,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pilot", action="store_true", help="5 tasks × 4 designs × 1 round")
     parser.add_argument("--report-only", action="store_true", help="rebuild report from the log")
     parser.add_argument("--output", type=Path, default=None, help="override the output folder")
+    parser.add_argument("--tasks", nargs="+", default=None, help="only these task ids")
     return parser
 
 
@@ -115,11 +116,16 @@ def main(argv: Optional[list[str]] = None) -> Path:
     folder = output_folder(args.model, args.pilot, args.output)
     if not args.report_only:
         config = StudyConfig(
-            model_label=args.model, output_dir=folder, rounds=1 if args.pilot else args.rounds
+            model_label=args.model,
+            output_dir=folder,
+            rounds=1 if args.pilot else args.rounds,
+            task_ids=args.tasks,
         )
         try:
             run_study(
-                config, select_tasks(task_set.tasks, args.pilot), build_chat_model(args.model)
+                config,
+                select_tasks(task_set.tasks, args.pilot),
+                build_chat_model(args.model),
             )
         except StudyPaused as pause:
             print(f"Paused: {pause}")

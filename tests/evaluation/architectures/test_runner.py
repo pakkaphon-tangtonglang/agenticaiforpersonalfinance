@@ -102,6 +102,23 @@ class TestRunStudy:
         run_study(_config(tmp_path), TASKS, fake_model())
         assert len(read_log(log_path)) == 4 and sum(calls.values()) == 4
 
+    def test_task_filter_keeps_file_position(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """task_ids runs only the named task, with its original index (P2P rotation)."""
+        seen: list[int] = []
+
+        def fake_design(_query: str, context: DesignContext) -> DesignOutcome:
+            seen.append(context.task_index)
+            return DesignOutcome(answer="ต้องการอะไรคะ", route=["expense"])
+
+        monkeypatch.setitem(runner.DESIGNS, "hub_spoke", fake_design)
+        last = TASKS[-1].task_id
+        config = _config(tmp_path).model_copy(update={"designs": ["hub_spoke"], "task_ids": [last]})
+        rows = read_log(run_study(config, TASKS, fake_model()))
+        assert [row.run.task_id for row in rows] == [last]
+        assert seen == [len(TASKS) - 1]
+
     def test_errors_are_logged_not_raised(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:

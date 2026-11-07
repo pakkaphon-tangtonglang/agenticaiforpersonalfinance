@@ -87,3 +87,24 @@ class TestAssetPromptPortfolioVsWatchlist:
         assert "get_portfolio_holdings" in ASSET_MONITORING_AGENT_SYSTEM_PROMPT
         assert "รายการถือหุ้น" in ASSET_MONITORING_AGENT_SYSTEM_PROMPT
         assert "ไม่ใช่ Watchlist" in ASSET_MONITORING_AGENT_SYSTEM_PROMPT
+
+
+class TestRouterPromptFixes:
+    """Fixes from the 4.11 evaluations (2026-11-07)."""
+
+    def test_greeting_is_general_with_high_confidence(self) -> None:
+        """A greeting must not fall under the 0.7 ask-back threshold."""
+        assert (
+            '- "หวัดดีครับ" → {"intent": "general", "confidence": 0.9}'
+            in ORCHESTRATOR_SYSTEM_PROMPT
+        )
+        assert "คำทักทาย" in ORCHESTRATOR_SYSTEM_PROMPT
+
+    def test_paid_premium_with_tax_question_goes_to_tax(self) -> None:
+        """'Paid X, how much tax?' is a tax question, not an expense entry."""
+        example = (
+            '- "ปีนี้จ่ายเบี้ยประกันสุขภาพไป 12,000 แล้วต้องเสียภาษีเท่าไร" → '
+            '{"intent": "tax", "confidence": 0.9}'
+        )
+        assert example in ORCHESTRATOR_SYSTEM_PROMPT
+        assert "ถามว่าต้องเสียภาษีเท่าไร" in ORCHESTRATOR_SYSTEM_PROMPT

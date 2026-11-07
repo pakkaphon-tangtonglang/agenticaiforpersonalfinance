@@ -239,3 +239,77 @@ cases:
     expected_effective_rate: "0.0436"
     tolerance_thb: "1000"
     tags: ["complex", "family", "multiple_deductions"]
+
+  # === 2569 rules (added 2026-11-07, expected values computed by hand, then checked against the calculator) ===
+  - case_id: "tax_acc_021"
+    query: "ปีภาษี 2569 เงินเดือน 50,000 บาท จ่ายประกันสังคมเดือนละ 875 บาท ลดหย่อนส่วนตัว 60,000 ต้องเสียภาษีเท่าไร"
+    description: "Social security at the 2569 cap (875 x 12 = 10,500)"
+    gross_income: "600000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      social_security: "10500"
+    expected_total_tax: "20450"
+    expected_effective_rate: "0.0341"
+    tolerance_thb: "100"
+    tags: ["2569", "social_security"]
+
+  - case_id: "tax_acc_022"
+    query: "รายได้ปีละ 1,000,000 บาท ลดหย่อนส่วนตัว 60,000 คู่สมรสไม่มีรายได้ เลี้ยงดูพ่อแม่ตัวเองและพ่อแม่ของคู่สมรสรวม 4 คน ภาษีเท่าไร"
+    description: "Parent allowance for 4 people (30,000 each)"
+    gross_income: "1000000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      spouse_allowance: "60000"
+      parent_allowance: "120000"
+    expected_total_tax: "51500"
+    expected_effective_rate: "0.0515"
+    tolerance_thb: "500"
+    tags: ["2569", "parent"]
+
+  - case_id: "tax_acc_023"
+    query: "ปีภาษี 2569 รายได้ 900,000 บาท ลดหย่อนส่วนตัว 60,000 ซื้อ ThaiESG 150,000 บาท ต้องเสียภาษีเท่าไร"
+    description: "ThaiESG within both caps"
+    gross_income: "900000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      thai_esg: "150000"
+    expected_total_tax: "41000"
+    expected_effective_rate: "0.0456"
+    tolerance_thb: "500"
+    tags: ["2569", "thai_esg"]
+
+  - case_id: "tax_acc_024"
+    query: "ปีภาษี 2569 รายได้ 600,000 บาท ลดหย่อนส่วนตัว 60,000 ซื้อ ThaiESG 250,000 บาท ภาษีเหลือเท่าไร"
+    description: "ThaiESG above the 30% cap (only 180,000 counts)"
+    gross_income: "600000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      thai_esg: "250000"
+    expected_total_tax: "5500"
+    expected_effective_rate: "0.0092"
+    tolerance_thb: "500"
+    tags: ["2569", "thai_esg", "cap"]
+
+  - case_id: "tax_acc_025"
+    query: "ปีภาษี 2569 รายได้ 2,000,000 บาท ลดหย่อนส่วนตัว 60,000 ซื้อ ThaiESG 400,000 บาท ต้องจ่ายภาษีเท่าไร"
+    description: "ThaiESG above the 300,000 cap"
+    gross_income: "2000000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      thai_esg: "400000"
+    expected_total_tax: "250000"
+    expected_effective_rate: "0.1250"
+    tolerance_thb: "2000"
+    tags: ["2569", "thai_esg", "cap"]
+
+  - case_id: "tax_acc_026"
+    query: "รายได้ 800,000 บาท ลดหย่อนส่วนตัว 60,000 มีลูก 3 คน เกิดก่อนปี 2561 ทุกคน ต้องเสียภาษีเท่าไร"
+    description: "Child allowance for 3 children (30,000 each, no total cap)"
+    gross_income: "800000"
+    deductions_by_type:
+      personal_allowance: "60000"
+      child_allowance: "90000"
+    expected_total_tax: "35000"
+    expected_effective_rate: "0.0438"
+    tolerance_thb: "500"
+    tags: ["2569", "child"]

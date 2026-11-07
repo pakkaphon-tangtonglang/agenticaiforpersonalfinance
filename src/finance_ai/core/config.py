@@ -187,8 +187,11 @@ class Settings(BaseSettings):
         default="models/gemini-embedding-001", description="Google embedding model name"
     )
     rag_sentence_transformer_model: str = Field(
-        default="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
-        description="Sentence-transformers model name",
+        default="BAAI/bge-m3",
+        description=(
+            "Local sentence-transformers model. bge-m3 was the best local model in the"
+            " 4.11 C retrieval study (MiniLM ranked below BM25)."
+        ),
     )
     rag_embedding_cache_enabled: bool = Field(
         default=False,

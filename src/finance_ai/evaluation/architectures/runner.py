@@ -100,6 +100,8 @@ class StudyConfig(BaseModel):
         designs: Designs to run.
         seed: Shuffle seed (round r uses seed + r).
         as_of: Fixed reference date for the demo data.
+        task_ids: Run only these tasks (None = all). Filtered after planning, so each
+            task keeps its file position and peer-to-peer entry agent.
     """
 
     model_label: str
@@ -108,6 +110,7 @@ class StudyConfig(BaseModel):
     designs: list[DesignName] = Field(default_factory=lambda: list(DESIGNS))
     seed: int = 20261102
     as_of: date = Field(default_factory=date.today)
+    task_ids: Optional[list[str]] = None
 
 
 class StudyLogRow(BaseModel):
@@ -288,6 +291,7 @@ def run_study(
         planned
         for planned in plan_runs(tasks, config.designs, config.rounds, config.seed)
         if planned.key not in done
+        and (not config.task_ids or planned.task.task_id in config.task_ids)
     ]
     logger.info("Architecture study: %d runs done, %d to go", len(done), len(todo))
     template = build_template_database(config.output_dir / "db", config.as_of)

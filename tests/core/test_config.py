@@ -65,3 +65,10 @@ def test_get_settings_returns_settings() -> None:
     settings = get_settings()
 
     assert isinstance(settings, Settings)
+
+
+def test_local_embedding_default_is_bge_m3(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The local embedding model is bge-m3, the best local model in the 4.11 C study."""
+    monkeypatch.delenv("RAG_SENTENCE_TRANSFORMER_MODEL", raising=False)
+    settings = Settings(_env_file=None, google_api_key="test-key")
+    assert settings.rag_sentence_transformer_model == "BAAI/bge-m3"
