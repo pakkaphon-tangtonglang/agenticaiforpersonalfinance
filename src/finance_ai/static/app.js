@@ -2026,19 +2026,22 @@
 
   // ─── Asset search: stocks, Thai funds, gold bars and crypto ───
   // When the results mix types, the server's clarify questions become one-click
-  // filter chips above the results (ประเภท / บลจ. / ปันผล).
-  const searchState = { results: [], filters: {}, expanded: [], questions: [] };
+  // filter chips above the results (ประเภท / บลจ. / ปันผล), styled like the
+  // income/expense filter. Below them, "ถาม AI" lets the LLM pick fund search terms.
+  const searchState = { results: [], filters: {}, expanded: [], questions: [], askedAi: false };
 
-  async function searchAssets() {
+  async function searchAssets({ askAi = false, text = null } = {}) {
     const input = $("assetSearchInput");
-    const query = input.value.trim();
+    const query = (text ?? input.value).trim();
     if (!query) return;
     input.value = query;
     const btn = $("assetSearchBtn");
     btn.classList.add("is-loading");
-    btn.textContent = "กำลังค้นหา…";
+    btn.textContent = askAi ? "AI กำลังค้นหา…" : "กำลังค้นหา…";
     try {
-      const res = await api("GET", "/assets/search", { params: { query } });
+      const params = askAi ? { query, ask_ai: true } : { query };
+      const res = await api("GET", "/assets/search", { params });
+      searchState.askedAi = askAi;
       searchState.results = res.results || [];
       searchState.expanded = res.expanded_terms || [];
       searchState.filters = {};
@@ -2061,8 +2064,13 @@
     renderAssetSearchResults();
   }
 
+  // Same chip as the income/expense filter: "หุ้นไทย (3)" → name + count pill.
   function filterChip(label, pressed, onclick) {
-    return el("button", { type: "button", class: "asset-filter-chip", "aria-pressed": String(pressed), onclick }, label);
+    const [, name, count] = /^(.*?)\s*(?:\((\d+)\))?$/.exec(label);
+    return el("button", {
+      type: "button", class: `history-filter${pressed ? " is-active" : ""}`,
+      "aria-pressed": String(pressed), onclick,
+    }, name, count ? el("span", { class: "history-filter-count" }, count) : null);
   }
 
   // One row per question: "ทั้งหมด" + its options; the pressed chip is the active filter.
@@ -2072,13 +2080,28 @@
       const key = question.options[0] && question.options[0].key;
       const active = searchState.filters[key];
       const clearRow = () => { delete searchState.filters[key]; renderAssetSearchResults(); };
-      return el("div", { class: "asset-filter-row", role: "group", "aria-label": question.question },
+      return el("div", { class: "asset-filter-row history-filters", role: "group", "aria-label": question.question },
         el("span", { class: "asset-filter-label" }, FILTER_ROW_LABELS[key] || question.question),
-        filterChip("ทั้งหมด", !active, clearRow),
+        filterChip(`ทั้งหมด (${searchState.results.length})`, !active, clearRow),
         ...question.options.map((option) =>
           filterChip(option.label, Boolean(active && active.value === option.value), () => toggleSearchFilter(option))));
     });
     return el("div", { class: "asset-filter-bar" }, ...rows);
+  }
+
+  // "ถาม AI": describe what you want; the LLM turns it into fund search terms.
+  function askAiForm() {
+    const input = el("input", {
+      type: "text", class: "field-input", autocomplete: "off", "aria-label": "ถาม AI",
+      placeholder: "ถาม AI เช่น กองทุนหุ้นอเมริกาที่จ่ายปันผล",
+    });
+    const form = el("form", { class: "asset-ask-ai" }, input,
+      el("button", { type: "submit", class: "btn btn-ghost" }, "ถาม AI"));
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (input.value.trim()) searchAssets({ askAi: true, text: input.value });
+    });
+    return form;
   }
 
   function filteredSearchResults() {
@@ -2089,15 +2112,16 @@
 
   function searchStatusLine() {
     if (!searchState.expanded.length) return null;
+    const lead = searchState.askedAi ? "AI ค้นกองทุนด้วยคำว่า" : "ไม่พบตรงตัว เลยลองค้นด้วย";
     return el("div", { class: "asset-search-status" }, el("span", { class: "asset-search-note" },
-      `ไม่พบตรงตัว เลยลองค้นด้วย: ${searchState.expanded.join(", ")} (คำค้นแนะนำโดย AI · ข้อมูลกองทุนจาก ก.ล.ต.)`));
+      `${lead}: ${searchState.expanded.join(", ")} (คำค้นแนะนำโดย AI · ข้อมูลกองทุนจาก ก.ล.ต.)`));
   }
 
   function renderAssetSearchResults() {
     const box = $("assetSearchResults");
     const shown = filteredSearchResults();
     box.innerHTML = "";
-    box.append(...[searchStatusLine(), searchFilterBar()].filter(Boolean));
+    box.append(...[searchFilterBar(), askAiForm(), searchStatusLine()].filter(Boolean));
     if (!shown.length) {
       box.append(el("p", { class: "asset-search-empty" }, searchState.results.length
         ? "ไม่มีรายการที่ตรงกับตัวกรองนี้"
