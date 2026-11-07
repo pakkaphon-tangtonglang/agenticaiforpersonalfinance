@@ -91,12 +91,16 @@ class FundSearchOutcome(BaseModel):
     expanded_terms: list[str] = []
 
 
-def search_funds(query: str, expand: Callable[[str], list[str]] | None = None) -> FundSearchOutcome:
+def search_funds(
+    query: str, expand: Callable[[str], list[str]] | None = None, always_expand: bool = False
+) -> FundSearchOutcome:
     """Find Thai fund classes for a query, using the LLM only when nothing matches.
 
     Args:
         query: Thai/English name, fund house, or code ("กรุงศรี ปันผล", "K-USA").
         expand: Query → extra search terms (LLM); None turns expansion off.
+        always_expand: Ask the LLM even when the query matched (the "ถาม AI" box);
+            its terms' funds come first, then the direct matches.
 
     Returns:
         Up to MAX_RESULTS classes with NAV, and any expansion terms used.
@@ -110,9 +114,9 @@ def search_funds(query: str, expand: Callable[[str], list[str]] | None = None) -
         return FundSearchOutcome(results=[])
     rows = _profile_rows(cleaned)
     terms: list[str] = []
-    if not rows and expand is not None:
+    if expand is not None and (always_expand or not rows):
         terms = expand(cleaned)
-        rows = _expanded_rows(terms)
+        rows = _expanded_rows(terms) + rows
     return FundSearchOutcome(results=_with_navs(_rank(rows, cleaned)), expanded_terms=terms)
 
 

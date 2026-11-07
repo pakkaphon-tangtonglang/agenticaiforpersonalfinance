@@ -29,6 +29,7 @@ def search_all_assets(
     query: str,
     stock_search: Callable[[str], list[AssetSymbolMatch]],
     expand: Callable[[str], list[str]] = expand_fund_query,
+    ask_ai: bool = False,
 ) -> dict[str, Any]:
     """Stocks and funds for a query, plus clarifying questions when unsure.
 
@@ -36,6 +37,7 @@ def search_all_assets(
         query: What the user typed.
         stock_search: Yahoo symbol search (injected for tests).
         expand: LLM fund-term expansion, used only when nothing else matched.
+        ask_ai: The "ถาม AI" box — always run the LLM expansion for funds.
 
     Returns:
         {"status", "results", "expanded_terms", "clarify"}; each result has
@@ -47,16 +49,17 @@ def search_all_assets(
         'fund'
     """
     cleaned = query.strip()
+    fund_options: dict[str, Any] = {"expand": expand, "always_expand": True} if ask_ai else {}
     with ThreadPoolExecutor(max_workers=3) as pool:
         gold_future = pool.submit(gold_bar_results, cleaned)
         stocks_future = pool.submit(stock_search, cleaned)
-        funds_future = pool.submit(search_funds, cleaned)
+        funds_future = pool.submit(search_funds, cleaned, **fund_options)
         stocks = [
             stock_result(m) for m in stocks_future.result() if not _shown_as_gold(m, gold_future)
         ]
         funds = funds_future.result()
         gold = gold_future.result()
-    if not gold and not stocks and not funds.results:
+    if not ask_ai and not gold and not stocks and not funds.results:
         funds = search_funds(cleaned, expand=expand)
     results = gold + stocks + [fund_result(fund) for fund in funds.results]
     clarify = build_clarification(results)

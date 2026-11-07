@@ -1664,23 +1664,16 @@ a.cite-card-title:hover { text-decoration: underline; }
   font-size: var(--text-body-sm); color: var(--muted);
 }
 .asset-search-note { flex-basis: 100%; }
-/* Filter chips: one row per question (ประเภท / บลจ. / ปันผล), app.js searchFilterBar */
+/* Filter rows (ประเภท / บลจ. / ปันผล) reuse the income/expense .history-filter chips */
 .asset-filter-bar { grid-column: 1 / -1; display: grid; gap: var(--sp-2); }
-.asset-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.asset-filter-row.history-filters { margin-top: 0; align-items: center; }
 .asset-filter-label {
   min-width: 52px; font-size: var(--text-caption); color: var(--muted); font-weight: var(--fw-medium);
 }
-.asset-filter-chip {
-  min-height: 30px; padding: 4px 12px; border-radius: var(--radius-full);
-  border: 1px solid var(--line); background: var(--sheet); color: var(--ink);
-  font-size: var(--text-body-sm); white-space: nowrap;
-  transition: background-color 120ms var(--ease), border-color 120ms var(--ease), color 120ms var(--ease);
-}
-.asset-filter-chip:hover { border-color: var(--accent); }
-.asset-filter-chip[aria-pressed="true"] {
-  background: var(--accent-tint); border-color: var(--accent); color: var(--accent);
-  font-weight: var(--fw-medium);
-}
+/* "ถาม AI": free-text question → LLM fund search terms */
+.asset-ask-ai { grid-column: 1 / -1; display: flex; gap: var(--sp-2); }
+.asset-ask-ai .field-input { flex: 1; min-width: 0; }
+.asset-ask-ai .btn { flex: none; }
 .asset-result-note { font-size: var(--text-caption); color: var(--faint); }
 .asset-search-empty { grid-column: 1 / -1; }
 

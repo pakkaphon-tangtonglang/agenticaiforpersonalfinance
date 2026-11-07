@@ -189,6 +189,19 @@ class TestSearchFunds:
         assert outcome.expanded_terms == ["US"]
         assert [r.symbol for r in outcome.results] == ["K-US500X-A(A)"]
 
+    def test_always_expand_asks_ai_even_when_found(self, fake_sec_api: FakeSec) -> None:
+        """'ถาม AI': the expander runs although 'ปันผล' matches; AI terms come first."""
+        us_fund = profile(
+            "P9", "K-US500X", "K-US500X-A(A)", "กองทุนเปิดเค หุ้นยูเอส", KASIKORN, "C21"
+        )
+        fake_sec_api(sec_handler({"US": [us_fund]}))
+
+        outcome = search_funds("ปันผล", expand=lambda query: ["US"], always_expand=True)
+
+        assert outcome.expanded_terms == ["US"]
+        assert outcome.results[0].symbol == "K-US500X-A(A)"
+        assert len(outcome.results) > 1
+
     def test_short_query_or_no_key(self, fake_sec_api: FakeSec) -> None:
         """One character, or no key, returns nothing."""
         fake_sec_api(sec_handler())

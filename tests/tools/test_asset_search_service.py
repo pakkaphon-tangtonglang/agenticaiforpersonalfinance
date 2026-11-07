@@ -102,3 +102,10 @@ def test_other_query_has_no_gold_bar() -> None:
         response = search_all_assets("ปตท", lambda q: [ptt()], expand=lambda q: [])
     assert [r["symbol"] for r in response["results"]] == ["PTT.BK"]
     gold_price.assert_not_called()
+
+
+def test_ask_ai_always_expands_fund_terms() -> None:
+    """ask_ai=True passes the expander with always_expand, even when stocks matched."""
+    with patch(_SEARCH, return_value=FundSearchOutcome(results=[])) as search:
+        search_all_assets("หุ้นอเมริกา", lambda q: [ptt()], expand=str.split, ask_ai=True)
+    assert search.call_args.kwargs == {"expand": str.split, "always_expand": True}

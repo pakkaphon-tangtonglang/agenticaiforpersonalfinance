@@ -1790,11 +1790,12 @@ def get_dashboard_trends(
 
 
 @app.get("/assets/search")
-def search_assets(query: str) -> dict[str, Any]:
+def search_assets(query: str, ask_ai: bool = False) -> dict[str, Any]:
     """Search asset symbols by free text (names, tickers, transliterations).
 
     Args:
         query: Free-text asset name or ticker (e.g. "ปตท", "Apple").
+        ask_ai: True from the "ถาม AI" box: always let the LLM suggest fund terms.
 
     Returns:
         {"status", "results", "expanded_terms", "clarify"}: stocks and Thai
@@ -1813,7 +1814,7 @@ def search_assets(query: str) -> dict[str, Any]:
         search_asset_symbols,
     )
 
-    return search_all_assets(query, search_asset_symbols)
+    return search_all_assets(query, search_asset_symbols, ask_ai=ask_ai)
 
 
 @app.post("/assets/fetch", response_model=AssetFetchResponse)
