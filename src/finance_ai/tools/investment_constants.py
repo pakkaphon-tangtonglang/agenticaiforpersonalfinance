@@ -11,6 +11,8 @@ ASSET_TYPES: dict[str, str] = {
     "stock": "หุ้น",
     "mutual_fund": "กองทุนรวม",
     "foreign_stock": "หุ้นต่างประเทศ",
+    "gold": "ทองคำแท่ง",
+    "crypto": "คริปโต",
 }
 
 # Valid asset type keys for validation

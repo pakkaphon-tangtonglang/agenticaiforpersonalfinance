@@ -110,7 +110,7 @@ class TestValidateAssetType:
     def test_invalid_type_raises(self) -> None:
         """Raises ValueError for unknown type."""
         with pytest.raises(ValueError, match="Unknown asset type"):
-            validate_asset_type("crypto")
+            validate_asset_type("bond")
 
 
 # ── Validate Stock Symbol ────────────────────────────────────────────

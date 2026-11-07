@@ -14,17 +14,19 @@ from typing import Any
 
 from pydantic import BaseModel
 
+GOLD = "gold"
 THAI_STOCK = "thai_stock"
 FUND = "fund"
 FOREIGN_STOCK = "foreign_stock"
 CRYPTO = "crypto"
 OTHER = "other"
 CATEGORY_LABELS: dict[str, str] = {
+    GOLD: "ทองคำ",
     THAI_STOCK: "หุ้นไทย",
     FUND: "กองทุนรวมไทย",
     FOREIGN_STOCK: "หุ้นต่างประเทศ",
     CRYPTO: "คริปโต",
-    OTHER: "อื่นๆ (ทองคำ ดัชนี ETF)",
+    OTHER: "อื่นๆ (สัญญาล่วงหน้า ดัชนี ETF)",
 }
 PAYOUT_LABELS: dict[str, str] = {"A": "สะสมมูลค่า (ไม่จ่ายปันผล)", "D": "รับเงินปันผล"}
 FEW_RESULTS = 4  # at or below this many results, just show them

@@ -134,13 +134,30 @@ class TestAddHoldingFromForm:
                 HoldingForm(symbol="AAPL", quantity="1", price_per_unit="200"),
             )
 
-    def test_crypto_rejected(self, test_session: Session, sample_user: User) -> None:
-        """Crypto is not a stock; the message points to the watchlist."""
-        with pytest.raises(HoldingEntryError, match="Watchlist"):
+    def test_crypto_price_converted_to_baht(self, test_session: Session, sample_user: User) -> None:
+        """BTC-USD typed in USD is stored in baht and saved as crypto."""
+        foreign = "finance_ai.tools.foreign_stock_service"
+        prices = {"BTC-USD": Decimal("100000"), "USDTHB=X": Decimal("32.5")}
+        with (
+            patch(f"{foreign}.fetch_current_price", side_effect=prices.get),
+            patch(f"{foreign}.fetch_currency", return_value="USD"),
+        ):
+            entry = add_holding_from_form(
+                test_session,
+                sample_user.id,
+                HoldingForm(symbol="btc-usd", quantity="0.01", price_per_unit="90000"),
+            )
+        assert (entry.symbol, entry.total_cost, entry.currency) == ("BTC-USD", "29250.00", "USD")
+        assert entry.current_value == "32500.00"
+        assert test_session.query(InvestmentHolding).one().asset_type == "crypto"
+
+    def test_futures_rejected(self, test_session: Session, sample_user: User) -> None:
+        """A futures contract is not something to hold; the message points to gold bars."""
+        with pytest.raises(HoldingEntryError, match="ทองคำแท่ง"):
             add_holding_from_form(
                 test_session,
                 sample_user.id,
-                HoldingForm(symbol="BTC-USD", quantity="1", price_per_unit="100"),
+                HoldingForm(symbol="CL=F", quantity="1", price_per_unit="100"),
             )
 
     def test_tiny_lot_has_no_percent(self, test_session: Session, sample_user: User) -> None:
@@ -190,8 +207,8 @@ class TestFundsAndPurchaseDate:
             _add_form(test_session, sample_user, form, "10")
 
     def test_unknown_asset_type(self, test_session: Session, sample_user: User) -> None:
-        """Only stock and mutual_fund are accepted."""
-        form = HoldingForm(symbol="BTC-USD", quantity="1", asset_type="crypto")
+        """Only the known asset types are accepted."""
+        form = HoldingForm(symbol="LB24DA", quantity="1", asset_type="bond")
         with pytest.raises(HoldingEntryError, match="ประเภทสินทรัพย์"):
             _add_form(test_session, sample_user, form, "10")
 
@@ -227,3 +244,55 @@ class TestFundsAndPurchaseDate:
         form = HoldingForm(symbol="PTT.BK", quantity="1", purchase_date="last week")
         with pytest.raises(HoldingEntryError, match="2026-10-01"):
             _add_form(test_session, sample_user, form, "33")
+
+
+_GOLD_PRICE = "finance_ai.tools.holding_entry_service.thai_gold_price_per_baht_weight"
+
+
+def _add_gold(session: Session, user: User, form: HoldingForm, latest: str | None) -> HoldingEntry:
+    """Add a gold bar with the estimated baht price mocked."""
+    latest_price = None if latest is None else Decimal(latest)
+    with patch(_GOLD_PRICE, return_value=latest_price):
+        return add_holding_from_form(session, user.id, form)
+
+
+class TestThaiGold:
+    """96.5% gold bars, priced in baht per baht-weight."""
+
+    def test_blank_price_uses_estimate(self, test_session: Session, sample_user: User) -> None:
+        """2 baht-weight at the estimated price, saved as gold."""
+        form = HoldingForm(symbol="THGOLD965", quantity="2", asset_type="gold")
+        entry = _add_gold(test_session, sample_user, form, "61500")
+        assert (entry.price_per_unit, entry.total_cost, entry.used_latest_price) == (
+            "61500",
+            "123000.00",
+            True,
+        )
+        holding = test_session.query(InvestmentHolding).one()
+        assert (holding.asset_type, holding.name) == ("gold", "ทองคำแท่ง 96.5%")
+
+    def test_typed_baht_price_not_converted(self, test_session: Session, sample_user: User) -> None:
+        """The shop price is already in baht: no exchange rate, gain vs the estimate."""
+        form = HoldingForm(
+            symbol="thgold965", name="ทองคำแท่ง 96.5%", quantity="0.5",
+            price_per_unit="60,000", asset_type="gold",
+        )  # fmt: skip
+        entry = _add_gold(test_session, sample_user, form, "61500")
+        assert (entry.total_cost, entry.gain_loss, entry.currency) == ("30000.00", "750.00", "THB")
+        assert entry.price_in_currency is None
+
+    def test_other_symbol_rejected(self, test_session: Session, sample_user: User) -> None:
+        """Only the gold bar symbol is a gold holding."""
+        form = HoldingForm(symbol="GLD", quantity="1", asset_type="gold")
+        with pytest.raises(HoldingEntryError, match="THGOLD965"):
+            _add_gold(test_session, sample_user, form, "61500")
+
+
+@pytest.mark.parametrize(("symbol", "asset_type"), [("GC=F", "stock"), ("GC=F", "world_gold")])
+def test_world_gold_futures_cannot_be_held(
+    test_session: Session, sample_user: User, symbol: str, asset_type: str
+) -> None:
+    """GC=F is a futures contract: rejected whichever type is sent."""
+    form = HoldingForm(symbol=symbol, quantity="1", price_per_unit="4000", asset_type=asset_type)
+    with pytest.raises(HoldingEntryError):
+        add_holding_from_form(test_session, sample_user.id, form)

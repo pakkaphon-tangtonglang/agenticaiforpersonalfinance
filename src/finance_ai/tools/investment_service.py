@@ -4,6 +4,7 @@ Orchestrates investment operations by querying holdings from the database
 and delegating computation to pure calculator functions.
 """
 
+from collections.abc import Callable
 from datetime import date
 from decimal import Decimal
 
@@ -295,7 +296,8 @@ def refresh_portfolio_prices(
 
 
 def _latest_prices(holdings: list[InvestmentHolding]) -> dict[str, Decimal | None]:
-    """Latest price per symbol: SEC NAV for funds, market prices for stocks (foreign in THB).
+    """Latest baht price per symbol: SEC NAV for funds, the baht-weight estimate for
+    gold bars, USD prices converted for foreign stocks and crypto, market prices otherwise.
 
     Args:
         holdings: The user's holdings.
@@ -303,25 +305,36 @@ def _latest_prices(holdings: list[InvestmentHolding]) -> dict[str, Decimal | Non
     Returns:
         Symbol → latest price (None when unknown).
     """
-    from finance_ai.tools.fund_nav_client import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
-        fetch_latest_nav,
-    )
     from finance_ai.tools.price_client import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
         fetch_multiple_prices,
     )
 
-    from finance_ai.tools.foreign_stock_service import (  # noqa: PLC0415  # pylint: disable=import-outside-toplevel
+    single_pricers = _single_symbol_pricers()
+    priced_one_by_one = {h.symbol: h.asset_type for h in holdings if h.asset_type in single_pricers}
+    stocks = [h.symbol for h in holdings if h.symbol not in priced_one_by_one]
+    prices: dict[str, Decimal | None] = dict(fetch_multiple_prices(stocks)) if stocks else {}
+    for symbol, asset_type in priced_one_by_one.items():
+        prices[symbol] = single_pricers[asset_type](symbol)
+    return prices
+
+
+def _single_symbol_pricers() -> dict[str, Callable[[str], Decimal | None]]:
+    """Asset type → function giving one symbol's latest baht price (lazy imports)."""
+    # pylint: disable=import-outside-toplevel
+    from finance_ai.tools import thai_gold_service  # noqa: PLC0415
+    from finance_ai.tools.crypto_service import CRYPTO  # noqa: PLC0415
+    from finance_ai.tools.foreign_stock_service import (  # noqa: PLC0415
         FOREIGN_STOCK,
         latest_price_in_thb,
     )
+    from finance_ai.tools.fund_nav_client import fetch_latest_nav  # noqa: PLC0415
 
-    funds = {h.symbol for h in holdings if h.asset_type == "mutual_fund"}
-    foreign = {h.symbol for h in holdings if h.asset_type == FOREIGN_STOCK}
-    stocks = [h.symbol for h in holdings if h.symbol not in funds | foreign]
-    prices: dict[str, Decimal | None] = dict(fetch_multiple_prices(stocks)) if stocks else {}
-    prices.update({symbol: fetch_latest_nav(symbol) for symbol in funds})
-    prices.update({symbol: latest_price_in_thb(symbol) for symbol in foreign})
-    return prices
+    return {
+        "mutual_fund": fetch_latest_nav,
+        FOREIGN_STOCK: latest_price_in_thb,
+        CRYPTO: latest_price_in_thb,
+        thai_gold_service.GOLD: lambda _symbol: thai_gold_service.thai_gold_price_per_baht_weight(),
+    }
 
 
 def get_portfolio_summary(

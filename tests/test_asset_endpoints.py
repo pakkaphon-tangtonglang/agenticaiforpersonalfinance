@@ -700,20 +700,20 @@ class TestAddHoldingEndpoint:
         listed = client.get("/assets/holdings", params={"user_id": user_id}).json()
         assert listed[0]["gain_loss_percentage"] is not None
 
-    def test_crypto_returns_422(self, client: TestClient, temp_db: sessionmaker[Session]) -> None:
-        """Crypto cannot be added to the portfolio from the asset page."""
+    def test_futures_returns_422(self, client: TestClient, temp_db: sessionmaker[Session]) -> None:
+        """A futures contract cannot be held; the message points to the gold bar."""
         user_id = _first_user_id(temp_db)
         response = client.post(
             "/assets/holdings",
             json={
                 "user_id": user_id,
-                "symbol": "BTC-USD",
+                "symbol": "CL=F",
                 "quantity": "1",
                 "price_per_unit": "200",
             },
         )
         assert response.status_code == 422
-        assert "Watchlist" in response.json()["detail"]
+        assert "ทองคำแท่ง" in response.json()["detail"]
 
     def test_refresh_updates_gain(
         self, client: TestClient, temp_db: sessionmaker[Session], monkeypatch: pytest.MonkeyPatch
@@ -972,6 +972,14 @@ class TestExchangeRateEndpoint:
         response = client.get("/assets/exchange-rate", params={"symbol": "PTT.BK"})
 
         assert response.status_code == 422
+
+    def test_crypto_gets_rate(self, client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+        """BTC-USD is priced in USD, so the form converts it like a foreign stock."""
+        _stub_fx(monkeypatch, Decimal("32.5"))
+
+        body = client.get("/assets/exchange-rate", params={"symbol": "btc-usd"}).json()
+
+        assert (body["symbol"], body["rate_to_thb"]) == ("BTC-USD", "32.5000")
 
 
 def test_exchange_rate_for_past_day(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:

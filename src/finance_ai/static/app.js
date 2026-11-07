@@ -1882,7 +1882,7 @@
       el("button", {
         type: "button", class: "watchlist-open",
         title: "ดึงราคาและข่าวล่าสุด",
-        onclick: () => fetchAssetData(row.symbol, row.name),
+        onclick: () => fetchAssetData(marketSymbol(row.symbol), row.name),
       },
         el("span", { class: "watchlist-symbol", title: row.symbol || "" }, displaySymbol(row.symbol)),
         el("span", { class: "watchlist-name" }, `${row.name || ""} · ${row.quantity ?? "—"} หน่วย${cost}`),
@@ -2024,26 +2024,26 @@
     }
   }
 
-  // ─── Asset search (free text) ───
-  // ─── Asset search: stocks + Thai funds, with a clarify card when unsure ───
-  const searchState = { results: [], filters: {}, expanded: [] };
+  // ─── Asset search: stocks, Thai funds, gold bars and crypto ───
+  // When the results mix types, the server's clarify questions become one-click
+  // filter chips above the results (ประเภท / บลจ. / ปันผล).
+  const searchState = { results: [], filters: {}, expanded: [], questions: [] };
 
-  async function searchAssets(queryOverride, presetFilters) {
+  async function searchAssets() {
     const input = $("assetSearchInput");
-    const query = (typeof queryOverride === "string" ? queryOverride : input.value).trim();
+    const query = input.value.trim();
     if (!query) return;
     input.value = query;
     const btn = $("assetSearchBtn");
     btn.classList.add("is-loading");
     btn.textContent = "กำลังค้นหา…";
-    showClarify(null);
     try {
       const res = await api("GET", "/assets/search", { params: { query } });
       searchState.results = res.results || [];
       searchState.expanded = res.expanded_terms || [];
-      searchState.filters = presetFilters || {};
+      searchState.filters = {};
+      searchState.questions = res.clarify && res.clarify.reason === "many" ? res.clarify.questions : [];
       renderAssetSearchResults();
-      showClarify(presetFilters ? null : res.clarify);
     } catch (e) {
       toast("ค้นหาไม่สำเร็จ: " + e.message, true);
     } finally {
@@ -2052,30 +2052,33 @@
     }
   }
 
-  function clarifyHost() {
-    let host = $("assetClarify");
-    if (!host) {
-      host = el("div", { id: "assetClarify", class: "asset-clarify", hidden: "" });
-      $("assetSearchResults").before(host);
-    }
-    return host;
-  }
+  const FILTER_ROW_LABELS = { category: "ประเภท", amc: "บลจ.", payout: "ปันผล" };
 
-  function showClarify(clarify) {
-    const host = clarifyHost();
-    host.replaceChildren();
-    host.hidden = !(clarify && clarify.questions && clarify.questions.length && window.ClarifyCard);
-    if (host.hidden) return;
-    window.ClarifyCard.mount(host, clarify, {
-      onDone: (filters) => { host.hidden = true; applySearchFilters(filters); },
-      onSearch: (text, filters) => { host.hidden = true; searchAssets(text, filters); },
-      onClose: () => { host.hidden = true; },
-    });
-  }
-
-  function applySearchFilters(filters) {
-    searchState.filters = filters || {};
+  function toggleSearchFilter(option) {
+    const current = searchState.filters[option.key];
+    if (current && current.value === option.value) delete searchState.filters[option.key];
+    else searchState.filters[option.key] = { value: option.value, label: option.label };
     renderAssetSearchResults();
+  }
+
+  function filterChip(label, pressed, onclick) {
+    return el("button", { type: "button", class: "asset-filter-chip", "aria-pressed": String(pressed), onclick }, label);
+  }
+
+  // One row per question: "ทั้งหมด" + its options; the pressed chip is the active filter.
+  function searchFilterBar() {
+    if (!searchState.questions.length) return null;
+    const rows = searchState.questions.map((question) => {
+      const key = question.options[0] && question.options[0].key;
+      const active = searchState.filters[key];
+      const clearRow = () => { delete searchState.filters[key]; renderAssetSearchResults(); };
+      return el("div", { class: "asset-filter-row", role: "group", "aria-label": question.question },
+        el("span", { class: "asset-filter-label" }, FILTER_ROW_LABELS[key] || question.question),
+        filterChip("ทั้งหมด", !active, clearRow),
+        ...question.options.map((option) =>
+          filterChip(option.label, Boolean(active && active.value === option.value), () => toggleSearchFilter(option))));
+    });
+    return el("div", { class: "asset-filter-bar" }, ...rows);
   }
 
   function filteredSearchResults() {
@@ -2085,43 +2088,57 @@
   }
 
   function searchStatusLine() {
-    const parts = [];
-    if (searchState.expanded.length) {
-      parts.push(el("span", { class: "asset-search-note" },
-        `ไม่พบตรงตัว เลยลองค้นด้วย: ${searchState.expanded.join(", ")} (คำค้นแนะนำโดย AI · ข้อมูลกองทุนจาก ก.ล.ต.)`));
-    }
-    const filters = Object.values(searchState.filters);
-    if (filters.length) {
-      parts.push(...filters.map((filter) => el("span", { class: "asset-filter-chip" }, filter.label.replace(/\s*\(\d+\)$/, ""))));
-      parts.push(el("button", { type: "button", class: "asset-filter-clear", onclick: () => applySearchFilters({}) }, "ล้างตัวกรอง"));
-    }
-    return parts.length ? el("div", { class: "asset-search-status" }, ...parts) : null;
+    if (!searchState.expanded.length) return null;
+    return el("div", { class: "asset-search-status" }, el("span", { class: "asset-search-note" },
+      `ไม่พบตรงตัว เลยลองค้นด้วย: ${searchState.expanded.join(", ")} (คำค้นแนะนำโดย AI · ข้อมูลกองทุนจาก ก.ล.ต.)`));
   }
 
   function renderAssetSearchResults() {
     const box = $("assetSearchResults");
     const shown = filteredSearchResults();
     box.innerHTML = "";
-    const status = searchStatusLine();
-    if (status) box.append(status);
+    box.append(...[searchStatusLine(), searchFilterBar()].filter(Boolean));
     if (!shown.length) {
-      box.append(el("p", { class: "asset-search-empty" },
-        searchState.results.length ? "ไม่มีรายการที่ตรงกับตัวกรองนี้" : "ไม่พบสินทรัพย์ที่ตรงกัน"));
+      box.append(el("p", { class: "asset-search-empty" }, searchState.results.length
+        ? "ไม่มีรายการที่ตรงกับตัวกรองนี้"
+        : "ไม่พบสินทรัพย์ที่ตรงกัน ลองพิมพ์ชื่อเต็ม ตัวย่อ หรือรหัสกองทุน เช่น Apple, PTT, K-USA"));
     }
     for (const result of shown) box.append(buildAssetSearchCard(result));
     box.hidden = false;
   }
 
   // ─── Add to portfolio (asset page) ───
-  // Thai stocks (.BK), foreign stocks/ETFs and Thai mutual funds (SEC data, type FUND).
-  // The portfolio is in baht: a foreign price is typed in the stock's currency (USD)
-  // and the server converts it. A blank price = the latest price or NAV.
+  // Thai stocks (.BK), foreign stocks/ETFs, Thai mutual funds (SEC data, type FUND),
+  // the Thai 96.5% gold bar (type GOLD, baht per baht-weight, calculated) and crypto
+  // (BTC-USD). World gold from the API (type WORLD_GOLD, GC=F) is a futures contract:
+  // view/track only. The portfolio is in baht: a foreign stock or coin price is typed
+  // in USD and the server converts it. A blank price = the latest price, NAV or gold estimate.
+  const THAI_GOLD_SYMBOL = "THGOLD965";
+  const WORLD_GOLD_SYMBOL = "GC=F";
   const isThaiStock = (symbol) => /\.BK$/i.test(symbol || "");
   const isFund = (result) => result.type === "FUND";
+  const isGold = (result) => result.type === "GOLD";
+  const isWorldGold = (result) => result.type === "WORLD_GOLD";
+  const isCrypto = (result) => result.type === "CRYPTOCURRENCY";
   const isForeignStock = (result) =>
     !isFund(result) && !isThaiStock(result.symbol) && ["EQUITY", "ETF"].includes(result.type);
-  const unitWord = (result) => (isFund(result) ? "หน่วย" : "หุ้น");
-  const priceCurrency = (result) => (isForeignStock(result) ? "USD" : "บาท");
+  const isUsdPriced = (result) => isForeignStock(result) || isCrypto(result);
+  const canHold = (result) => isFund(result) || isGold(result) || isUsdPriced(result)
+    || isThaiStock(result.symbol);
+  const UNIT_WORDS = { FUND: "หน่วย", GOLD: "บาททองคำ", CRYPTOCURRENCY: "เหรียญ" };
+  const unitWord = (result) => UNIT_WORDS[result.type] || "หุ้น";
+  const priceCurrency = (result) => (isUsdPriced(result) ? "USD" : "บาท");
+  const latestPriceWord = (result) =>
+    isFund(result) ? "NAV ล่าสุด" : isGold(result) ? "ราคาประมาณล่าสุด" : "ราคาล่าสุด";
+  // Gold bars have no Yahoo quote: their price and news come from world gold.
+  const marketSymbol = (symbol) => (symbol === THAI_GOLD_SYMBOL ? WORLD_GOLD_SYMBOL : symbol);
+
+  function holdingAssetType(result) {
+    if (isFund(result)) return "mutual_fund";
+    if (isGold(result)) return "gold";
+    if (isCrypto(result)) return "crypto";
+    return isForeignStock(result) ? "foreign_stock" : "stock";
+  }
 
   function localToday() {
     const now = new Date();
@@ -2129,11 +2146,9 @@
   }
 
   function portfolioButton(result) {
-    const allowed = isFund(result) || isThaiStock(result.symbol) || isForeignStock(result);
     return el("button", {
       type: "button", class: "asset-port-btn", "aria-expanded": "false",
-      disabled: allowed ? null : "",
-      title: allowed ? "บันทึกว่าซื้อสินทรัพย์นี้แล้ว" : "พอร์ตรองรับหุ้นและกองทุนรวม (คริปโต/ทองคำ ใช้ Watchlist)",
+      title: "บันทึกว่าซื้อสินทรัพย์นี้แล้ว",
       onclick: (e) => toggleHoldingForm(result, e.currentTarget),
     }, "เพิ่มลงพอร์ต");
   }
@@ -2155,8 +2170,10 @@
 
   function holdingForm(result, close) {
     const unit = unitWord(result);
-    const latestWord = isFund(result) ? "NAV ล่าสุด" : "ราคาล่าสุด";
-    const [qtyField, qty] = holdingFormField(`จำนวน${unit}`, { placeholder: "เช่น 100" });
+    const latestWord = latestPriceWord(result);
+    const qtyExample = isGold(result) ? "เช่น 1 หรือ 0.25 (1 สลึง)"
+      : isCrypto(result) ? "เช่น 0.01" : "เช่น 100";
+    const [qtyField, qty] = holdingFormField(`จำนวน${unit}`, { placeholder: qtyExample });
     const [priceField, price] = holdingFormField(`ราคาซื้อต่อ${unit} (${priceCurrency(result)})`, { placeholder: latestWord });
     const [dateField, bought] = holdingFormField("วันที่ซื้อ", { type: "date", inputmode: null, max: localToday(), value: localToday() });
     const out = el("div", { class: "holding-form-result", role: "status", "aria-live": "polite" });
@@ -2170,7 +2187,7 @@
       e.preventDefault();
       saveHolding(result, { qty, price, bought }, submit, out);
     });
-    if (isForeignStock(result)) attachFxPreview(form, result.symbol, { qty, price, bought }, form.querySelector(".holding-form-hint"));
+    if (isUsdPriced(result)) attachFxPreview(form, result.symbol, { qty, price, bought, unit }, form.querySelector(".holding-form-hint"));
     return form;
   }
 
@@ -2199,7 +2216,7 @@
     refresh();
   }
 
-  function fxPreviewText(rate, { qty, price }) {
+  function fxPreviewText(rate, { qty, price, unit }) {
     if (!rate) return "กำลังดึงอัตราแลกเปลี่ยน…";
     const perUnit = Number(rate.rate_to_thb);
     const isPast = rate.rate_date && rate.rate_date < localToday();
@@ -2212,7 +2229,7 @@
     const shares = Number(qty.value.replace(/,/g, ""));
     const each = usd * perUnit;
     const total = Number.isFinite(shares) && shares > 0 ? ` · รวม ≈ ${thb(each * shares)}` : "";
-    return `≈ ${thb(each)} ต่อหุ้น${total} · ${rateText}`;
+    return `≈ ${thb(each)} ต่อ${unit}${total} · ${rateText}`;
   }
 
   async function saveHolding(result, fields, submit, out) {
@@ -2223,7 +2240,7 @@
     try {
       const res = await api("POST", "/assets/holdings", { json: {
         user_id: state.userId, symbol: result.symbol, name: result.name,
-        asset_type: isFund(result) ? "mutual_fund" : (isForeignStock(result) ? "foreign_stock" : "stock"),
+        asset_type: holdingAssetType(result),
         quantity: qty.value, price_per_unit: price.value.trim() || null,
         purchase_date: bought.value || null,
       } });
@@ -2273,6 +2290,15 @@
   }
 
   function searchCardMeta(result) {
+    if (isGold(result)) {
+      const price = result.price ? `≈ ${thb(result.price)} ต่อบาททองคำ` : "ยังคำนวณราคาไม่ได้";
+      return `${price} · ${result.exchange}`;
+    }
+    if (isWorldGold(result)) {
+      const price = result.price ? `${Number(result.price).toLocaleString("en-US")} USD ต่อออนซ์` : "ยังดึงราคาไม่ได้";
+      return `${result.symbol} · ${price} · ${result.exchange}`;
+    }
+    if (isCrypto(result)) return `${result.symbol} · คริปโต · ราคาเป็น USD`;
     if (!isFund(result)) return `${result.symbol} · ${result.exchange} · ${result.type}`;
     const navDate = result.nav_date ? ` (${formatThaiDate(result.nav_date)})` : "";
     const payout = result.payout === "D" ? " · ปันผล" : result.payout === "A" ? " · สะสมมูลค่า" : "";
@@ -2280,10 +2306,11 @@
     return `${house}${result.symbol}${payout} · NAV ${result.nav ?? "—"} ฿${navDate}`;
   }
 
-  // Funds come from SEC data: Yahoo cannot fetch or watch them, so they only get เพิ่มลงพอร์ต.
+  // Funds (SEC data) and gold bars have no Yahoo quote to fetch or watch, so they only
+  // get เพิ่มลงพอร์ต. Futures and indexes cannot be held, so they skip it.
   function searchCardActions(result) {
-    const actions = [portfolioButton(result)];
-    if (isFund(result)) return actions;
+    const actions = canHold(result) ? [portfolioButton(result)] : [];
+    if (isFund(result) || isGold(result)) return actions;
     actions.push(
       el("button", {
         type: "button", class: "asset-fetch-btn",
@@ -2298,10 +2325,13 @@
 
   // One card = info area + เพิ่มลงพอร์ต + ดึงข้อมูล (fetch) + ติดตาม (add to the watchlist).
   function buildAssetSearchCard(result) {
+    const cannotHold = canHold(result) ? null
+      : el("span", { class: "asset-result-note" }, "สัญญาล่วงหน้า/ดัชนี ซื้อถือในพอร์ตไม่ได้ ดูราคาหรือติดตามได้");
     return el("div", { class: "asset-result-card", dataset: { symbol: result.symbol } },
       el("span", { class: "asset-result-main" },
         el("span", { class: "asset-result-name" }, result.name),
         el("span", { class: "asset-result-meta" }, searchCardMeta(result)),
+        cannotHold,
       ),
       el("div", { class: "asset-card-actions" }, ...searchCardActions(result)),
     );

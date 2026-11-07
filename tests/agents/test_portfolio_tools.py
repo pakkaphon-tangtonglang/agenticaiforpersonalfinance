@@ -329,7 +329,7 @@ class TestAddPortfolioHoldingEdgeCases:
             symbol="PTT",
             quantity="1",
             price_per_unit="10",
-            asset_type="crypto",
+            asset_type="bond",
         )
         assert result["options"] == ["หุ้นไทย", "กองทุนรวม"]
 

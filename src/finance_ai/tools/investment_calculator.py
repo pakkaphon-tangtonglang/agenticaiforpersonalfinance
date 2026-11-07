@@ -10,6 +10,8 @@ from decimal import Decimal
 from pydantic import BaseModel, Field
 
 from finance_ai.tools.foreign_stock_service import FOREIGN_STOCK, is_foreign_stock_symbol
+from finance_ai.tools.crypto_service import CRYPTO, validate_crypto_symbol
+from finance_ai.tools.thai_gold_service import GOLD, validate_thai_gold_symbol
 from finance_ai.tools.investment_constants import (
     ASSET_TYPES,
     MAX_PRICE_PER_UNIT,
@@ -226,13 +228,15 @@ def validate_symbol(symbol: str, asset_type: str) -> str:
         >>> validate_symbol("PTT.BK", "stock")
         'PTT.BK'
     """
-    if asset_type == "stock":
-        return validate_stock_symbol(symbol)
-    if asset_type == "mutual_fund":
-        return validate_mutual_fund_symbol(symbol)
-    if asset_type == FOREIGN_STOCK:
-        return validate_foreign_stock_symbol(symbol)
-    return symbol.strip().upper()
+    validators = {
+        "stock": validate_stock_symbol,
+        "mutual_fund": validate_mutual_fund_symbol,
+        FOREIGN_STOCK: validate_foreign_stock_symbol,
+        GOLD: validate_thai_gold_symbol,
+        CRYPTO: validate_crypto_symbol,
+    }
+    validator = validators.get(asset_type)
+    return validator(symbol) if validator else symbol.strip().upper()
 
 
 def validate_foreign_stock_symbol(symbol: str) -> str:
@@ -248,7 +252,7 @@ def validate_foreign_stock_symbol(symbol: str) -> str:
     if not is_foreign_stock_symbol(symbol):
         raise ValueError(
             f"'{symbol}' is not a foreign stock ticker (e.g. NVDA, AAPL). "
-            "Thai stocks end with .BK; crypto and gold cannot be held in the portfolio."
+            "Thai stocks end with .BK; crypto uses BTC-USD and gold bars THGOLD965."
         )
     return symbol.strip().upper()
 
