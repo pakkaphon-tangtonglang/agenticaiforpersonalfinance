@@ -57,6 +57,9 @@ dependencies = [
 [project.optional-dependencies]
 ollama = ["langchain-ollama>=0.3.0"]
 openrouter = ["langchain-openai>=0.3.0"]
+embeddings = [
+    "sentence-transformers>=3.0",
+]
 
 [dependency-groups]
 dev = [

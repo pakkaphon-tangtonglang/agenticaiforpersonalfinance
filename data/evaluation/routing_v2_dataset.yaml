@@ -1,0 +1,241 @@
+# Routing questions for the router study (4.11 B, written 2026-11-07).
+#
+# expected = where the production router should send the question:
+#   tax | expense | asset_monitoring | planning | recommendation | report
+#   general_chat  -> router intent "general" or "unknown" (both open General Chat)
+#   clarify       -> router asks back (intent "general" with confidence < 0.7)
+# Labels follow the category rules in the production router prompt
+# (src/finance_ai/agents/prompts.py, ORCHESTRATOR_PROMPT_HEAD). No question copies a
+# few-shot example in that prompt, the September 35-question set or the architecture tasks.
+# difficulty "hard" = a boundary rule from the prompt decides the label
+# (e.g. paid insurance -> expense, buying gold -> asset_monitoring).
+# also_accept: second labels added after the 2026-11-07 audit, only where the router prompt's own
+# rules support the label the models chose (see docs/evaluation/router-thinking-notes.md).
+name: routing_v2
+version: "1.0"
+questions:
+  # ===================== tax (17) =====================
+  - {question_id: tax_01, query: "เงินเดือนเดือนละ 42,000 ปีนี้ต้องจ่ายภาษีประมาณเท่าไหร่", expected: tax, difficulty: easy}
+  - {question_id: tax_02, query: "ฟรีแลนซ์รายได้ปีละ 800,000 หักค่าใช้จ่ายได้กี่เปอร์เซ็นต์", expected: tax, difficulty: medium}
+  - {question_id: tax_03, query: "SSF ยังลดหย่อนได้อยู่ไหมปีนี้", expected: tax, difficulty: easy}
+  - {question_id: tax_04, query: "ThaiESG ลดหย่อนได้สูงสุดเท่าไร", expected: tax, difficulty: easy}
+  - {question_id: tax_05, query: "เงินสมทบประกันสังคมหักลดหย่อนได้เท่าไหร่", expected: tax, difficulty: easy}
+  - {question_id: tax_06, query: "ลดหย่อนเลี้ยงดูพ่อแม่ได้คนละเท่าไร", expected: tax, difficulty: easy}
+  - {question_id: tax_07, query: "มีลูก 2 คน ลดหย่อนบุตรได้เท่าไหร่", expected: tax, difficulty: easy}
+  - {question_id: tax_08, query: "ดอกเบี้ยผ่อนบ้านเอามาลดหย่อนได้ไหม", expected: tax, difficulty: easy}
+  - {question_id: tax_09, query: "ยื่นภาษีออนไลน์ได้ถึงวันไหน", expected: tax, difficulty: medium}
+  - {question_id: tax_10, query: "ถ้าซื้อประกันชีวิตเพิ่ม 50,000 จะประหยัดภาษีได้เท่าไร", expected: tax, difficulty: medium}
+  - {question_id: tax_11, query: "tax bracket ของคนรายได้ 1.2 ล้านต่อปีอยู่ที่กี่เปอร์เซ็นต์", expected: tax, difficulty: medium}
+  - {question_id: tax_12, query: "บริจาคเงินให้โรงพยาบาลลดหย่อนได้กี่เท่า", expected: tax, difficulty: easy}
+  - {question_id: tax_13, query: "how much income tax do I pay if I earn 600k baht a year", expected: tax, difficulty: medium}
+  - {question_id: tax_14, query: "โบนัสต้องเสียภาษีด้วยเหรอ", expected: tax, difficulty: medium}
+  - {question_id: tax_15, query: "โดนหัก ณ ที่จ่ายไปแล้ว 20,000 จะได้เงินภาษีคืนไหม", expected: tax, difficulty: medium}
+  - {question_id: tax_16, query: "เงินปันผลหุ้นไทยโดนหักภาษีกี่เปอร์เซ็นต์", expected: tax, difficulty: hard}
+  - {question_id: tax_17, query: "อยากลดภาษีให้ได้มากที่สุด ต้องซื้ออะไรบ้าง", expected: tax, difficulty: hard}
+
+  # ===================== expense (17) =====================
+  - {question_id: exp_01, query: "กินข้าวมันไก่ 50 บาท", expected: expense, difficulty: easy}
+  - {question_id: exp_02, query: "เติมน้ำมัน 1,200", expected: expense, difficulty: easy}
+  - {question_id: exp_03, query: "วันนี้เงินเดือนเข้า 35,000 บาท", expected: expense, difficulty: easy}
+  - {question_id: exp_04, query: "เมื่อวานจ่ายค่าไฟไป 1,850 บาท", expected: expense, difficulty: easy}
+  - {question_id: exp_05, query: "ลืมจด เมื่อวานนั่งแท็กซี่ 140", expected: expense, difficulty: medium}
+  - {question_id: exp_06, query: "อาทิตย์นี้ใช้เงินช้อปปิ้งไปเท่าไรแล้ว", expected: expense, difficulty: easy}
+  - {question_id: exp_07, query: "ค่าเดินทางเดือนที่แล้วรวมเท่าไหร่", expected: expense, difficulty: easy}
+  - {question_id: exp_08, query: "ได้ค่าจ้างงานฟรีแลนซ์มา 8,000", expected: expense, difficulty: medium}
+  - {question_id: exp_09, query: "ยืมเงินแม่มา 3,000", expected: expense, difficulty: medium}
+  - {question_id: exp_10, query: "คืนเงินที่ยืมพี่ไป 1,500 แล้ว", expected: expense, difficulty: medium}
+  - {question_id: exp_11, query: "ตอนนี้ติดหนี้ใครอยู่บ้าง เหลือเท่าไหร่", expected: expense, difficulty: medium}
+  - {question_id: exp_12, query: "มีเงินเก็บในบัญชีอยู่ 80,000", expected: expense, difficulty: hard}
+  - {question_id: exp_13, query: "จ่ายเบี้ยประกันสุขภาพไป 18,000 บาท", expected: expense, difficulty: hard}
+  - {question_id: exp_14, query: "netflix 419 บาท ตัดบัตรไปแล้ว", expected: expense, difficulty: medium}
+  - {question_id: exp_15, query: "ลบรายการค่ากาแฟเมื่อเช้าออกให้หน่อย", expected: expense, difficulty: medium}
+  - {question_id: exp_16, query: "เดือนนี้รายจ่ายหมวดไหนเยอะสุด", expected: expense, difficulty: easy}
+  - {question_id: exp_17, query: "ผ่อนรถงวดนี้ 9,800 จ่ายแล้ว", expected: expense, difficulty: medium}
+
+  # ===================== asset_monitoring (17) =====================
+  - {question_id: ast_01, query: "SCB ตอนนี้ราคาเท่าไหร่", expected: asset_monitoring, difficulty: easy}
+  - {question_id: ast_02, query: "ราคาทองวันนี้เท่าไร", expected: asset_monitoring, difficulty: medium}
+  - {question_id: ast_03, query: "ขาย KBANK ไป 300 หุ้นที่ 152 บาท", expected: asset_monitoring, difficulty: easy}
+  - {question_id: ast_04, query: "ซื้อกองทุน K-USA-A(A) 10,000 บาท", expected: asset_monitoring, difficulty: easy}
+  - {question_id: ast_05, query: "bitcoin ตอนนี้เท่าไหร่แล้ว", expected: asset_monitoring, difficulty: easy}
+  - {question_id: ast_06, query: "มีข่าวอะไรเกี่ยวกับ CPALL บ้าง", expected: asset_monitoring, difficulty: easy}
+  - {question_id: ast_07, query: "พอร์ตฉันตอนนี้ขาดทุนอยู่ไหม", expected: asset_monitoring, difficulty: easy}
+  - {question_id: ast_08, query: "หุ้นตัวไหนในพอร์ตจ่ายปันผลดีสุด", expected: asset_monitoring, difficulty: medium}
+  - {question_id: ast_09, query: "ปตท.ปิดวันนี้เท่าไร", expected: asset_monitoring, difficulty: easy}
+  - {question_id: ast_10, query: "เพิ่ม DELTA เข้า watchlist ให้หน่อย", expected: asset_monitoring, difficulty: medium}
+  - {question_id: ast_11, query: "หากองทุน RMF ที่ลงทุนหุ้นต่างประเทศให้หน่อย", expected: asset_monitoring, difficulty: hard}
+  - {question_id: ast_12, query: "NVDA ร่วงเพราะอะไร", expected: asset_monitoring, difficulty: medium}
+  - {question_id: ast_13, query: "ดัชนี SET50 ย้อนหลัง 1 เดือนเป็นยังไง", expected: asset_monitoring, difficulty: medium}
+  - {question_id: ast_14, query: "แก้จำนวนหุ้น AOT ในพอร์ตเป็น 500 หุ้น", expected: asset_monitoring, difficulty: medium}
+  - {question_id: ast_15, query: "กองทุนที่ถืออยู่ NAV ล่าสุดเท่าไหร่", expected: asset_monitoring, difficulty: easy}
+  - {question_id: ast_16, query: "ซื้อทองคำแท่ง 1 บาท ราคา 41,000", expected: asset_monitoring, difficulty: hard}
+  - {question_id: ast_17, query: "how is my portfolio doing today", expected: asset_monitoring, difficulty: medium}
+
+  # ===================== planning (17) =====================
+  - {question_id: pln_01, query: "อยากมีเงินล้านภายใน 10 ปี ต้องเริ่มยังไง", expected: planning, difficulty: easy}
+  - {question_id: pln_02, query: "ตั้งเป้าเก็บเงินแต่งงาน 300,000 ภายใน 2 ปี", expected: planning, difficulty: easy}
+  - {question_id: pln_03, query: "อยากมีเงินฉุกเฉินพอใช้ 6 เดือน ต้องเก็บเท่าไหร่", expected: planning, difficulty: medium}
+  - {question_id: pln_04, query: "เป้าหมายเที่ยวญี่ปุ่นไปถึงไหนแล้ว", expected: planning, difficulty: easy}
+  - {question_id: pln_05, query: "เพิ่มเงินเข้าเป้าหมายรถใหม่ 5,000", expected: planning, difficulty: medium}
+  - {question_id: pln_06, query: "ลบเป้าหมายซื้อ iPad ออก", expected: planning, difficulty: medium}
+  - {question_id: pln_07, query: "อายุ 35 มีเงินเก็บ 5 แสน จะเกษียณตอน 60 ได้ไหม", expected: planning, difficulty: medium}
+  - {question_id: pln_08, query: "เงินเดือน 30,000 ควรแบ่งออมก่อนใช้ยังไง", expected: planning, also_accept: [general_chat], difficulty: medium}
+  - {question_id: pln_09, query: "ถ้าเก็บเดือนละ 3,000 อีกกี่ปีจะได้ 200,000", expected: planning, difficulty: easy}
+  - {question_id: pln_10, query: "อยากเก็บเงินดาวน์คอนโด", expected: planning, difficulty: easy}
+  - {question_id: pln_11, query: "เปลี่ยนเป้าหมายเงินเกษียณเป็น 8 ล้าน", expected: planning, difficulty: medium}
+  - {question_id: pln_12, query: "วางแผนเก็บเงินค่าเทอมลูกปีหน้า 120,000", expected: planning, difficulty: easy}
+  - {question_id: pln_13, query: "ทำยังไงถึงจะเก็บเงินได้ครบตามเป้าเร็วขึ้น", expected: planning, difficulty: hard}
+  - {question_id: pln_14, query: "i want to save 50k for a new laptop by june", expected: planning, difficulty: medium}
+  - {question_id: pln_15, query: "เป้าหมายไหนใกล้ครบที่สุด", expected: planning, difficulty: medium}
+  - {question_id: pln_16, query: "อยากปลดหนี้บัตรเครดิตให้หมดใน 1 ปี ต้องวางแผนยังไง", expected: planning, difficulty: hard}
+  - {question_id: pln_17, query: "ปีหน้าอยากเก็บให้ได้ 20% ของรายได้", expected: planning, difficulty: medium}
+
+  # ===================== recommendation (17) =====================
+  - {question_id: rec_01, query: "ช่วยดูหน่อยว่าการเงินฉันมีจุดอ่อนตรงไหน", expected: recommendation, difficulty: easy}
+  - {question_id: rec_02, query: "คะแนนสุขภาพการเงินของฉันได้เท่าไหร่", expected: recommendation, difficulty: easy}
+  - {question_id: rec_03, query: "ควรลดรายจ่ายตรงไหนดี", expected: recommendation, difficulty: medium}
+  - {question_id: rec_04, query: "มีเงินก้อน 2 แสน ควรเอาไปทำอะไรดี", expected: recommendation, difficulty: medium}
+  - {question_id: rec_05, query: "พอร์ตฉันเสี่ยงเกินไปไหม ควรปรับยังไง", expected: recommendation, difficulty: hard}
+  - {question_id: rec_06, query: "ช่วงนี้เครียดเรื่องเงินมาก ไม่รู้จะเริ่มแก้ตรงไหน", expected: recommendation, difficulty: medium}
+  - {question_id: rec_07, query: "อยากรวยเร็ว ควรกู้เงินมาลงทุนดีไหม", expected: recommendation, difficulty: hard}
+  - {question_id: rec_08, query: "ช่วยประเมินว่าฉันรับความเสี่ยงได้แค่ไหน", expected: recommendation, difficulty: medium}
+  - {question_id: rec_09, query: "ฉันใช้เงินเปลืองเกินไปไหม", expected: recommendation, difficulty: medium}
+  - {question_id: rec_10, query: "ตอนนี้ควรถือเงินสดหรือลงทุนดี", expected: recommendation, difficulty: medium}
+  - {question_id: rec_11, query: "ขอคำแนะนำการเงินที่เจาะจงกับฉันหน่อย", expected: recommendation, difficulty: easy}
+  - {question_id: rec_12, query: "เพื่อนชวนลงทุน ผลตอบแทน 20% ต่อเดือน น่าลงไหม", expected: recommendation, difficulty: hard}
+  - {question_id: rec_13, query: "ทำยังไงให้มีเงินเหลือเก็บมากขึ้นทุกเดือน", expected: recommendation, also_accept: [general_chat], difficulty: medium}
+  - {question_id: rec_14, query: "ตรวจสุขภาพการเงินประจำเดือนให้หน่อย", expected: recommendation, difficulty: easy}
+  - {question_id: rec_15, query: "should I pay off my debt or invest first", expected: recommendation, difficulty: medium}
+  - {question_id: rec_16, query: "มีอะไรที่ฉันควรรีบทำเรื่องการเงินไหม", expected: recommendation, difficulty: easy}
+  - {question_id: rec_17, query: "อยากเริ่มลงทุนแต่กลัวขาดทุน ควรเริ่มยังไง", expected: recommendation, difficulty: medium}
+
+  # ===================== report (17) =====================
+  - {question_id: rpt_01, query: "ขอรายงานการเงินเดือนตุลาคม", expected: report, difficulty: easy}
+  - {question_id: rpt_02, query: "สรุปรายรับรายจ่ายทั้งปี 2569", expected: report, difficulty: easy}
+  - {question_id: rpt_03, query: "ทำรายงานไตรมาสที่แล้วให้หน่อย", expected: report, difficulty: easy}
+  - {question_id: rpt_04, query: "เดือนนี้รายรับหักรายจ่ายแล้วเหลือเท่าไร", expected: report, difficulty: medium}
+  - {question_id: rpt_05, query: "export รายงานการเงินเป็น PDF ให้หน่อย", expected: report, difficulty: medium}
+  - {question_id: rpt_06, query: "ขอรายงานภาพรวมรายเดือนแบบละเอียด", expected: report, difficulty: easy}
+  - {question_id: rpt_07, query: "สถานะการเงินของฉันตอนนี้เป็นยังไง", expected: report, difficulty: medium}
+  - {question_id: rpt_08, query: "ขอสรุปทรัพย์สินกับหนี้สินทั้งหมด", expected: report, difficulty: medium}
+  - {question_id: rpt_09, query: "อัตราการออมของฉันปีนี้กี่เปอร์เซ็นต์", expected: report, difficulty: hard}
+  - {question_id: rpt_10, query: "monthly financial report please", expected: report, difficulty: medium}
+  - {question_id: rpt_11, query: "สรุปการเงินสัปดาห์นี้ให้หน่อย", expected: report, difficulty: easy}
+  - {question_id: rpt_12, query: "ทำรายงานสรุปการเงินไว้ส่งให้แฟนดูหน่อย", expected: report, difficulty: medium}
+  - {question_id: rpt_13, query: "ขอดูรายงานการเงินปีที่แล้วทั้งหมด", expected: report, difficulty: easy}
+  - {question_id: rpt_14, query: "ขอ financial statement ของเดือนนี้", expected: report, difficulty: medium}
+  - {question_id: rpt_15, query: "สรุปผลการเงินครึ่งปีแรกให้หน่อย", expected: report, difficulty: easy}
+  - {question_id: rpt_16, query: "ความมั่งคั่งสุทธิของฉันตอนนี้เท่าไหร่", expected: report, difficulty: hard}
+  - {question_id: rpt_17, query: "ปีนี้เงินเข้าออกเป็นยังไงบ้าง สรุปให้ที", expected: report, difficulty: medium}
+
+  # ===================== general_chat: finance knowledge + small talk (12) =====================
+  - {question_id: gen_01, query: "กองทุนรวมคืออะไร", expected: general_chat, difficulty: easy}
+  - {question_id: gen_02, query: "ดอกเบี้ยทบต้นคืออะไร", expected: general_chat, difficulty: easy}
+  - {question_id: gen_03, query: "เครดิตบูโรคืออะไร ทำไมต้องสนใจ", expected: general_chat, difficulty: easy}
+  - {question_id: gen_04, query: "บัตรเครดิตกับบัตรเดบิตต่างกันยังไง", expected: general_chat, difficulty: easy}
+  - {question_id: gen_05, query: "กฎ 50/30/20 คืออะไร", expected: general_chat, difficulty: medium}
+  - {question_id: gen_06, query: "ประกันสะสมทรัพย์คืออะไร", expected: general_chat, difficulty: medium}
+  - {question_id: gen_07, query: "สวัสดีครับ", expected: general_chat, difficulty: easy}
+  - {question_id: gen_08, query: "ขอบคุณมากนะ", expected: general_chat, difficulty: easy}
+  - {question_id: gen_09, query: "คุณทำอะไรได้บ้าง", expected: general_chat, difficulty: medium}
+  - {question_id: gen_10, query: "ถ้าเงินเฟ้อสูง ดอกเบี้ยนโยบายจะขึ้นไหม", expected: general_chat, difficulty: medium}
+  - {question_id: gen_11, query: "ทำไมควรแยกบัญชีเงินออมกับบัญชีใช้จ่าย", expected: general_chat, difficulty: medium}
+  - {question_id: gen_12, query: "บำนาญชราภาพประกันสังคมคำนวณยังไง", expected: general_chat, difficulty: medium}
+
+  # ===================== general_chat: not about money (10) =====================
+  - {question_id: oos_01, query: "พรุ่งนี้ฝนจะตกไหม", expected: general_chat, difficulty: easy}
+  - {question_id: oos_02, query: "แนะนำหนังน่าดูหน่อย", expected: general_chat, difficulty: easy}
+  - {question_id: oos_03, query: "ใครชนะบอลเมื่อคืน", expected: general_chat, difficulty: easy}
+  - {question_id: oos_04, query: "ช่วยแปลว่า ฉันหิวข้าว เป็นภาษาอังกฤษ", expected: general_chat, difficulty: easy}
+  - {question_id: oos_05, query: "เขียนกลอนวันแม่ให้หน่อย", expected: general_chat, difficulty: easy}
+  - {question_id: oos_06, query: "ลดน้ำหนักยังไงให้ได้ผล", expected: general_chat, difficulty: easy}
+  - {question_id: oos_07, query: "ต้มยำกุ้งใส่อะไรบ้าง", expected: general_chat, difficulty: easy}
+  - {question_id: oos_08, query: "เขียนโค้ด python เรียงตัวเลขให้หน่อย", expected: general_chat, difficulty: easy}
+  - {question_id: oos_09, query: "มีเกมมือถืออะไรสนุกบ้าง", expected: general_chat, difficulty: easy}
+  - {question_id: oos_10, query: "ไปเที่ยวเชียงใหม่ช่วงไหนดี", expected: general_chat, difficulty: medium}
+
+  # ===================== clarify: too vague to pick a category (12) =====================
+  - {question_id: vag_01, query: "ตังค์", expected: clarify, difficulty: medium}
+  - {question_id: vag_02, query: "ช่วยด้วย", expected: clarify, difficulty: medium}
+  - {question_id: vag_03, query: "บันทึกให้หน่อย", expected: clarify, difficulty: medium}
+  - {question_id: vag_04, query: "ดูให้หน่อย", expected: clarify, difficulty: medium}
+  - {question_id: vag_05, query: "อยากถามเรื่องเงิน", expected: clarify, difficulty: medium}
+  - {question_id: vag_06, query: "ปรึกษาหน่อย", expected: clarify, difficulty: medium}
+  - {question_id: vag_07, query: "การเงินฉัน", expected: clarify, also_accept: [report], difficulty: medium}
+  - {question_id: vag_08, query: "เท่าไหร่", expected: clarify, difficulty: medium}
+  - {question_id: vag_09, query: "ทำยังไงดี", expected: clarify, difficulty: medium}
+  - {question_id: vag_10, query: "เรื่องเงินอะ", expected: clarify, difficulty: medium}
+  - {question_id: vag_11, query: "ขอข้อมูลหน่อย", expected: clarify, difficulty: medium}
+  - {question_id: vag_12, query: "อันนี้ได้ไหม", expected: clarify, difficulty: medium}
+
+  # ===================== follow-ups that need the chat history (14) =====================
+  - question_id: his_01
+    query: "ตอนนี้กำไรหรือยัง"
+    chat_history: [["user", "ซื้อ PTT 100 หุ้นที่ 34 บาท"], ["assistant", "บันทึก PTT 100 หุ้น ราคา 34 บาท ลงพอร์ตแล้วค่ะ"]]
+    expected: asset_monitoring
+    difficulty: medium
+  - question_id: his_02
+    query: "ค่าน้ำอีก 15"
+    chat_history: [["user", "จ่ายค่าข้าว 60"], ["assistant", "บันทึกรายจ่ายค่าข้าว 60 บาทแล้วค่ะ"]]
+    expected: expense
+    difficulty: medium
+  - question_id: his_03
+    query: "ถ้าซื้อ SSF 50,000 ล่ะ"
+    chat_history: [["user", "คำนวณภาษี เงินได้ปีละ 500,000"], ["assistant", "ภาษีที่ต้องจ่ายคือ 7,500 บาทค่ะ"]]
+    expected: tax
+    difficulty: medium
+  - question_id: his_04
+    query: "4 ปี"
+    chat_history: [["user", "อยากเก็บเงินซื้อรถ 400,000"], ["assistant", "อยากได้ภายในกี่ปีคะ"]]
+    expected: planning
+    difficulty: hard
+  - question_id: his_05
+    query: "ตัวแรก NAV เท่าไหร่"
+    chat_history: [["user", "หากองทุนดัชนี SET50 ให้หน่อย"], ["assistant", "เจอ 3 กองทุน: SCBSET50, KFSET50, TMB50 ค่ะ"]]
+    expected: asset_monitoring
+    difficulty: medium
+  - question_id: his_06
+    query: "แล้วเดือนตุลาคมล่ะ"
+    chat_history: [["user", "สรุปรายงานการเงินเดือนกันยายน"], ["assistant", "รายงานเดือนกันยายน: รายรับ 50,000 รายจ่าย 12,930 บาทค่ะ"]]
+    expected: report
+    difficulty: medium
+  - question_id: his_07
+    query: "ข้อแรกต้องทำยังไง"
+    chat_history: [["user", "ช่วยตรวจสุขภาพการเงิน"], ["assistant", "คะแนน 72/100 ข้อแนะนำ: 1) สร้างเงินสำรองฉุกเฉิน 2) ลดค่าที่พัก"]]
+    expected: recommendation
+    difficulty: hard
+  - question_id: his_08
+    query: "เดือนที่แล้วล่ะ"
+    chat_history: [["user", "เดือนนี้ใช้ค่าอาหารไปเท่าไร"], ["assistant", "เดือนนี้ค่าอาหาร 4,200 บาทค่ะ"]]
+    expected: expense
+    difficulty: medium
+  - question_id: his_09
+    query: "มีข่าวอะไรไหม"
+    chat_history: [["user", "ราคา KBANK เท่าไร"], ["assistant", "KBANK ล่าสุด 152 บาทค่ะ"]]
+    expected: asset_monitoring
+    difficulty: medium
+  - question_id: his_10
+    query: "เติมอันแรกอีก 2,000"
+    chat_history: [["user", "ดูเป้าหมายการเงิน"], ["assistant", "มี 2 เป้าหมาย: เที่ยวญี่ปุ่น 29%, เงินฉุกเฉิน 80% ค่ะ"]]
+    expected: planning
+    difficulty: hard
+  - question_id: his_11
+    query: "แล้วอันนี้ลดหย่อนได้เท่าไหร่"
+    chat_history: [["user", "จ่ายประกันชีวิตไป 30,000"], ["assistant", "บันทึกรายจ่ายประกันชีวิต 30,000 บาทแล้วค่ะ"]]
+    expected: tax
+    difficulty: medium
+  - question_id: his_12
+    query: "ควรเอาไปทำอะไรดี"
+    chat_history: [["user", "ได้โบนัส 50,000"], ["assistant", "บันทึกรายรับโบนัส 50,000 บาทแล้วค่ะ"]]
+    expected: recommendation
+    difficulty: medium
+  - question_id: his_13
+    query: "เปลี่ยนเรื่อง เล่าเรื่องตลกให้ฟังหน่อย"
+    chat_history: [["user", "ราคาหุ้น AOT"], ["assistant", "AOT ล่าสุด 58.25 บาทค่ะ"]]
+    expected: general_chat
+    difficulty: medium
+  - question_id: his_14
+    query: "เดือนละ 45,000"
+    chat_history: [["user", "ปีนี้ต้องจ่ายภาษีเท่าไร"], ["assistant", "ขอทราบรายได้ต่อเดือนหรือต่อปีค่ะ"]]
+    expected: tax
+    difficulty: hard

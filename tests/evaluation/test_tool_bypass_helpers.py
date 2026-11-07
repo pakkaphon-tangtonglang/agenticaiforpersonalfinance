@@ -1,6 +1,7 @@
 """Tests for tool-bypass benchmark graph helpers."""
 
 from decimal import Decimal
+from typing import Any
 from unittest.mock import MagicMock
 
 from langchain_core.messages import AIMessage
@@ -28,6 +29,17 @@ class TestToolBypassHelpers:
         assert response == "tax 25000"
         assert latency >= 0.0
         mock_graph.invoke.assert_called_once()
+
+    def test_run_notool_joins_gemini_content_blocks(self) -> None:
+        """Gemini 3 replies are content-block lists; the text must come out plain."""
+        mock_graph = MagicMock()
+        blocks: list[str | dict[Any, Any]] = [
+            {"type": "text", "text": "ภาษีรวม\n"},
+            {"type": "text", "text": "21,500 บาท"},
+        ]
+        mock_graph.invoke.return_value = {"messages": [AIMessage(content=blocks)]}
+        response, _ = _run_notool(mock_graph, "query")
+        assert response == "ภาษีรวม\n21,500 บาท"
 
     def test_run_notool_handles_exception(self) -> None:
         """_run_notool returns error string when graph raises."""

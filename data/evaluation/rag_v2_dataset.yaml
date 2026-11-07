@@ -1,0 +1,154 @@
+# RAG questions for the embedding study (4.11 C, written 2026-11-07).
+#
+# Relevance: a chunk (production splitter, 500 chars / 50 overlap) is relevant to a question
+# when it comes from one of gold_files AND contains every keyword ("a|b" = either a or b).
+# Questions are written in user wording and do not copy headings or sentences from the
+# documents (leakage check: embedding_study/leakage.py). gold_files lists every file that
+# states the answer. Checked: every question has at least one relevant chunk.
+name: rag_v2
+version: "1.0"
+questions:
+  # ---------- Tax_Deductions_Guide ----------
+  - {question_id: q001, query: "พ่อแม่อายุเกิน 60 เอามาลดหย่อนภาษีได้คนละกี่บาท", gold_files: [Tax_Deductions_Guide.md], keywords: ["อุปการะบิดามารดา", "30,000"]}
+  - {question_id: q002, query: "จ่ายค่าประกันสุขภาพให้พ่อแม่ หักภาษีได้สูงสุดเท่าไหร่", gold_files: [Tax_Deductions_Guide.md], keywords: ["ประกันสุขภาพบิดามารดา", "15,000"]}
+  - {question_id: q003, query: "ปีหน้าเงินประกันสังคมที่โดนหักทุกเดือนเอาไปลดหย่อนได้มากสุดกี่บาท", gold_files: [Tax_Deductions_Guide.md], keywords: ["10,500"]}
+  - {question_id: q004, query: "ผ่อนบ้านอยู่ ดอกเบี้ยที่จ่ายไปหักภาษีได้เพดานเท่าไร", gold_files: [Tax_Deductions_Guide.md, Tax_Personal_Income_Guide.pdf], keywords: ["ดอกเบี้ย", "100,000"]}
+  - {question_id: q005, query: "ตั้งครรภ์และคลอดลูก ค่าใช้จ่ายเอาไปลดภาษีได้ไหม เท่าไหร่", gold_files: [Tax_Deductions_Guide.md], keywords: ["ฝากครรภ์", "60,000"]}
+  - {question_id: q006, query: "ยังซื้อ SSF เพื่อลดภาษีได้อยู่หรือเปล่า", gold_files: [Tax_Deductions_Guide.md], keywords: ["SSF", "สิ้นสุด"]}
+  - {question_id: q007, query: "บริจาคให้โรงเรียนหรือโรงพยาบาลหักภาษีได้กี่เท่าของที่จ่าย", gold_files: [Tax_Deductions_Guide.md], keywords: ["2 เท่า"]}
+  - {question_id: q008, query: "กองทุนเกษียณทุกตัวรวมกันลดหย่อนได้ไม่เกินเท่าไหร่", gold_files: [Tax_Deductions_Guide.md, Retirement_Planning_Guide.md], keywords: ["500,000"]}
+  # ---------- Tax_Thai_Personal_Income ----------
+  - {question_id: q009, query: "คนโสดมีรายได้เท่าไหร่ต่อปีถึงต้องยื่นภาษี", gold_files: [Tax_Thai_Personal_Income.md, Tax_Filing_Guide.md], keywords: ["120,000"]}
+  - {question_id: q010, query: "เงินได้สุทธิช่วง 750,001 ถึงหนึ่งล้าน โดนภาษีกี่เปอร์เซ็นต์", gold_files: [Tax_Thai_Personal_Income.md], keywords: ["750,001 - 1,000,000", "20%"]}
+  - {question_id: q011, query: "ถ้าไม่ยื่นภาษีให้ทันกำหนดจะโดนเงินเพิ่มเดือนละเท่าไร", gold_files: [Tax_Thai_Personal_Income.md, Tax_Filing_Guide.md], keywords: ["1.5%"]}
+  - {question_id: q012, query: "แจ้งข้อมูลภาษีเป็นเท็จโทษหนักแค่ไหน", gold_files: [Tax_Thai_Personal_Income.md], keywords: ["200,000", "จำคุก"]}
+  - {question_id: q013, query: "ปีภาษีของไทยนับตั้งแต่วันไหนถึงวันไหน", gold_files: [Tax_Thai_Personal_Income.md], keywords: ["1 มกราคม", "31 ธันวาคม"]}
+  # ---------- Tax_Filing_Guide ----------
+  - {question_id: q014, query: "มนุษย์เงินเดือนอย่างเดียวต้องใช้แบบฟอร์มภาษีตัวไหน", gold_files: [Tax_Filing_Guide.md], keywords: ["ภ.ง.ด.91"]}
+  - {question_id: q015, query: "ยื่นภาษีผ่านเน็ตได้ถึงประมาณวันที่เท่าไร", gold_files: [Tax_Filing_Guide.md], keywords: ["8 เมษายน"]}
+  - {question_id: q016, query: "ภาษีที่ต้องจ่ายเพิ่มเยอะ ขอแบ่งจ่ายเป็นงวดได้ไหม", gold_files: [Tax_Filing_Guide.md], keywords: ["3,000", "3 งวด"]}
+  - {question_id: q017, query: "ยื่นออนไลน์แล้วรอเงินคืนภาษีนานประมาณกี่เดือน", gold_files: [Tax_Filing_Guide.md], keywords: ["1-3 เดือน"]}
+  - {question_id: q018, query: "ต้องเตรียมเอกสารอะไรจากบริษัทบ้างตอนยื่นภาษี", gold_files: [Tax_Filing_Guide.md], keywords: ["50 ทวิ"]}
+  - {question_id: q019, query: "ยื่นแบบช้ากว่ากำหนดโดนค่าปรับกี่บาท", gold_files: [Tax_Filing_Guide.md], keywords: ["200 บาท"]}
+  - {question_id: q020, query: "เอกสารหลักฐานภาษีควรเก็บไว้นานแค่ไหน", gold_files: [Tax_Filing_Guide.md, Tax_VAT_Withholding.md], keywords: ["5 ปี"]}
+  # ---------- Tax_VAT_Withholding ----------
+  - {question_id: q021, query: "รับงานฟรีแลนซ์ ลูกค้าหักภาษีไว้กี่เปอร์เซ็นต์", gold_files: [Tax_VAT_Withholding.md], keywords: ["3%"]}
+  - {question_id: q022, query: "ดอกเบี้ยเงินฝากธนาคารถูกหักภาษีเท่าไหร่", gold_files: [Tax_VAT_Withholding.md], keywords: ["ดอกเบี้ยเงินฝาก", "15%"]}
+  - {question_id: q023, query: "ปล่อยเช่าคอนโด ผู้เช่าต้องหักภาษีไว้กี่เปอร์เซ็นต์", gold_files: [Tax_VAT_Withholding.md], keywords: ["ค่าเช่า", "5%"]}
+  - {question_id: q024, query: "ขายของรายได้ถึงเท่าไหร่ต่อปีต้องไปจด VAT", gold_files: [Tax_VAT_Withholding.md, Tax_Personal_Income_Guide.pdf], keywords: ["1.8"]}
+  - {question_id: q025, query: "ตอนนี้ภาษีมูลค่าเพิ่มเก็บกี่เปอร์เซ็นต์", gold_files: [Tax_VAT_Withholding.md], keywords: ["7%"]}
+  - {question_id: q026, query: "บริษัทต้องนำส่งภาษีที่หักไว้ภายในวันที่เท่าไรของเดือนถัดไป", gold_files: [Tax_VAT_Withholding.md], keywords: ["วันที่ 7"]}
+  - {question_id: q027, query: "ธุรกิจแบบไหนบ้างที่ไม่ต้องเสีย VAT", gold_files: [Tax_VAT_Withholding.md], keywords: ["ยกเว้น VAT"]}
+  # ---------- Debt_Management_Guide ----------
+  - {question_id: q028, query: "ผ่อนหนี้รวมกันไม่ควรเกินกี่เปอร์เซ็นต์ของเงินเดือน", gold_files: [Debt_Management_Guide.md, Financial_Planning_Basics.md], keywords: ["40%"]}
+  - {question_id: q029, query: "ดอกเบี้ยรถแบบ flat แปลงเป็นดอกเบี้ยจริงคิดยังไง", gold_files: [Debt_Management_Guide.md], keywords: ["1.8"]}
+  - {question_id: q030, query: "ถ้าจ่ายแค่ขั้นต่ำหนี้บัตรแสนนึง ต้องใช้เวลากี่ปีกว่าจะหมด", gold_files: [Debt_Management_Guide.md, Debt_Psychology_Payoff.md], keywords: ["100,000", "ปี"]}
+  - {question_id: q031, query: "รีไฟแนนซ์บ้านต้องเสียค่าอะไรบ้าง", gold_files: [Debt_Management_Guide.md], keywords: ["ค่าจดจำนอง"]}
+  - {question_id: q032, query: "กู้นอกระบบดอกเบี้ยสูงแค่ไหน ผิดกฎหมายไหม", gold_files: [Debt_Management_Guide.md], keywords: ["นอกระบบ", "36%"]}
+  - {question_id: q033, query: "สัญญาณอะไรที่บอกว่าเรากำลังมีปัญหาหนี้", gold_files: [Debt_Management_Guide.md], keywords: ["สัญญาณเตือน"]}
+  # ---------- Debt_Psychology_Payoff ----------
+  - {question_id: q034, query: "ทำไมบางคนไม่กล้าเปิดดูใบแจ้งหนี้เลย", gold_files: [Debt_Psychology_Payoff.md], keywords: ["Ostrich"]}
+  - {question_id: q035, query: "จ่ายหนี้ก้อนที่ดอกเบี้ยแพงสุดก่อนเรียกว่าวิธีอะไร", gold_files: [Debt_Psychology_Payoff.md, Debt_Management_Guide.md], keywords: ["Avalanche", "ดอกเบี้ยสูง"]}
+  - {question_id: q036, query: "ไม่แน่ใจว่าจะใช้วิธีปลดหนี้แบบไหน ควรเลือกอะไร", gold_files: [Debt_Psychology_Payoff.md], keywords: ["Snowball", "แรงจูงใจ"]}
+  - {question_id: q037, query: "อยากหยุดซื้อของตามอารมณ์ มีเทคนิคอะไรบ้าง", gold_files: [Debt_Psychology_Payoff.md], keywords: ["24 ชั่วโมง"]}
+  - {question_id: q038, query: "ระหว่างปลดหนี้ควรแบ่งเงินเดือนยังไง", gold_files: [Debt_Psychology_Payoff.md], keywords: ["30%", "จ่ายหนี้"]}
+  # ---------- Expense_Budgeting_Guide ----------
+  - {question_id: q039, query: "แบ่งเงินเดือนแบบห้าสิบสามสิบยี่สิบคืออะไร", gold_files: [Expense_Budgeting_Guide.md, Debt_Psychology_Payoff.md, Financial_Planning_Basics.md], keywords: ["50/30/20"]}
+  - {question_id: q040, query: "อายุ 35 ควรออมเงินกี่เปอร์เซ็นต์ของรายได้", gold_files: [Expense_Budgeting_Guide.md], keywords: ["30-40 ปี", "25-35%"]}
+  - {question_id: q041, query: "ค่าใช้จ่ายคงที่กับผันแปรต่างกันยังไง", gold_files: [Expense_Budgeting_Guide.md], keywords: ["Variable Expenses"]}
+  - {question_id: q042, query: "อยากประหยัดค่ากินค่าเดินทางในกรุงเทพ มีวิธีไหนบ้าง", gold_files: [Expense_Budgeting_Guide.md], keywords: ["BTS"]}
+  # ---------- Expense_Emergency_Fund ----------
+  - {question_id: q043, query: "ทำฟรีแลนซ์ ควรมีเงินสำรองไว้กี่เดือน", gold_files: [Expense_Emergency_Fund.md, Expense_Budgeting_Guide.md], keywords: ["6-12 เดือน"]}
+  - {question_id: q044, query: "ใช้จ่ายเดือนละสองหมื่น ควรมีเงินฉุกเฉินเท่าไร", gold_files: [Expense_Emergency_Fund.md], keywords: ["60,000 - 120,000"]}
+  - {question_id: q045, query: "เก็บเงินฉุกเฉินไว้ในกองทุนตลาดเงินดีไหม", gold_files: [Expense_Emergency_Fund.md], keywords: ["MMF"]}
+  - {question_id: q046, query: "เอาเงินฉุกเฉินไปซื้อหุ้นหรือทองได้ไหม", gold_files: [Expense_Emergency_Fund.md], keywords: ["ทองคำ", "ผันผวน"]}
+  - {question_id: q047, query: "ใช้เงินสำรองไปแล้วต้องทำอะไรต่อ", gold_files: [Expense_Emergency_Fund.md], keywords: ["เติมกลับ"]}
+  - {question_id: q048, query: "เริ่มเก็บเงินฉุกเฉินควรหักจากเงินเดือนกี่เปอร์เซ็นต์", gold_files: [Expense_Emergency_Fund.md], keywords: ["10% ของรายได้"]}
+  # ---------- Finance_Psychology_Of_Money ----------
+  - {question_id: q049, query: "หนังสือ Psychology of Money บอกว่าอะไรสำคัญกว่าความรู้เรื่องเงิน", gold_files: [Finance_Psychology_Of_Money.md], keywords: ["พฤติกรรม"]}
+  - {question_id: q050, query: "ทำไม Warren Buffett ถึงรวยมากตอนแก่", gold_files: [Finance_Psychology_Of_Money.md], keywords: ["Warren Buffett"]}
+  - {question_id: q051, query: "ความผันผวนของตลาดควรมองว่าเป็นค่าอะไร", gold_files: [Finance_Psychology_Of_Money.md], keywords: ["ค่าเข้า"]}
+  - {question_id: q052, query: "ควรมีเงินออมแม้ยังไม่มีเป้าหมายไหม", gold_files: [Finance_Psychology_Of_Money.md], keywords: ["Save Money"]}
+  - {question_id: q053, query: "แผนการเงินที่ดีที่สุดในทางทฤษฎีจำเป็นต้องดีที่สุดสำหรับเราไหม", gold_files: [Finance_Psychology_Of_Money.md], keywords: ["Reasonable"]}
+  # ---------- Financial_Planning_Basics ----------
+  - {question_id: q054, query: "อยากรู้ว่าเงินจะโตเป็นสองเท่าในกี่ปี คิดง่ายๆ ยังไง", gold_files: [Financial_Planning_Basics.md], keywords: ["72"]}
+  - {question_id: q055, query: "มูลค่าสุทธิของตัวเองคำนวณยังไง", gold_files: [Financial_Planning_Basics.md], keywords: ["Net Worth"]}
+  - {question_id: q056, query: "ลงทุนเดือนละ 5,000 นาน 30 ปีจะได้เงินประมาณเท่าไหร่", gold_files: [Financial_Planning_Basics.md], keywords: ["6,100,000"]}
+  - {question_id: q057, query: "ประกันชีวิตแบบบำนาญหักภาษีได้สูงสุดเท่าไหร่", gold_files: [Financial_Planning_Basics.md], keywords: ["บำนาญ", "200,000"]}
+  - {question_id: q058, query: "อายุ 50 กว่าใกล้เกษียณ ควรปรับการเงินยังไง", gold_files: [Financial_Planning_Basics.md], keywords: ["50-60 ปี"]}
+  - {question_id: q059, query: "เป้าหมายการเงินระยะกลางมีอะไรบ้าง", gold_files: [Financial_Planning_Basics.md], keywords: ["ระยะกลาง"]}
+  # ---------- Insurance_Life_Health ----------
+  - {question_id: q060, query: "ประกันชีวิตแบบไหนเบี้ยถูกที่สุดแต่ไม่มีเงินคืน", gold_files: [Insurance_Life_Health.md], keywords: ["Term Life"]}
+  - {question_id: q061, query: "ประกันแบบออมเงินด้วยคุ้มครองด้วยได้เงินคืนเท่าไหร่", gold_files: [Insurance_Life_Health.md], keywords: ["สะสมทรัพย์"]}
+  - {question_id: q062, query: "ประกันสุขภาพแบบไม่ต้องนอนโรงพยาบาลเรียกว่าอะไร", gold_files: [Insurance_Life_Health.md], keywords: ["OPD"]}
+  - {question_id: q063, query: "ประกันที่ผสมการลงทุนในกองทุนเสี่ยงไหม", gold_files: [Insurance_Life_Health.md], keywords: ["Unit Linked"]}
+  # ---------- Insurance_Social_Security ----------
+  - {question_id: q064, query: "ปี 2569 ประกันสังคมหักเงินเดือนสูงสุดเดือนละกี่บาท", gold_files: [Insurance_Social_Security.md], keywords: ["875"]}
+  - {question_id: q065, query: "ลาออกจากงานแล้วอยากส่งประกันสังคมต่อ ต้องจ่ายเดือนละเท่าไร", gold_files: [Insurance_Social_Security.md], keywords: ["432"]}
+  - {question_id: q066, query: "ฟรีแลนซ์สมัครประกันสังคมได้ไหม มีแบบไหนบ้าง", gold_files: [Insurance_Social_Security.md], keywords: ["มาตรา 40"]}
+  - {question_id: q067, query: "คลอดลูกเบิกประกันสังคมได้กี่บาท", gold_files: [Insurance_Social_Security.md], keywords: ["15,000"]}
+  - {question_id: q068, query: "ทำฟันใช้สิทธิประกันสังคมได้ปีละเท่าไหร่", gold_files: [Insurance_Social_Security.md], keywords: ["900"]}
+  - {question_id: q069, query: "ผู้ประกันตนเสียชีวิต ญาติได้ค่าทำศพเท่าไร", gold_files: [Insurance_Social_Security.md], keywords: ["50,000"]}
+  # ---------- Investment_DCA_Strategy ----------
+  - {question_id: q070, query: "ทยอยลงทุนทุกเดือนดีกว่าลงก้อนเดียวยังไง", gold_files: [Investment_DCA_Strategy.md], keywords: ["Lump Sum"]}
+  - {question_id: q071, query: "ช่วงตลาดขึ้นยาวๆ การลงทุนรายเดือนยังคุ้มไหม", gold_files: [Investment_DCA_Strategy.md], keywords: ["ขาขึ้น"]}
+  - {question_id: q072, query: "ควรตั้งซื้อกองทุนอัตโนมัติวันไหนของเดือน", gold_files: [Investment_DCA_Strategy.md], keywords: ["เงินเดือนออก"]}
+  - {question_id: q073, query: "ลงทุนสม่ำเสมอ 12 เดือนในตัวอย่าง ต้นทุนเฉลี่ยต่อหน่วยเท่าไร", gold_files: [Investment_DCA_Strategy.md], keywords: ["9.70"]}
+  # ---------- Investment_Digital_Assets ----------
+  - {question_id: q074, query: "บิทคอยน์ใช้จ่ายแทนเงินบาทได้ตามกฎหมายไหม", gold_files: [Investment_Digital_Assets.md], keywords: ["เงินตรา"]}
+  - {question_id: q075, query: "ขาดทุนจากคริปโตเอาไปหักภาษีได้ไหม", gold_files: [Investment_Digital_Assets.md], keywords: ["ขาดทุน"]}
+  - {question_id: q076, query: "จะรู้ได้ยังไงว่าโครงการคริปโตเป็นแชร์ลูกโซ่", gold_files: [Investment_Digital_Assets.md], keywords: ["หลอกลวง"]}
+  - {question_id: q077, query: "ซื้อขายเหรียญดิจิทัลต้องทำผ่านใคร", gold_files: [Investment_Digital_Assets.md], keywords: ["ผู้ประกอบธุรกิจ"]}
+  # ---------- Investment_ETF_Bonds ----------
+  - {question_id: q078, query: "ETF ค่าธรรมเนียมถูกกว่ากองทุนรวมแค่ไหน", gold_files: [Investment_ETF_Bonds.md], keywords: ["0.1-0.5%"]}
+  - {question_id: q079, query: "อยากลงทุน S&P 500 จากไทยมีกองทุนไหนบ้าง", gold_files: [Investment_ETF_Bonds.md], keywords: ["K-US500X"]}
+  - {question_id: q080, query: "พันธบัตรรัฐบาลให้ดอกเบี้ยประมาณเท่าไหร่", gold_files: [Investment_ETF_Bonds.md], keywords: ["2-3%"]}
+  - {question_id: q081, query: "อายุ 25 ควรถือหุ้นกับตราสารหนี้สัดส่วนเท่าไร", gold_files: [Investment_ETF_Bonds.md], keywords: ["70-80%"]}
+  - {question_id: q082, query: "ดอกเบี้ยหุ้นกู้โดนหักภาษีกี่เปอร์เซ็นต์", gold_files: [Investment_ETF_Bonds.md], keywords: ["หุ้นกู้", "15%"]}
+  # ---------- Investment_Earthh_Evans_Lifelong ----------
+  - {question_id: q083, query: "ก่อนเริ่มลงทุนควรมีเงินสำรองกี่เท่าของค่าใช้จ่าย", gold_files: [Investment_Earthh_Evans_Lifelong.md], keywords: ["6 เท่า"]}
+  - {question_id: q084, query: "พอร์ตมือใหม่ควรแบ่งส่วนเสี่ยงสูงไว้ประมาณเท่าไร", gold_files: [Investment_Earthh_Evans_Lifelong.md], keywords: ["10–20%"]}
+  - {question_id: q085, query: "เลือกหุ้นรายตัวควรถามตัวเองเรื่องอะไรบ้าง", gold_files: [Investment_Earthh_Evans_Lifelong.md], keywords: ["moat"]}
+  - {question_id: q086, query: "ถ้าหุ้นที่จะซื้อร่วง 30% พรุ่งนี้ ควรคิดยังไงก่อนซื้อ", gold_files: [Investment_Earthh_Evans_Lifelong.md], keywords: ["30%"]}
+  # ---------- Investment_Mutual_Funds ----------
+  - {question_id: q087, query: "กองทุนที่ชื่อขึ้นต้นด้วย KT- เป็นของบริษัทไหน", gold_files: [Investment_Mutual_Funds.md], keywords: ["KTAM"]}
+  - {question_id: q088, query: "ค่าธรรมเนียมจัดการกองทุนต่อปีประมาณเท่าไร", gold_files: [Investment_Mutual_Funds.md], keywords: ["Management Fee"]}
+  - {question_id: q089, query: "กองทุนที่ลงทุนหุ้นต่างประเทศเรียกว่าอะไร", gold_files: [Investment_Mutual_Funds.md], keywords: ["FIF"]}
+  - {question_id: q090, query: "NAV ของกองทุนคืออะไร", gold_files: [Investment_Mutual_Funds.md], keywords: ["NAV"]}
+  # ---------- Investment_Thai_Stocks ----------
+  - {question_id: q091, query: "ตลาดหุ้นไทยเปิดซื้อขายช่วงบ่ายกี่โมง", gold_files: [Investment_Thai_Stocks.md], keywords: ["14:30"]}
+  - {question_id: q092, query: "ซื้อหุ้นแล้วต้องจ่ายเงินภายในกี่วัน", gold_files: [Investment_Thai_Stocks.md], keywords: ["T+2"]}
+  - {question_id: q093, query: "ค่าคอมซื้อขายหุ้นประมาณกี่เปอร์เซ็นต์", gold_files: [Investment_Thai_Stocks.md], keywords: ["0.15%"]}
+  - {question_id: q094, query: "ตลาด mai ต่างจาก SET ยังไง", gold_files: [Investment_Thai_Stocks.md], keywords: ["mai"]}
+  - {question_id: q095, query: "ขายหุ้นในตลาดได้กำไร ต้องเสียภาษีไหม", gold_files: [Investment_Thai_Stocks.md], keywords: ["Capital Gains"]}
+  # ---------- Planning_Savings_Guide ----------
+  - {question_id: q096, query: "ตั้งเป้าออมแบบ SMART หมายถึงอะไร", gold_files: [Planning_Savings_Guide.md], keywords: ["SMART"]}
+  - {question_id: q097, query: "ซื้อรถแปดแสน ควรดาวน์เท่าไหร่", gold_files: [Planning_Savings_Guide.md], keywords: ["800,000", "160,000"]}
+  - {question_id: q098, query: "เงินเดือนสามหมื่น ผ่อนรถได้ไม่ควรเกินเดือนละเท่าไร", gold_files: [Planning_Savings_Guide.md], keywords: ["4,500"]}
+  - {question_id: q099, query: "ซื้อบ้านสามล้าน ต้องเตรียมเงินสดรวมประมาณเท่าไร", gold_files: [Planning_Savings_Guide.md], keywords: ["360,000"]}
+  - {question_id: q100, query: "ค่าโอนกรรมสิทธิ์ตอนซื้อบ้านคิดกี่เปอร์เซ็นต์", gold_files: [Planning_Savings_Guide.md], keywords: ["ค่าโอน", "2%"]}
+  # ---------- Retirement_Planning_Guide ----------
+  - {question_id: q101, query: "ตอนเกษียณต้องมีเงินกี่เท่าของค่าใช้จ่ายต่อปี", gold_files: [Retirement_Planning_Guide.md, Financial_Planning_Basics.md], keywords: ["× 25|25 เท่า"]}
+  - {question_id: q102, query: "มีเงินสิบล้านตอนเกษียณ ปีแรกถอนใช้ได้เท่าไหร่", gold_files: [Retirement_Planning_Guide.md], keywords: ["400,000"]}
+  - {question_id: q103, query: "ต้องส่งประกันสังคมกี่เดือนถึงจะได้บำนาญ", gold_files: [Retirement_Planning_Guide.md], keywords: ["180 เดือน"]}
+  - {question_id: q104, query: "RMF ต้องถือถึงอายุเท่าไรถึงขายได้โดยไม่เสียสิทธิ", gold_files: [Retirement_Planning_Guide.md], keywords: ["55 ปี"]}
+  - {question_id: q105, query: "กอช. ออมได้ปีละมากสุดเท่าไร", gold_files: [Retirement_Planning_Guide.md, Tax_Deductions_Guide.md], keywords: ["30,000"]}
+  - {question_id: q106, query: "ข้าราชการสะสมเงินเข้า กบข. กี่เปอร์เซ็นต์", gold_files: [Retirement_Planning_Guide.md], keywords: ["กบข", "3%"]}
+  # ---------- Tax_PIT90_Guide_2568.pdf ----------
+  - {question_id: q107, query: "แบบ ภ.ง.ด.90 ใช้กับคนมีเงินได้ประเภทไหน", gold_files: [Tax_PIT90_Guide_2568.pdf], keywords: ["40 (1) - (8)"]}
+  - {question_id: q108, query: "ผ่อนชำระภาษีงวดสุดท้ายของปีภาษี 2568 ต้องจ่ายภายในวันไหน", gold_files: [Tax_PIT90_Guide_2568.pdf], keywords: ["31 พฤษภาคม"]}
+  - {question_id: q109, query: "สามีภรรยาต่างคนต่างมีรายได้ หักลดหย่อนประกันชีวิตได้คนละเท่าไร", gold_files: [Tax_PIT90_Guide_2568.pdf], keywords: ["คู่สมรสต่างฝ่าย", "100,000"]}
+  - {question_id: q110, query: "ThaiESG ต้องถือหน่วยลงทุนนานกี่ปี", gold_files: [Tax_PIT90_Guide_2568.pdf], keywords: ["ไม่น้อยกว่า 5 ปี"]}
+  - {question_id: q111, query: "ค่าจ้างสร้างบ้านเอามาหักภาษีได้ ต้องมีหลักฐานอะไร", gold_files: [Tax_PIT90_Guide_2568.pdf], keywords: ["ก่อสร้างอาคาร", "86/4"]}
+  - {question_id: q112, query: "เงินได้สุทธิเกินหนึ่งล้านถึงสองล้าน อัตราภาษีกี่เปอร์เซ็นต์ตามแบบ ภ.ง.ด.90", gold_files: [Tax_PIT90_Guide_2568.pdf], keywords: ["2,000,000", "25"]}
+  # ---------- Tax_Personal_Income_Guide.pdf ----------
+  - {question_id: q113, query: "ร้านค้าในโครงการคนละครึ่งต้องยื่นภาษีครึ่งปีภายในวันไหน", gold_files: [Tax_Personal_Income_Guide.pdf], keywords: ["30 กันยายน"]}
+  - {question_id: q114, query: "วิธีคำนวณภาษีแบบ 0.5% ของเงินได้ใช้เมื่อไหร่", gold_files: [Tax_Personal_Income_Guide.pdf], keywords: ["0.005"]}
+  - {question_id: q115, query: "อาชีพแพทย์ หักค่าใช้จ่ายแบบเหมาได้กี่เปอร์เซ็นต์", gold_files: [Tax_Personal_Income_Guide.pdf, Tax_PIT90_Guide_2568.pdf], keywords: ["ร้อยละ 60"]}
+  # ---------- Finance_Behavioral_Finance_Ritter.pdf (English) ----------
+  - {question_id: q116, query: "Does the efficient market hypothesis assume every investor is rational?", gold_files: [Finance_Behavioral_Finance_Ritter.pdf], keywords: ["EMH", "rational"]}
+  - {question_id: q117, query: "Why do restaurants call it an early-bird special instead of a peak-hour surcharge?", gold_files: [Finance_Behavioral_Finance_Ritter.pdf], keywords: ["Framing"]}
+  - {question_id: q118, query: "What happened to LTCM's trade on the twin shares?", gold_files: [Finance_Behavioral_Finance_Ritter.pdf], keywords: ["LTCM"]}
+  # ---------- Finance_Behavioral_Reasoning_Chains.pdf (English) ----------
+  - {question_id: q119, query: "How many samples are in the behaviorally grounded personal finance dataset?", gold_files: [Finance_Behavioral_Reasoning_Chains.pdf], keywords: ["19k"]}
+  - {question_id: q120, query: "Which small model gave the best relevance per billion parameters?", gold_files: [Finance_Behavioral_Reasoning_Chains.pdf], keywords: ["Borda", "8B"]}

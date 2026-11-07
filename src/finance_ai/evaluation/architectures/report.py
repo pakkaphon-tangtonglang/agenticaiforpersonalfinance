@@ -288,8 +288,8 @@ def format_markdown(report: StudyReport) -> str:
 def _audit_section(notes: list[str]) -> str:
     """List the manual audit verdicts applied to this report."""
     if not notes:
-        return "## Manual audit\nEvery failed run was read by hand; no overrides were needed."
-    lines = ["## Manual audit overrides", "Every failed run was read by hand. Overrides:"]
+        return "## Manual audit overrides\nNone recorded in audit.yaml."
+    lines = ["## Manual audit overrides", "Verdicts from audit.yaml (applied above):"]
     return "\n".join(lines + [f"- {note}" for note in notes])
 
 
