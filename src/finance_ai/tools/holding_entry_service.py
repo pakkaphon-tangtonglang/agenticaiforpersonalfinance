@@ -1,7 +1,8 @@
-"""Add a Thai stock, foreign stock or Thai mutual fund to the portfolio from the asset page.
+"""Add a stock, Thai mutual fund, gold or crypto to the portfolio from the asset page.
 
-Foreign stock prices are typed in the stock's currency (usually USD) and
-stored in baht at today's rate.
+Foreign stock and crypto prices are typed in USD and stored in baht at the
+purchase day's rate. Thai gold bars are typed in baht per baht-weight. Futures
+(world gold GC=F included) and indexes cannot be held.
 
 The form sends a quantity, an optional buy price and an optional purchase
 date. A blank price means "bought at the latest price" (the stock's latest
@@ -17,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from finance_ai.database.crud.investment_crud import InvestmentHoldingCRUD
 from finance_ai.database.models.investment_holding import InvestmentHolding
+from finance_ai.tools.crypto_service import CRYPTO, is_crypto_symbol, validate_crypto_symbol
 from finance_ai.tools.foreign_stock_service import (
     FOREIGN_STOCK,
     ThbPrice,
@@ -30,6 +32,13 @@ from finance_ai.tools.investment_calculator import validate_mutual_fund_symbol
 from finance_ai.tools.investment_constants import STOCK_SYMBOL_SUFFIX
 from finance_ai.tools.investment_service import add_investment_holding
 from finance_ai.tools.price_client import fetch_current_price
+from finance_ai.tools.thai_gold_service import (
+    GOLD,
+    THAI_GOLD_NAME,
+    THAI_GOLD_SYMBOL,
+    thai_gold_price_per_baht_weight,
+    validate_thai_gold_symbol,
+)
 
 _MONEY = Decimal("0.01")
 _PERCENT = Decimal("0.01")
@@ -37,14 +46,18 @@ _HUNDRED = Decimal("100")
 STOCK = "stock"
 MUTUAL_FUND = "mutual_fund"
 NOT_A_STOCK = (
-    "'{symbol}' ไม่ใช่หุ้น — พอร์ตรองรับหุ้นไทย หุ้นต่างประเทศ และกองทุนรวม"
-    " (คริปโต/ทองคำ ใช้ Watchlist)"
+    "'{symbol}' เพิ่มลงพอร์ตไม่ได้ — พอร์ตรองรับหุ้น กองทุนรวม ทองคำแท่ง และคริปโต"
+    " (สัญญาล่วงหน้าและดัชนีซื้อถือไม่ได้ ถ้าถือทองคำแท่ง ให้เลือก '{gold}')"
 )
+BAD_GOLD_SYMBOL = "ทองคำแท่งใช้รหัส {gold} (ได้รับ: '{symbol}')"
+BAD_CRYPTO_SYMBOL = "รหัสคริปโต '{symbol}' ไม่ถูกต้อง (ตัวอย่าง: BTC-USD, ETH-USD)"
+USD_PRICED_TYPES: tuple[str, ...] = (FOREIGN_STOCK, CRYPTO)
+DEFAULT_NAMES: dict[str, str] = {GOLD: THAI_GOLD_NAME}
 NO_EXCHANGE_RATE = (
     "ไม่พบอัตราแลกเปลี่ยนสำหรับ {symbol} ตอนนี้ ลองใหม่อีกครั้ง หรือเว้นราคาว่างเพื่อใช้ราคาล่าสุด"
 )
 BAD_FUND_CODE = "รหัสกองทุน '{symbol}' ไม่ถูกต้อง (ตัวอย่าง: K-USA-A(A), SCBSET50)"
-UNKNOWN_ASSET_TYPE = "ประเภทสินทรัพย์ต้องเป็นหุ้นหรือกองทุนรวม (ได้รับ: '{value}')"
+UNKNOWN_ASSET_TYPE = "ประเภทสินทรัพย์ต้องเป็นหุ้น กองทุนรวม ทองคำ หรือคริปโต (ได้รับ: '{value}')"
 NO_LATEST_PRICE = "ไม่พบราคาล่าสุดของ {symbol} ตอนนี้ กรุณากรอกราคาซื้อเอง"
 BAD_QUANTITY = "จำนวนหุ้น/หน่วยต้องเป็นตัวเลขมากกว่า 0 (ได้รับ: '{value}')"
 BAD_PRICE = "ราคาซื้อต้องเป็นตัวเลขมากกว่า 0 หรือเว้นว่างเพื่อใช้ราคาล่าสุด (ได้รับ: '{value}')"
@@ -124,7 +137,8 @@ def add_holding_from_form(session: Session, user_id: str, form: HoldingForm) -> 
     conversion = None if used_latest else _foreign_conversion(asset_type, symbol, price, bought_on)
     if conversion is not None:
         price = conversion.amount_thb
-    holding = _save(session, user_id, asset_type, symbol, form.name, quantity, price, bought_on)
+    name = form.name or DEFAULT_NAMES.get(asset_type, symbol)
+    holding = _save(session, user_id, asset_type, symbol, name, quantity, price, bought_on)
     if latest is not None:
         InvestmentHoldingCRUD().update_market_price(session, holding.id, latest)
     entry = _entry(symbol, quantity, price, latest, used_latest, bought_on)
@@ -134,8 +148,8 @@ def add_holding_from_form(session: Session, user_id: str, form: HoldingForm) -> 
 def _foreign_conversion(
     asset_type: str, symbol: str, typed_price: Decimal, bought_on: date
 ) -> ThbPrice | None:
-    """A foreign stock's typed price (USD...) in baht at the purchase day's rate."""
-    if asset_type != FOREIGN_STOCK:
+    """A foreign stock's or coin's typed price (USD...) in baht at the purchase day's rate."""
+    if asset_type not in USD_PRICED_TYPES:
         return None
     try:
         return price_in_thb(symbol, typed_price, bought_on)
@@ -156,7 +170,7 @@ def _with_conversion(entry: HoldingEntry, conversion: ThbPrice | None) -> Holdin
 
 
 def latest_unit_price(asset_type: str, symbol: str) -> Decimal | None:
-    """Latest price per unit: SEC NAV for funds, market price for stocks.
+    """Latest price per unit in baht: SEC NAV, gold estimate, or market price.
 
     Example:
         >>> latest_unit_price("mutual_fund", "K-USA-A(A)")  # doctest: +SKIP
@@ -164,27 +178,44 @@ def latest_unit_price(asset_type: str, symbol: str) -> Decimal | None:
     """
     if asset_type == MUTUAL_FUND:
         return fetch_latest_nav(symbol)
-    if asset_type == FOREIGN_STOCK:
+    if asset_type == GOLD:
+        return thai_gold_price_per_baht_weight()
+    if asset_type in USD_PRICED_TYPES:
         return latest_price_in_thb(symbol)
     return fetch_current_price(symbol)
+
+
+_STRICT_TYPES = {
+    MUTUAL_FUND: (validate_mutual_fund_symbol, BAD_FUND_CODE),
+    GOLD: (validate_thai_gold_symbol, BAD_GOLD_SYMBOL),
+    CRYPTO: (validate_crypto_symbol, BAD_CRYPTO_SYMBOL),
+}
 
 
 def _asset_identity(symbol: str, asset_type: str) -> tuple[str, str]:
     """Validate the asset type and normalize the symbol for it."""
     kind = asset_type.strip().lower()
-    if kind == MUTUAL_FUND:
+    if kind in _STRICT_TYPES:
+        validator, message = _STRICT_TYPES[kind]
         try:
-            return kind, validate_mutual_fund_symbol(symbol)
+            return kind, validator(symbol)
         except ValueError as exc:
-            raise HoldingEntryError(BAD_FUND_CODE.format(symbol=symbol)) from exc
+            raise HoldingEntryError(message.format(symbol=symbol, gold=THAI_GOLD_SYMBOL)) from exc
     if kind not in (STOCK, FOREIGN_STOCK):
         raise HoldingEntryError(UNKNOWN_ASSET_TYPE.format(value=asset_type))
+    return _market_identity(symbol)
+
+
+def _market_identity(symbol: str) -> tuple[str, str]:
+    """A Yahoo symbol typed as a stock: Thai stock, foreign stock or crypto."""
     canonical = symbol.strip().upper()
     if canonical.endswith(STOCK_SYMBOL_SUFFIX):
         return STOCK, canonical
+    if is_crypto_symbol(canonical):
+        return CRYPTO, canonical
     if is_foreign_stock_symbol(canonical):
         return FOREIGN_STOCK, canonical
-    raise HoldingEntryError(NOT_A_STOCK.format(symbol=symbol))
+    raise HoldingEntryError(NOT_A_STOCK.format(symbol=symbol, gold=THAI_GOLD_NAME))
 
 
 def _purchase_date(text: str | None) -> date:

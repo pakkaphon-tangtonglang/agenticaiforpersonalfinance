@@ -71,6 +71,7 @@ from finance_ai.tools.bank_statement_pdf import (
 )
 from finance_ai.tools.bank_statement_service import bulk_insert_transactions
 from finance_ai.tools.asset_search_service import search_all_assets
+from finance_ai.tools.crypto_service import is_crypto_symbol
 from finance_ai.tools.holding_edit_service import (
     HoldingEditForm,
     HoldingNotFoundError,
@@ -1959,7 +1960,7 @@ def get_holdings(user_id: str, session: Session = Depends(get_session)) -> list[
 
 @app.get("/assets/exchange-rate", response_model=ExchangeRateOut)
 def get_exchange_rate(symbol: str, on_date: date | None = None) -> ExchangeRateOut:
-    """Rate from a foreign stock's currency to baht, for the holding form preview.
+    """Rate from a foreign stock's or coin's currency to baht, for the holding form preview.
 
     Args:
         symbol: Foreign ticker (e.g. "NVDA").
@@ -1972,9 +1973,9 @@ def get_exchange_rate(symbol: str, on_date: date | None = None) -> ExchangeRateO
         HTTPException: 422 for a non-foreign symbol, 503 when Yahoo has no rate.
     """
     ticker = symbol.strip().upper()
-    if not is_foreign_stock_symbol(ticker):
+    if not (is_foreign_stock_symbol(ticker) or is_crypto_symbol(ticker)):
         raise HTTPException(
-            status_code=422, detail=f"{ticker} ไม่ใช่หุ้นต่างประเทศ ไม่ต้องแปลงสกุลเงิน"
+            status_code=422, detail=f"{ticker} ซื้อขายเป็นเงินบาทอยู่แล้ว ไม่ต้องแปลงสกุลเงิน"
         )
     try:
         rate = exchange_rate_to_thb(ticker, on_date)

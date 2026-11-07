@@ -152,7 +152,7 @@ class TestGetUserHoldingsByAssetType:
     def test_invalid_asset_type_raises(self, test_session: Session, sample_user: User) -> None:
         """Raises ValueError for unknown asset type."""
         with pytest.raises(ValueError, match="Unknown asset type"):
-            get_user_holdings_by_asset_type(test_session, sample_user.id, "crypto")
+            get_user_holdings_by_asset_type(test_session, sample_user.id, "bond")
 
 
 # ── Get User Holding By Symbol ───────────────────────────────────────
@@ -230,7 +230,7 @@ class TestAddInvestmentHolding:
             add_investment_holding(
                 test_session,
                 sample_user.id,
-                asset_type="crypto",
+                asset_type="bond",
                 symbol="BTC",
                 name="Bitcoin",
                 quantity=Decimal("1"),
@@ -331,6 +331,33 @@ class TestRefreshPortfolioPrices:
         mock_fetch.assert_not_called()
         holding = test_session.query(InvestmentHolding).one()
         assert holding.current_price_per_unit == Decimal("6800")
+
+    @patch("finance_ai.tools.thai_gold_service.thai_gold_price_per_baht_weight")
+    @patch("finance_ai.tools.foreign_stock_service.latest_price_in_thb")
+    @patch("finance_ai.tools.price_client.fetch_multiple_prices")
+    def test_gold_and_crypto_priced_in_baht(
+        self,
+        mock_fetch: MagicMock,
+        mock_thb: MagicMock,
+        mock_gold: MagicMock,
+        test_session: Session,
+        sample_user: User,
+    ) -> None:
+        """Gold bars use the baht-weight estimate; crypto is converted from USD."""
+        add_investment_holding(
+            test_session, sample_user.id, "gold", "THGOLD965", "ทองคำแท่ง 96.5%",
+            Decimal("1"), Decimal("60000"), date(2026, 10, 1),
+        )  # fmt: skip
+        add_investment_holding(
+            test_session, sample_user.id, "crypto", "BTC-USD", "Bitcoin",
+            Decimal("0.01"), Decimal("3000000"), date(2026, 10, 1),
+        )  # fmt: skip
+        mock_gold.return_value = Decimal("61500")
+        mock_thb.return_value = Decimal("3250000")
+        assert refresh_portfolio_prices(test_session, sample_user.id) == 2
+        mock_fetch.assert_not_called()
+        prices = {h.symbol: h.current_price_per_unit for h in test_session.query(InvestmentHolding)}
+        assert prices == {"THGOLD965": Decimal("61500"), "BTC-USD": Decimal("3250000")}
 
     @patch("finance_ai.tools.price_client.fetch_multiple_prices")
     def test_skips_unavailable_prices(

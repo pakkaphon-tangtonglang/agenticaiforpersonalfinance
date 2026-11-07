@@ -70,3 +70,35 @@ def test_not_found_returns_questions() -> None:
         response = search_all_assets("zzqqxx", lambda q: [], expand=lambda q: [])
     assert response["results"] == []
     assert response["clarify"]["reason"] == "not_found"
+
+
+_GOLD_PRICE = "finance_ai.tools.asset_search_service.thai_gold_price_per_baht_weight"
+
+
+_WORLD_PRICE = "finance_ai.tools.world_gold_service.fetch_current_price"
+
+
+def test_gold_query_shows_calculated_and_api_gold_first() -> None:
+    """ทองคำ offers the calculated Thai bar, then API world gold (Yahoo's GC=F row dropped)."""
+    futures = AssetSymbolMatch(symbol="GC=F", name="Gold", exchange="CMX", quote_type="FUTURE")
+    micro = AssetSymbolMatch(symbol="MGC=F", name="Micro", exchange="CMX", quote_type="FUTURE")
+    with (
+        patch(_SEARCH, return_value=FundSearchOutcome(results=[k_value()])),
+        patch(_GOLD_PRICE, return_value=Decimal("61500.00")),
+        patch(_WORLD_PRICE, return_value=Decimal("4012.5")),
+    ):
+        response = search_all_assets("ทองคำ", lambda q: [futures, micro], expand=lambda q: [])
+    rows = [(r["symbol"], r["type"], r["price"]) for r in response["results"][:2]]
+    assert rows == [("THGOLD965", "GOLD", "61500.00"), ("GC=F", "WORLD_GOLD", "4012.5")]
+    assert [r["symbol"] for r in response["results"][2:]] == ["MGC=F", "K-VALUE-A(A)"]
+
+
+def test_other_query_has_no_gold_bar() -> None:
+    """The gold bar only shows for gold searches (and its price is not fetched)."""
+    with (
+        patch(_SEARCH, return_value=FundSearchOutcome(results=[])),
+        patch(_GOLD_PRICE) as gold_price,
+    ):
+        response = search_all_assets("ปตท", lambda q: [ptt()], expand=lambda q: [])
+    assert [r["symbol"] for r in response["results"]] == ["PTT.BK"]
+    gold_price.assert_not_called()
