@@ -259,3 +259,8 @@ docs/guru_knowledge/*/fetched/
 # Real bank statements used for local testing (personal financial data)
 docs/*statement*.pdf
 *bank_statement*.pdf
+
+# LaTeX build files for the evaluation reports
+docs/evaluation/report/*.aux
+docs/evaluation/report/*.out
+docs/evaluation/report/*.toc

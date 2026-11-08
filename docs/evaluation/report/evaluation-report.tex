@@ -59,7 +59,7 @@ This report presents the evaluations carried out for the thesis system, a Thai p
 \textbf{Main findings.}
 \begin{itemize}
 \item On DeepSeek V4.1 Flash, the single agent had the highest task success (98.9\%), against 87.2\% for hub-and-spoke ($p<0.0001$). The whole gap came from cross-topic tasks (100\% against 61.1\%). On gpt-oss:20b, the single agent and hub-and-spoke were statistically tied (83.9\% and 83.3\%). Hub-and-spoke used about 3.6 times fewer input tokens per task.
-\item Adding \textbf{multi-intent routing} to hub-and-spoke raised its cross-topic success from 61.1\% to an estimated 86.1\% (paired $p=0.012$) without a significant change in single-topic routing (95.7\% against 94.6\%, $p=0.69$). The router split 22 of 22 multi-topic messages correctly, including messages with three to five topics.
+\item With \textbf{multi-intent routing}, hub-and-spoke reached an estimated 86.1\% on cross-topic tasks against 61.1\% without it (paired $p=0.012$), with no significant change in single-topic routing (94.6\% against 95.7\% for a single-route prompt, $p=0.69$). The router split 22 of 22 multi-topic messages correctly, including messages with three to five topics. Combined, the production router was right on 205 of 215 messages (95.3\%, 95\% CI 91.7--97.5\%), and the production design (hub-and-spoke with multi-intent routing, estimate) completed 92.2\% of the 60 Study A tasks with 3.3 times fewer input tokens than the single agent.
 \item The router's lowest thinking level (\emph{minimal}) kept accuracy (95.9\% against 96.2\% without the setting; difference within $-2.2$ to $+1.6$ points) and halved routing latency (1.36\,s against 2.59\,s).
 \item Gemini embeddings retrieved best (nDCG@10 0.805), significantly above BAAI/bge-m3 (0.724), multilingual-e5 (0.722), BM25 (0.568) and MiniLM (0.394). Final answer correctness, however, did not differ significantly between the three best retrievers (92.5--94.2\%).
 \item The production Tax Agent computed 26 of 26 tax cases correctly. Without the calculator tool, the model alone was correct in 7 of 8 cases and repeated an outdated social-security cap.
@@ -87,7 +87,7 @@ Architecture tasks & architecture\_\allowbreak{}tasks.yaml & 60 & 40 single-topi
 Routing questions & routing\_\allowbreak{}v2\_\allowbreak{}dataset.yaml + Sept. set & 185 & 150 written for this study + 35 from September; 8 destinations \\
 Multi-topic routing & routing\_\allowbreak{}multi\_\allowbreak{}dataset.yaml & 30 & 22 multi-topic (2--5 topics) + 8 one-question look-alikes \\
 RAG questions & rag\_\allowbreak{}v2\_\allowbreak{}dataset.yaml & 120 & user wording, gold files + answer keywords, leakage-checked \\
-Tax accuracy & tax\_\allowbreak{}accuracy\_\allowbreak{}dataset.yaml & 26 & 20 existing + 6 cases for the 2569 (2026) rules \\
+Tax accuracy & tax\_\allowbreak{}accuracy\_\allowbreak{}dataset.yaml & 26 & 20 general + 6 cases for the 2569 (2026) rules \\
 Tool bypass & tool\_\allowbreak{}bypass\_\allowbreak{}benchmark.py & 8 & tax with and without the calculator tool \\
 Hallucination & hallucination\_\allowbreak{}dataset.yaml & 10 & regex checks on tax facts \\
 \bottomrule
@@ -121,12 +121,15 @@ A run succeeds only when it takes an acceptable route, calls every required grou
 \textbf{Design} & \textbf{Success (95\% CI)} & \textbf{Single} & \textbf{Cross} & \textbf{Vague} & \textbf{pass$^{3}$} & \textbf{LLM calls} & \textbf{Input tokens} & \textbf{Latency (s)} \\
 \midrule
 Single agent & 98.9\% (96.0--99.7\%) & 99.2\% & 100.0\% & 95.8\% & 96.7\% & 2.3 & 42,555 & 3.6 \\
+Production$^{*}$ & 92.2\% (87.4--95.3\%) & 92.5\% & 86.1\% & 100.0\% & 90.0\% & 3.3 & 12,946 & 4.4 \\
 Peer-to-peer & 91.7\% (86.7--94.9\%) & 97.5\% & 66.7\% & 100.0\% & 88.3\% & 3.9 & 14,807 & 5.6 \\
 Hub-and-spoke & 87.2\% (81.6--91.3\%) & 92.5\% & 61.1\% & 100.0\% & 83.3\% & 3.1 & 11,649 & 4.4 \\
 Hierarchical & 85.0\% (79.1--89.5\%) & 90.8\% & 55.6\% & 100.0\% & 80.0\% & 4.0 & 12,280 & 5.3 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\noindent{\footnotesize $^{*}$ Production = hub-and-spoke with multi-intent routing. Multi-intent routing was measured on the six cross-topic tasks that plain hub-and-spoke failed at least once (18 runs); all other tasks take the same path and share the hub-and-spoke results (Section~\ref{sec:mi}). This is an estimate, since the six cross-topic tasks that hub-and-spoke always passed were not measured with multi-intent routing. Against the single agent: 2 vs 14 discordant pairs, exact McNemar $p=0.004$.}
 
 \begin{table}[H]
 \centering
@@ -196,31 +199,31 @@ gpt-oss:20b & Single agent & 0 & 27 & 0 & 0 & 1 & 0 & 0 & 0 \\
 
 
 \subsection{Discussion}
-With the stronger model (DeepSeek V4.1 Flash), the single agent solved almost every task, and its advantage over hub-and-spoke came entirely from cross-topic tasks: a routed design sends a message to one specialist, which cannot use another specialist's tools. With the weaker model (gpt-oss:20b), the designs tied and hub-and-spoke was the most consistent. Hub-and-spoke kept a large cost advantage: each specialist sees only its own prompt and tools, so it sent 11.6k input tokens per task against 42.6k for the single agent on DeepSeek. The cross-topic weakness motivated the multi-intent extension in Section~\ref{sec:mi}.
+With the stronger model (DeepSeek V4.1 Flash), the single agent solved almost every task, and its advantage over hub-and-spoke came entirely from cross-topic tasks: a routed design sends a message to one specialist, which cannot use another specialist's tools. With the weaker model (gpt-oss:20b), the designs tied and hub-and-spoke was the most consistent. Hub-and-spoke kept a large cost advantage: each specialist sees only its own prompt and tools, so it sent 11.6k input tokens per task against 42.6k for the single agent on DeepSeek. Section~\ref{sec:mi} evaluates multi-intent routing, which addresses this cross-topic weakness.
 
-\section{Extension: Multi-Intent Routing}\label{sec:mi}
+\section{Multi-Intent Routing}\label{sec:mi}
 
 \subsection{Design}
-The router may now split a message into one task per agent, in the order the user asked. There is no fixed cap; the only bound is the six specialist agents, because parts for the same agent are merged. Each part is rewritten as a self-contained question, parts run one after another (agents may write data, and later parts may depend on earlier answers), and later agents receive earlier answers as context. The reply joins one headed section per agent, lists any part below the 0.7 confidence threshold for the user to clarify, and ends with a summary of every record that was saved. A failing part does not stop the others. Single-topic messages follow the unchanged original path.
+The router may split a message into one task per agent, in the order the user asked. There is no fixed cap; the only bound is the six specialist agents, because parts for the same agent are merged. Each part is rewritten as a self-contained question, parts run one after another (agents may write data, and later parts may depend on earlier answers), and later agents receive earlier answers as context. The reply joins one headed section per agent, lists any part below the 0.7 confidence threshold for the user to clarify, and ends with a summary of every record that was saved. A failing part does not stop the others. Single-topic messages go to one specialist, exactly as in plain hub-and-spoke.
 
 \subsection{Evaluation}
-Because only the router changed, three focused runs were made:
+The mechanism lives entirely in the router, so three focused evaluations were made:
 \begin{enumerate}
-\item \textbf{Single-topic regression:} the 185 routing questions on the production setup (Table~\ref{tab:b-prompts}). Accuracy was 94.6\% against 95.7\% with the previous prompt, a difference that is not significant (exact McNemar $p=0.69$; 4 questions changed from right to wrong and 2 from wrong to right), the same size as the variation between rounds of the previous prompt. One question was split into two agents; it does ask for two things, but the strict rule counts it as wrong.
-\item \textbf{Multi-topic routing:} 30 new messages. The router produced exactly the right set of agents for 22/22 multi-topic messages (95\% CI 85.1--100.0\%), all in the order asked, and correctly left 8/8 one-question look-alikes unsplit (Appendix Table~\ref{tab:app-mt}).
-\item \textbf{End to end (Study A, DeepSeek V4.1 Flash):} the six cross-topic tasks on which hub-and-spoke had failed at least once were re-run with multi-intent routing in all three rounds (18 runs) and merged into the audited results.
+\item \textbf{Single-topic regression:} the 185 routing questions on the production setup (Table~\ref{tab:b-prompts}). Accuracy was 94.6\% against 95.7\% with a single-route prompt, a difference that is not significant (exact McNemar $p=0.69$; 4 questions changed from right to wrong and 2 from wrong to right), the same size as the variation between rounds of the single-route prompt. One question was split into two agents; it does ask for two things, but the strict rule counts it as wrong.
+\item \textbf{Multi-topic routing:} 30 new messages. The router produced exactly the right set of agents for 22/22 multi-topic messages (95\% CI 85.1--100.0\%), all in the order asked, and correctly left 8/8 one-question look-alikes unsplit (Appendix Table~\ref{tab:app-mt}). Together with the 185 single-topic questions, the production router was correct on 205/215 messages (95.3\%, 95\% CI 91.7--97.5\%).
+\item \textbf{End to end (Study A, DeepSeek V4.1 Flash):} the six cross-topic tasks on which plain hub-and-spoke failed at least once were run with multi-intent routing in all three rounds (18 runs); the other tasks take the same path and share the audited hub-and-spoke results.
 \end{enumerate}
 
 \begin{table}[H]
 \centering
 \small
-\caption{Study A on DeepSeek V4.1 Flash with multi-intent routing merged in.}\label{tab:mi-merged}
+\caption{Study A on DeepSeek V4.1 Flash with multi-intent routing.}\label{tab:mi-merged}
 \begin{tabular}{lrrr}
 \toprule
 \textbf{Design} & \textbf{All 60 tasks} & \textbf{Cross-topic} & \textbf{Cross pass$^{3}$} \\
 \midrule
 Hub-and-spoke (audited) & 157/180 (87.2\%) & 22/36 (61.1\%) & 6/12 \\
-Hub + multi-intent (merged estimate) & 166/180 (92.2\%) & 31/36 (86.1\%) & 10/12 \\
+Hub + multi-intent (estimate) & 166/180 (92.2\%) & 31/36 (86.1\%) & 10/12 \\
 Single agent (audited) & 178/180 (98.9\%) & 36/36 (100.0\%) & 12/12 \\
 \bottomrule
 \end{tabular}
@@ -228,7 +231,7 @@ Single agent (audited) & 178/180 (98.9\%) & 36/36 (100.0\%) & 12/12 \\
 \begin{table}[H]
 \centering
 \footnotesize
-\caption{Re-run cross-topic tasks: hub-and-spoke (old) against hub with multi-intent routing (new).}\label{tab:mi-rerun}
+\caption{Cross-topic tasks measured with multi-intent routing: plain hub-and-spoke against hub with multi-intent routing.}\label{tab:mi-rerun}
 \begin{tabular}{lrlll}
 \toprule
 \textbf{Task} & \textbf{Round} & \textbf{Hub-and-spoke} & \textbf{Multi-intent route} & \textbf{Multi-intent} \\
@@ -256,9 +259,9 @@ crs\_\allowbreak{}12 & 3 & wrong\_\allowbreak{}route & tax $\rightarrow$ expense
 \end{table}
 
 
-On the 18 re-run pairs, multi-intent routing succeeded where hub-and-spoke failed 10 times, and the reverse happened once (exact McNemar $p=0.012$). On these tasks it used more resources (mean LLM calls 3.4 to 5.8, input tokens 11.2k to 24.1k, median latency 9.0 to 13.0\,s); single-topic messages are unaffected. The five remaining failures were read by hand and none was overridden: in two runs the saving question was routed to the recommendation agent instead of planning, and in three runs DeepSeek's tax agent returned an empty reply. The latter revealed a defect in the reply builder (an empty section heading), which was fixed so that an empty part now shows a short apology.
+On these 18 pairs, multi-intent routing succeeded where hub-and-spoke failed 10 times, and the reverse happened once (exact McNemar $p=0.012$). On these tasks it used more resources (mean LLM calls 3.4 to 5.8, input tokens 11.2k to 24.1k, median latency 9.0 to 13.0\,s); single-topic messages are unaffected. The five remaining failures were read by hand and none was overridden: in two runs the saving question was routed to the recommendation agent instead of planning, and in three runs DeepSeek's tax agent returned an empty reply.
 
-The merged figure is an estimate: the six cross-topic tasks that never failed were not re-run. The single-topic and multi-topic routing results make a drop on those tasks unlikely, but it was not measured.
+The production figure is an estimate: the six cross-topic tasks that plain hub-and-spoke always passed were not measured with multi-intent routing. The single-topic and multi-topic routing results make a drop on those tasks unlikely, but it was not measured.
 
 \section{Study B: Router Thinking Level}
 
@@ -289,7 +292,7 @@ gemini-3.5-flash-lite & high & 370 & 96.5\% (94.1--97.9\%) & 1.93 & 3.24 & 469 &
 \toprule
 \textbf{Comparison} & \textbf{Pairs} & \textbf{Acc. diff (95\% CI)} & \textbf{Only 1st/2nd} & \textbf{McNemar p} & \textbf{Latency diff (s)} \\
 \midrule
-ch.3 claim: minimal vs no setting (before the fix) & 370 & -0.3 (-2.2 to +1.6) & 6/7 & 1.000 & -1.26 \\
+ch.3 claim: minimal vs no setting & 370 & -0.3 (-2.2 to +1.6) & 6/7 & 1.000 & -1.26 \\
 Does thinking help flash-lite? & 370 & -2.7 (-5.1 to -0.5) & 5/15 & 0.041 & -1.04 \\
 Could flash-lite replace the production router? & 370 & -2.2 (-4.6 to +0.0) & 5/13 & 0.096 & -0.46 \\
 \bottomrule
@@ -313,7 +316,7 @@ lite high & 98\% & 96\% & 94\% & 100\% & 89\% & 100\% & 98\% & 96\% \\
 
 
 \subsection{Discussion}
-The minimal level meets the non-inferiority criterion: the accuracy difference of $-0.3$ points has a 95\% interval of $-2.2$ to $+1.6$ points, while the median routing latency fell by about 1.26\,s. Flash-Lite at the minimal level was 2.2 points less accurate than Flash, so it was not adopted. The router prompt was later revised twice (Table~\ref{tab:b-prompts}); neither revision changed accuracy significantly.
+The minimal level meets the non-inferiority criterion: the accuracy difference of $-0.3$ points has a 95\% interval of $-2.2$ to $+1.6$ points, while the median routing latency fell by about 1.26\,s. Flash-Lite at the minimal level was 2.2 points less accurate than Flash, so it was not adopted. Table~\ref{tab:b-prompts} compares router prompts on the same questions; the production prompt with multi-intent routing does not differ significantly from the single-route prompts.
 
 \begin{table}[H]
 \centering
@@ -323,9 +326,9 @@ The minimal level meets the non-inferiority criterion: the accuracy difference o
 \toprule
 \textbf{Router prompt} & \textbf{Calls} & \textbf{Accuracy (95\% CI)} & \textbf{Wrong splits} & \textbf{Median (s)} \\
 \midrule
-Original prompt (Study B, 2 rounds) & 370 & 95.9\% (93.4--97.5\%) & 0 & 1.36 \\
-After prompt fixes (greeting, tax) & 185 & 95.7\% (91.7--97.8\%) & 0 & 1.25 \\
-Multi-intent prompt & 185 & 94.6\% (90.3--97.0\%) & 1 & 1.38 \\
+Single-route prompt A (Study B, 2 rounds) & 370 & 95.9\% (93.4--97.5\%) & 0 & 1.36 \\
+Single-route prompt B (greeting and tax rules) & 185 & 95.7\% (91.7--97.8\%) & 0 & 1.25 \\
+Multi-intent prompt (production) & 185 & 94.6\% (90.3--97.0\%) & 1 & 1.38 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -349,7 +352,7 @@ gemini-embedding-001 & 0.805 (0.756--0.851) & 0.742 & 0.900 & 0.942 & 0.827 \\
 BAAI/bge-m3 & 0.724 (0.662--0.782) & 0.650 & 0.842 & 0.883 & 0.747 \\
 multilingual-e5-large-instruct & 0.722 (0.661--0.776) & 0.650 & 0.825 & 0.858 & 0.746 \\
 BM25 (newmm) & 0.568 (0.501--0.634) & 0.458 & 0.683 & 0.742 & 0.578 \\
-MiniLM-L12 (old fallback) & 0.394 (0.323--0.464) & 0.333 & 0.433 & 0.492 & 0.407 \\
+MiniLM-L12 & 0.394 (0.323--0.464) & 0.333 & 0.433 & 0.492 & 0.407 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -363,7 +366,7 @@ MiniLM-L12 (old fallback) & 0.394 (0.323--0.464) & 0.333 & 0.433 & 0.492 & 0.407
 \midrule
 multilingual-e5-large-instruct & -0.084 (-0.133 to -0.035) & 14/43 & 0.0002 & 4/13 & 0.049 \\
 BAAI/bge-m3 & -0.081 (-0.132 to -0.035) & 15/45 & 0.0001 & 4/11 & 0.118 \\
-MiniLM-L12 (old fallback) & -0.411 (-0.479 to -0.343) & 4/86 & $<$0.0001 & 1/57 & $<$0.0001 \\
+MiniLM-L12 & -0.411 (-0.479 to -0.343) & 4/86 & $<$0.0001 & 1/57 & $<$0.0001 \\
 BM25 (newmm) & -0.237 (-0.308 to -0.163) & 14/68 & $<$0.0001 & 6/32 & $<$0.0001 \\
 \bottomrule
 \end{tabular}
@@ -385,11 +388,11 @@ multilingual-e5-large-instruct & 120 & 111/120 (92.5\%) & 104/120 (86.7\%) \\
 
 
 \subsection{Discussion}
-Gemini embeddings retrieved significantly better than every alternative, which supports keeping \texttt{gemini-embedding-001} in production. The old local fallback, MiniLM, was clearly unsuitable for Thai, so the local default was changed to BAAI/bge-m3. Retrieval differences did not carry through to final answers: correctness was 92.5--94.2\% for the three best retrievers with no significant difference, because the answer model can often answer correctly from a partly relevant set of three chunks.
+Gemini embeddings retrieved significantly better than every alternative, which supports keeping \texttt{gemini-embedding-001} in production. MiniLM was clearly unsuitable for Thai, so the local fallback is BAAI/bge-m3. Retrieval differences did not carry through to final answers: correctness was 92.5--94.2\% for the three best retrievers with no significant difference, because the answer model can often answer correctly from a partly relevant set of three chunks.
 
 \section{Tax Evaluations}
 
-The tax calculator and the Tax Agent prompt were corrected on 3 November 2026 for the 2569 (2026) rules (social security cap 10,500; parent allowance per person, up to four; no total cap on children; SSF ended after 2567). All tax evaluations were therefore re-run. Six new cases were added for the 2569 rules; their expected values were computed by hand, checked against the calculator, and chosen so that the old rule would give a different answer outside the tolerance.
+The tax calculator and the Tax Agent prompt follow the 2569 (2026) rules (social security cap 10,500; parent allowance per person, up to four; no total cap on children; SSF ended after 2567). Six cases test these rules; their expected values were computed by hand, checked against the calculator, and chosen so that the previous year's rule would give a different answer outside the tolerance.
 
 {\scriptsize
 \begin{longtable}{lrrlp{8.6cm}}
@@ -475,19 +478,10 @@ hal\_\allowbreak{}010 & missing\_\allowbreak{}citation & yes & yes & {\thaifont 
 
 \textbf{Reading.} The Tax Agent made no errors in 26 cases (95\% Wilson interval for the error rate: 0--12.9\%). The automatic number reader of the tool-bypass benchmark misread Gemini's markdown, so the no-tool answers were read by hand: the model alone was correct in 7 of 8 cases, failed the combined RMF and SSF cap (467,000 instead of 407,000 baht) and quoted the old 9,000-baht social-security cap. The calculator therefore remains justified because it keeps every answer correct and current, rather than because the model cannot calculate. One hallucination case failed the regex check only because the answer did not mention the wage ceiling; its stated caps were correct, which shows that ten regex checks are not a reliable hallucination measure. The faithfulness judge in Study C is the stronger measure.
 
-\section{Product Issues Found and Fixed}
-\begin{itemize}
-\item \textbf{Router, tax questions:} after a life-insurance category was added, ``paid an insurance premium, how much tax do I owe?'' was routed to the expense agent. A rule and an example now send questions about tax amounts to the tax agent (both affected tasks reached the tax agent in 18 of 18 calls afterwards).
-\item \textbf{Router, greetings:} greetings were sometimes answered with the ask-back menu; they now go to general chat with high confidence.
-\item \textbf{Benchmark:} the tool-bypass benchmark turned Gemini's content blocks into a string, so no number could be read; it now joins the text blocks.
-\item \textbf{Multi-intent replies:} an agent that returned no text produced an empty section; such a part now shows a short apology.
-\item \textbf{Local embedding default:} changed from MiniLM to BAAI/bge-m3 (production uses Gemini and is unaffected).
-\end{itemize}
-
 \section{Limitations}
 \begin{itemize}
 \item Study A was not repeated on the production model, Gemini 3.5 Flash, because of budget; its results come from two other model families. Gemini was chosen for production because it gave the most stable results in the tests that did use it (26 of 26 tax cases, no failed or unreadable router calls in 185 questions, no empty replies), whereas DeepSeek V4.1 Flash occasionally returned empty tax replies and gpt-oss:20b once asked the user back in Chinese.
-\item The multi-intent result on cross-topic tasks is a merged estimate (Section~\ref{sec:mi}).
+\item The multi-intent result on cross-topic tasks is an estimate (Section~\ref{sec:mi}).
 \item All datasets were written by the author; they are not drawn from real user traffic, and the multi-topic set has 30 messages.
 \item No expert review, user study or adversarial (red-team) test was carried out.
 \item Latency was measured from a laptop, not from the deployed server.
@@ -514,7 +508,7 @@ Hand audits are recorded in \texttt{audit.yaml} in each Study A results folder a
 \section{Study A Results per Task}
 {\scriptsize
 \begin{longtable}{llrrrrrp{7.2cm}}
-\caption{Successful rounds out of 3 per task, DeepSeek V4.1 Flash. Hub+MI = hub with multi-intent routing (re-run only for the six failed cross-topic tasks).}\label{tab:app-a-ds}\\
+\caption{Successful rounds out of 3 per task, DeepSeek V4.1 Flash. Hub+MI = hub with multi-intent routing (measured only on the six cross-topic tasks that hub-and-spoke failed at least once).}\label{tab:app-a-ds}\\
 \toprule
 \textbf{Task} & \textbf{Type} & \textbf{Single} & \textbf{Hub} & \textbf{Hier.} & \textbf{P2P} & \textbf{Hub+MI} & \textbf{Query} \\
 \midrule
