@@ -1,112 +1,90 @@
 # Personal Finance AI
 
-> ระบบ AI แบบ Multi-Agent สำหรับช่วยจัดการการเงินส่วนบุคคล ออกแบบมาเพื่อผู้ใช้ชาวไทย
-
-[English version](./README_EN.md) | ไทย (เอกสารนี้)
+> ระบบ AI แบบหลาย Agent (Multi-Agent) สำหรับช่วยจัดการการเงินส่วนบุคคล ออกแบบมาเพื่อผู้ใช้ชาวไทย
 
 [![CI](https://github.com/pakkaphon-tangtonglang/agenticaiforpersonalfinance/actions/workflows/ci.yml/badge.svg?branch=main)](./.github/workflows/ci.yml)
 [![Python](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-![Tests](https://img.shields.io/badge/tests-1%2C901%20passed-brightgreen)
-![Coverage](https://img.shields.io/badge/coverage-92.7%25-brightgreen)
+![Tests](https://img.shields.io/badge/tests-3%2C314%20passed-brightgreen)
+![Coverage](https://img.shields.io/badge/coverage-96.6%25-brightgreen)
 [![License](https://img.shields.io/badge/license-Educational%20Use%20Only-orange.svg)](./LICENSE)
 
 ## สรุปในหน้าเดียว
 
 | | |
 |---|---|
-| **สถาปัตยกรรม** | LangGraph multi-agent: Router + 6 specialist agents แบบ Hub-and-Spoke (พิสูจน์ด้วย benchmark เทียบกับ P2P/Hierarchical) |
-| **RAG** | ChromaDB กับเอกสารการเงินภาษาไทย 24 ฉบับ (PDF จากหน่วยงานจริง สรรพากร/กลต./ตลท.) Recall@3 0.897 |
-| **คุณภาพที่วัดได้** | Router accuracy 0.943 บทสนทนาเดี่ยว / 1.000 หลายรอบ · คำนวณภาษีแม่นยำ 95% (MAE 3,000 บาท) · hallucination 0 ในคำตอบหลัก (10/10) |
-| **ฝั่ง Engineering** | tests 1,901 ตัว, coverage 92.7%, mypy strict, pylint 10/10, เขียนด้วย TDD ทั้งโปรเจกต์ |
-| **Deployment** | FastAPI (REST 14 endpoints) บน Render + Neon Postgres, LINE chatbot, OCR ใบเสร็จ |
-| **การประเมินผล** | สร้าง evaluation framework 6 มิติขึ้นเอง: routing ablation (810 LLM calls), ความถูกต้องของคำตอบ, คุณภาพ retrieval, ตรวจ hallucination, benchmark สถาปัตยกรรม |
+| **สถาปัตยกรรม** | LangGraph แบบ Hub-and-Spoke: Router แยกข้อความที่ถามหลายเรื่องแล้วส่งให้ Agent เฉพาะทาง 6 ตัว และมี Guru Agent แยกต่างหาก |
+| **RAG** | ChromaDB 2 คลัง: เอกสารการเงินภาษาไทย 24 ฉบับ (สรรพากร ก.ล.ต. ตลท.) และคลังความรู้ของกูรูการลงทุน |
+| **ผลการประเมิน** | Router จำแนกถูก 95.6% (411/430) · คำนวณภาษีถูก 26/26 กรณีตามกฎปี 2569 · ใช้ token น้อยกว่าแบบ Single Agent 3.1 เท่า |
+| **คุณภาพโค้ด** | test 3,314 ตัว, coverage 96.6%, mypy strict, pylint, เขียนแบบ TDD ทั้งโปรเจกต์ |
+| **การใช้งานจริง** | FastAPI บน Render + Neon Postgres, Google Gemini 3.5 Flash, LINE chatbot, OCR ใบเสร็จและ statement ธนาคาร |
 
-## โปรเจกต์นี้คืออะไร
+## โปรเจกต์นี้ทำอะไรได้บ้าง
 
-ผู้ช่วยการเงินที่คุยด้วยได้เป็นภาษาไทย ทำสิ่งเหล่านี้ได้:
+ผู้ช่วยการเงินที่คุยด้วยภาษาไทยได้ ทั้งผ่านเว็บและ LINE
 
-- คำนวณภาษีเงินได้บุคคลธรรมดาของไทย ครบทุกค่าลดหย่อน
-- บันทึกและจัดหมวดหมู่รายจ่าย สรุปยอดรายเดือน
-- ดูราคาหุ้น อ่านข่าวการเงิน และจัดการ watchlist
-- ตั้งเป้าหมายการเงินและคำนวณแผนเก็บเงิน
-- แนะนำสิ่งที่ควรทำต่อไป พร้อมคะแนนสุขภาพทางการเงิน
-- รวมทุกอย่างเป็นรายงาน (ส่งออก PDF/CSV)
+- คำนวณภาษีเงินได้บุคคลธรรมดาตามกฎปี 2569 ครบทุกค่าลดหย่อน และบันทึกค่าลดหย่อนให้เองระหว่างคุย
+- บันทึกรายรับรายจ่าย จัดหมวดหมู่ สรุปรายเดือน และตั้งรายการประจำทุกเดือนได้
+- ติดตามหนี้ เป้าหมายการเงิน และแผนเก็บเงิน แก้ไขได้จากหน้า Dashboard
+- พอร์ตลงทุน: หุ้นไทย หุ้นต่างประเทศ กองทุนรวม (รวม ThaiESG) ทองคำแท่ง และคริปโต พร้อมอัตราแลกเปลี่ยน USD แบบสด
+- Watchlist พร้อมแจ้งเตือนข่าวรายวันบนเว็บและ LINE
+- ประเมินความเสี่ยงในการลงทุน คะแนนสุขภาพทางการเงิน และคำแนะนำเชิงรุก
+- ถามกูรูการลงทุน (บัฟเฟตต์ ดาลิโอ ดร.นิเวศน์ โค้ชหนุ่ม) ทีละคนหรือให้หลายคนตอบเทียบกัน
+- อ่านใบเสร็จและ statement ธนาคารจากรูปหรือ PDF แล้วร่างรายการให้กดยืนยัน
+- สรุปทุกอย่างเป็นรายงาน ส่งออกเป็น PDF/CSV
 
 ## ความสามารถหลัก
 
-### ระบบ Multi-agent (LangGraph)
+### ระบบหลาย Agent (LangGraph)
 
-LangGraph graph ประกอบด้วย router และ specialist agents 6 ตัว:
+- **Router Agent** จำแนกเจตนาของคำถาม ถ้าข้อความถามหลายเรื่องจะแยกแล้วส่งให้หลาย Agent ทำงาน ถ้าไม่มั่นใจจะถามกลับพร้อมตัวเลือก
+- **Tax Agent** ภาษีเงินได้บุคคลธรรมดา ค่าลดหย่อน การวางแผนลดหย่อน
+- **Expense Agent** รายรับ รายจ่าย หนี้ รายการประจำ
+- **Asset Monitoring Agent** ราคาหุ้น ข่าว พอร์ต watchlist
+- **Planning Agent** เป้าหมายการเงิน แผนเก็บเงิน และตรวจจับสัญญาณทางจิตวิทยาการเงิน
+- **Recommendation Agent** คำแนะนำเชิงรุกจากกฎ 10 ข้อ และคะแนนสุขภาพทางการเงิน
+- **Report Agent** รายงานรวม ส่งออก PDF/CSV
+- **Guru Agent** ตอบในมุมมองของกูรูแต่ละคนจากคลังความรู้ของตัวเอง เครื่องมือที่เขียนข้อมูลจะทำงานหลังผู้ใช้พิมพ์ "ยืนยัน" เท่านั้น
 
-- **Router Agent** - จำแนก intent แล้วส่งต่อให้ specialist ที่ถูกต้อง
-- **Tax Agent** - ภาษีเงินได้บุคคลธรรมดาของไทย ครบทุกค่าลดหย่อน
-- **Expense Agent** - บันทึกรายรับ/รายจ่าย สรุปรายเดือน ค้นตามหมวดหมู่
-- **Asset Monitoring Agent** - ราคาหุ้น ข่าวการเงิน watchlist
-- **Planning Agent** - เป้าหมายการเงิน แผนเก็บเงิน ตรวจจับสัญญาณทางจิตวิทยา
-- **Recommendation Agent** - คำแนะนำเชิงรุกและคะแนนสุขภาพทางการเงิน
-- **Report Agent** - รายงานรวมทุกอย่าง ส่งออก PDF/CSV
+เครื่องมือที่เกี่ยวกับตัวเงินเป็นตัวคำนวณแบบ deterministic ที่ใช้ `Decimal` ทั้งหมด โมเดลภาษาเป็นผู้เรียกใช้เครื่องมือ ไม่ได้คิดตัวเลขเอง
 
-### คลังความรู้ RAG
-Vector store ด้วย ChromaDB และเอกสารการเงินภาษาไทย 24 ฉบับ (Markdown 18 + PDF ทางการ 6) ครอบคลุม:
-- ภาษีเงินได้ ค่าลดหย่อน คู่มือยื่นภาษี ภาษีมูลค่าเพิ่ม/ภาษีหัก ณ ที่จ่าย
-- หุ้นไทย กองทุนรวม ETF พันธบัตร กลยุทธ์ DCA
-- การจัดงบประมาณ เงินสำรองฉุกเฉิน การจัดการหนี้
-- ประกันชีวิต/ประกันสุขภาพ ประกันสังคม
-- เกษียณและการวางแผนการเงิน
-- สินทรัพย์ดิจิทัลและ crypto (อ้างอิงแหล่งข้อมูลจาก ก.ล.ต. และตลท.)
+### คลังความรู้ (RAG)
 
-### OCR ใบเสร็จ
-อัปโหลดรูปใบเสร็จ ระบบจะดึงรายการ จำนวนเงิน และร้านค้าออกมาเอง
-แล้วร่าง transaction เป็น draft ให้กดยืนยันครั้งเดียวจบ
-(`POST /ocr/receipt` → `POST /ocr/confirm`) ตัว Vision model ตั้งค่าแยกจาก
-chat agent ได้ (`OCR_PROVIDER` + `OCR_MODEL`)
+ChromaDB มี 2 collection
+
+- `finance_knowledge` เอกสารการเงินภาษาไทย 24 ฉบับใน [`docs/knowledge_base/`](./docs/knowledge_base/) ครอบคลุมภาษี ค่าลดหย่อน หุ้น กองทุนรวม พันธบัตร DCA การจัดงบ เงินสำรองฉุกเฉิน หนี้ ประกัน ประกันสังคม การเกษียณ และสินทรัพย์ดิจิทัล
+- `guru_knowledge` ความรู้ของกูรูแต่ละคน (โปรไฟล์อยู่ใน [`docs/gurus/`](./docs/gurus/))
+
+ใช้ `gemini-embedding-001` ทำเวกเตอร์ และเก็บ cache ไว้ในฐานข้อมูล
+
+### OCR ใบเสร็จและ statement
+
+อัปโหลดรูปใบเสร็จหรือไฟล์ statement ธนาคาร (รูปหรือ PDF) ระบบจะดึงรายการ จำนวนเงิน และร้านค้าออกมา แล้วร่างเป็นรายการรอยืนยัน
+(`POST /upload/receipt`, `POST /upload/bank-statement` → `POST /transactions/confirm`)
+ตั้งค่าโมเดลสำหรับ OCR แยกจากแชตได้ด้วย `OCR_PROVIDER` และ `OCR_MODEL`
 
 ### LINE Chatbot
-คุยกับระบบ multi-agent ชุดเดียวกันผ่านแอป LINE:
-- `POST /line/webhook` ตรวจ `X-Line-Signature` (HMAC-SHA256) และตอบรับภายในกรอบเวลา ~1 วินาทีของ LINE
-- Agent ทำงานเป็น background task แล้วส่งคำตอบภาษาไทยกลับผ่าน Push Message API (reply token หมดอายุก่อน agent ทำงานเสร็จ)
-- แต่ละบัญชี LINE map อัตโนมัติกับ user + conversation (`line_user_mappings`) ทำให้ประวัติแชตไม่หาย
-- ผูกบัญชี: พิมพ์ `เชื่อมต่อ <userId>` ใน LINE (คัดลอกคำสั่งได้จากการ์ดในเว็บ) เพื่อเชื่อมแชตกับบัญชีเว็บ; พิมพ์ `ยกเลิกเชื่อมต่อ` / `unlink` หรือกดปุ่ม "ยกเลิกการเชื่อมต่อ" บนเว็บเพื่อยกเลิก
-- มี Quick Reply menu ให้กด (บันทึกรายจ่าย / วางแผน / หุ้น / ภาษี) สอดคล้องกับตัวเลือก clarify บนเว็บ
 
-แผนภาพสถาปัตยกรรมและ sequence diagram (บทที่ 3): [docs/diagrams.md](./docs/diagrams.md)
+คุยกับระบบชุดเดียวกันผ่านแอป LINE
 
-### การตัดสินใจออกแบบ ที่มีตัวเลขยืนยัน
+- `POST /line/webhook` ตรวจลายเซ็น `X-Line-Signature` (HMAC-SHA256) และตอบรับภายในเวลาที่ LINE กำหนด
+- Agent ทำงานเบื้องหลัง แล้วส่งคำตอบกลับผ่าน Push Message API
+- บัญชี LINE แต่ละบัญชีผูกกับผู้ใช้และบทสนทนาโดยอัตโนมัติ ประวัติแชตจึงไม่หาย
+- ผูกบัญชีกับเว็บ: พิมพ์ `เชื่อมต่อ <userId>` ใน LINE (คัดลอกได้จากการ์ดบนเว็บ) ยกเลิกด้วย `ยกเลิกเชื่อมต่อ` หรือกดปุ่มบนเว็บ
+- มีเมนู Quick Reply (บันทึกรายจ่าย / วางแผน / หุ้น / ภาษี)
+- แจ้งเตือนข่าวหุ้นใน watchlist ส่งเข้า LINE ด้วย ถ้าผูกบัญชีไว้
 
-ทุกทางเลือกสถาปัตยกรรมที่นี่มาจากการวัดผลจริง ไม่ใช่เดา:
+### ความปลอดภัยของ API
 
-- **ประวัติแชตคือ feature ที่คุ้มค่าที่สุดของ router** จาก ablation
-  (810 LLM calls, 3 รอบ) ความแม่นยำแบบหลายรอบสนทนาพุ่งจาก 0.733
-  เป็น 1.000 เมื่อใส่ history และ prompt layout ที่ได้ผลดีที่สุด
-  คือแบบที่วาง role instruction ไว้หลัง history block ไม่ใช่ก่อนหน้า
-- **Hub-and-Spoke ชนะด้านต้นทุน routing** ใช้ LLM routing call 1 ครั้งต่อคำถาม
-  เทียบกับ 1.8 (P2P) และ 2.0 (Hierarchical) พร้อม coupling แบบ O(N)
-  แทน O(N²) ส่วน latency ต่างกันในระดับ noise (~3%) ตัวตัดสินจึงเป็นต้นทุน
-- **การคำนวณเงินผ่าน calculator ที่มี type ชัดเจน ไม่ใช่ให้ LLM คิดเอง**
-  การคำนวณภาษีแม่นยำ 95% (MAE 3,000 บาท) เพราะ model เรียกใช้ tool
-  แบบ deterministic แทนการตั้งสมการในหัว
-- **รายงาน hallucination เป็น 2 ชั้นโดยตั้งใจ** ตัวประเมิน regex ให้ flag 0.70
-  แบบดิบ แต่วิเคราะห์ระดับเนื้อหาพบว่าคำตอบ headline ตรงกับ knowledge base
-  10/10 ตัวเลขทั้งสองชั้นอยู่ในผลลัพธ์ ไม่ได้โชว์แค่ตัวที่สวย
+- ทุก endpoint ต้องส่ง `X-API-Key` ยกเว้น `/health` และ `/line/webhook` (ซึ่งตรวจลายเซ็นของ LINE อยู่แล้ว)
+- จำกัดจำนวนคำขอต่อ IP แบบ sliding window ค่าเริ่มต้น 30 ครั้งต่อนาที (ใส่ `0` เพื่อปิด)
+- โค้ดอยู่ที่ [`src/finance_ai/core/api_security.py`](./src/finance_ai/core/api_security.py)
 
-### ความปลอดภัยของ API (สำหรับ deploy สาธารณะ)
-
-- ทุก endpoint ต้องส่ง `X-API-Key` ยกเว้น `/health` และ
-  `/line/webhook` (webhook ของ LINE ตรวจลายเซ็น HMAC-SHA256 ของตัวเองอยู่แล้ว)
-- Rate limiting แบบ per-IP sliding window เริ่มต้น 30 req/min (ใส่ `0` เพื่อปิด)
-- ดูโค้ดได้ที่ [`src/finance_ai/core/api_security.py`](./src/finance_ai/core/api_security.py)
-
-## ตัวอย่างการใช้งานจริง (Demo)
-
-ตัวอย่างนี้หยิบมาจาก evaluation run จริง (`tax_acc_001`, minimax-m3)
-ไม่ใช่แบบที่พิมพ์ขึ้นมาเอง ผู้ใช้พิมพ์คำถามภาษาไทย router ส่งต่อให้
-Tax Agent แล้ว agent เรียกใช้ตัวคำนวณภาษีแบบ deterministic:
+## ตัวอย่างการใช้งาน
 
 > **ผู้ใช้:** คำนวณภาษี เงินเดือน 50,000 บาทต่อเดือน ค่าลดหย่อนส่วนตัว 60,000
 >
-> **Finance AI:** จากการคำนวณ รายได้รวมทั้งปี 600,000 บาท หักค่าใช้จ่าย 50%
-> (สูงสุด 100,000 บาท) และค่าลดหย่อนส่วนตัว 60,000 บาท ทำให้มีเงินได้สุทธิ
-> 440,000 บาท และต้องเสียภาษี 21,500 บาท
+> **Finance AI:** รายได้รวมทั้งปี 600,000 บาท หักค่าใช้จ่าย 50% (สูงสุด 100,000 บาท)
+> และค่าลดหย่อนส่วนตัว 60,000 บาท เหลือเงินได้สุทธิ 440,000 บาท ต้องเสียภาษี 21,500 บาท
 >
 > | รายการ | จำนวนเงิน (บาท) |
 > |---|---:|
@@ -116,84 +94,98 @@ Tax Agent แล้ว agent เรียกใช้ตัวคำนวณภ
 > | **เงินได้สุทธิ** | **440,000** |
 > | **ภาษีที่ต้องชำระ** | **21,500** |
 
-ถามอย่างอื่นได้ด้วย:
+คำถามอื่นที่ลองได้
 
-- "สรุปค่าใช้จ่ายเดือนนี้" → สรุปรายจ่ายรายเดือนแยกตามหมวดหมู่
-- "ซื้อ RMF ปีละ 100,000 ได้ลดหย่อนเท่าไหร่" → ค่าลดหย่อนเพื่อการออมเกษียณ อ้างอิงจาก RAG knowledge base
-- "PTT.BK ราคาเท่าไหร่" → ราคาสดจาก Yahoo Finance และเพิ่มหุ้นเข้า watchlist ได้
-- "ช่วยวางแผนเก็บเงิน 100,000 ใน 1 ปี" → แผนเก็บเงินแบ่งรายเดือน
-- รูปใบเสร็จ → OCR ดึงรายการออกมา แล้วร่างรายจ่ายเป็น draft ให้กดยืนยันครั้งเดียว
+- "สรุปค่าใช้จ่ายเดือนนี้" → สรุปรายจ่ายแยกตามหมวด
+- "ซื้อ RMF ปีละ 100,000 ได้ลดหย่อนเท่าไหร่" → ตอบโดยอ้างอิงคลังความรู้
+- "PTT ราคาเท่าไหร่ แล้วเดือนนี้ใช้เงินไปเท่าไหร่" → Router แยกเป็น 2 เรื่องและส่งให้ 2 Agent
+- "ช่วยวางแผนเก็บเงิน 100,000 ใน 1 ปี" → แผนเก็บเงินรายเดือน
+- ส่งรูปใบเสร็จ → ร่างรายจ่ายให้กดยืนยัน
 
-### สถาปัตยกรรมขณะรันจริง
+## สถาปัตยกรรม
 
 ```mermaid
 flowchart LR
-    LINE["LINE app"] & WEB["Web app"] -->|"webhook + push"| API["FastAPI<br/>(Render)"]
-    API --> ORCH["Query coordinator"]
-    ORCH --> AG["6 specialist agents<br/>(LangGraph 1.x)"]
-    AG --> TL["Tools & services layer"]
+    LINE["แอป LINE"] & WEB["เว็บแอป"] --> API["FastAPI<br/>(Render)"]
+    API --> ROUTER["Router<br/>(แยกหลายเรื่อง)"]
+    API --> GURU["Guru Agent"]
+    ROUTER --> AG["Agent เฉพาะทาง 6 ตัว<br/>(LangGraph 1.x)"]
+    AG & GURU --> TL["ชั้นเครื่องมือและบริการ"]
     TL --> DB[("Neon<br/>PostgreSQL")]
-    TL --> CH[("ChromaDB<br/>เอกสารไทย 24 ฉบับ")]
-    TL --> YF["Yahoo<br/>Finance"]
-    AG --> LLM["AI model provider<br/>(Ollama / Gemini /<br/>OpenRouter)"]
+    TL --> CH[("ChromaDB<br/>2 คลังความรู้")]
+    TL --> YF["Yahoo Finance<br/>Google News"]
+    AG & GURU --> LLM["Google Gemini<br/>(หรือ Ollama / OpenRouter)"]
 ```
 
-แผนภาพเต็ม (บทที่ 3 รวม sequence diagram): [docs/diagrams.md](./docs/diagrams.md)
+แผนภาพฉบับเต็มและ sequence diagram: [docs/diagrams.md](./docs/diagrams.md)
 
-## เริ่มใช้งานเร็ว ๆ
+## ผลการประเมิน
+
+ประเมินระบบ 5 ด้าน รายงานฉบับเต็มอยู่ที่ [docs/evaluation/report/evaluation-report-th.pdf](./docs/evaluation/report/evaluation-report-th.pdf)
+
+| การทดสอบ | คำถาม | ผลลัพธ์ |
+|---|---|---|
+| สถาปัตยกรรม | แบบใดทำงานสำเร็จมากที่สุด | ระบบจริง (Hub-and-Spoke + แยกหลายเรื่อง) สำเร็จ 92.2% เทียบกับ Single Agent 98.9% แต่ใช้ token น้อยกว่า 3.1 เท่า |
+| การแยกหลายเรื่อง | รองรับคำถามที่ต้องใช้หลาย Agent ไหม | Router จำแนกถูก 411/430 ครั้ง (95.6%) คำถามที่ต้องใช้หลาย Agent สำเร็จ 80.6% เทียบกับ 61.1% เมื่อไม่แยก |
+| ระดับการคิดของ Router | ใช้ระดับต่ำสุดยังแม่นไหม | แม่นยำพอกัน (95.9% กับ 96.2%) และเร็วขึ้นเกือบเท่าตัว (1.36 กับ 2.59 วินาที) |
+| การค้นคืนเอกสาร | โมเดลเวกเตอร์ตัวไหนดีที่สุด | Gemini ได้ nDCG@10 สูงสุด 0.805 ส่วนคำตอบสุดท้ายของ 3 อันดับแรกถูกต้องใกล้เคียงกัน (92.5–94.2%) |
+| การคำนวณภาษี | ถูกต้องตามกฎปี 2569 ไหม | ถูก 26/26 กรณี ถ้าไม่ใช้เครื่องมือ โมเดลตอบถูก 7/8 และยังใช้เพดานประกันสังคมแบบเก่า |
+
+รันการประเมินเอง
+
+```bash
+make evaluate           # รันการประเมินทั้งหมด
+make evaluate-routing   # ความแม่นยำของ Router
+make evaluate-rag       # คุณภาพการค้นคืนเอกสาร
+make evaluate-gurus     # ประเมิน Guru Agent
+make evaluate-compare   # เทียบหลายโมเดล
+```
+
+## เริ่มใช้งาน
 
 ### สิ่งที่ต้องมี
+
 - Python 3.12 ขึ้นไป
-- [uv](https://docs.astral.sh/uv/) (สำหรับจัดการ dependencies)
-- OpenRouter API key ([สร้างได้ที่ https://openrouter.ai/keys](https://openrouter.ai/keys))
-  - หรือใช้ Google Gemini / Ollama เป็น LLM provider ทางเลือก
+- [uv](https://docs.astral.sh/uv/) สำหรับจัดการ dependency
+- Google API key สำหรับ Gemini (ใช้ทั้งแชต OCR และ embedding)
+  หรือใช้ Ollama / OpenRouter แทนสำหรับแชต
 
 ### ติดตั้ง
 
 ```bash
-# Clone the repository
+# ดาวน์โหลดโค้ด
 git clone https://github.com/pakkaphon-tangtonglang/agenticaiforpersonalfinance.git
 cd agenticaiforpersonalfinance
 
-# Install dependencies
+# ติดตั้ง dependency
 make install
 
-# Copy environment variables template
+# สร้างไฟล์ตั้งค่าจากตัวอย่าง แล้วใส่ API key
 cp .env.example .env
+#   อย่างน้อยต้องตั้ง LLM_PROVIDER (google | ollama | openrouter) และ key ของ provider นั้น
+#   Ollama ไม่ต้องใช้ key ถ้ารันในเครื่องที่ http://localhost:11434
 
-# Edit .env and add your API keys
-#   At minimum set: LLM_PROVIDER (google | ollama | openrouter) + OPENROUTER_API_KEY
-#   (ollama needs no API key — run it locally on http://localhost:11434)
-nano .env
-
-# Initialize the database (runs Alembic migrations to create all tables)
+# สร้างตารางในฐานข้อมูล (รัน Alembic migration)
 make init-db
 
-# (Optional) load demo data - users, expenses, watchlist - so the UI
-# is populated on first open
+# (ไม่บังคับ) ใส่ข้อมูลตัวอย่าง เพื่อให้หน้าเว็บมีข้อมูลตั้งแต่เปิดครั้งแรก
 uv run python scripts/seed_demo.py
 
-# Run tests to verify setup
+# รัน test เพื่อตรวจว่าติดตั้งครบ
 make test
 ```
 
-### สั่งรันแอป
+### รันแอป
 
 ```bash
-# Start the FastAPI backend (development mode with auto-reload)
-make dev
-
-# Or run production server
-make run
+make dev    # โหมดพัฒนา รีโหลดอัตโนมัติ
+make run    # โหมด production
 ```
 
-API จะรันอยู่ที่ `http://localhost:8080`
-Web UI (หน้าแชต) อยู่ที่ `http://localhost:8080/`
-เอกสาร API แบบ interactive อยู่ที่ `http://localhost:8080/docs`
+- หน้าเว็บ: `http://localhost:8080/`
+- เอกสาร API: `http://localhost:8080/docs`
 
-## ตัวอย่างการเรียกใช้ในโค้ด
-
-### คำนวณภาษี
+## เรียกใช้จากโค้ด
 
 ```python
 from finance_ai.agents.llm_factory import create_chat_model
@@ -206,10 +198,10 @@ result = orchestrate_query(
 )
 
 print(result["intent"])    # "tax"
-print(result["response"])  # Thai-language tax breakdown
+print(result["response"])  # คำตอบภาษาไทยพร้อมรายละเอียดภาษี
 ```
 
-### แชตแบบ Streaming
+แบบ streaming
 
 ```python
 from finance_ai.agents.stream_utils import orchestrate_query_stream
@@ -228,155 +220,95 @@ for event in orchestrate_query_stream(
 ```
 agenticaiforpersonalfinance/
 ├── src/finance_ai/
-│   ├── agents/              # LangGraph agent implementations
-│   │   ├── router_agent.py       # Intent classification + dispatch
-│   │   ├── tax_agent.py          # Tax Agent (ReAct graph)
-│   │   ├── expense_agent.py      # Expense Agent
-│   │   ├── asset_monitoring_agent.py
-│   │   ├── planning_agent.py
-│   │   ├── recommendation_agent.py
-│   │   ├── report_agent.py
-│   │   ├── llm_factory.py        # LLM provider factory
-│   │   ├── stream_utils.py       # Streaming agent responses
-│   │   └── prompts.py            # System prompts
-│   ├── line/               # LINE chatbot (webhook, mapping, push)
-│   ├── tools/              # Service layer (business logic + tools)
-│   ├── rag/                # ChromaDB vector store + embeddings
-│   ├── database/           # SQLAlchemy models + CRUD + Alembic
-│   ├── evaluation/         # Evaluation framework (6 dimensions)
-│   ├── core/               # Config, logging, API security, LLM clients
-│   ├── static/             # Web frontend (HTML/JS/CSS served by FastAPI)
-│   └── main.py             # FastAPI app entry point
-├── tests/                  # Test suite (mirrors src/)
-├── alembic/                # Database migrations
+│   ├── agents/        # Router, Agent เฉพาะทาง, Guru Agent และเครื่องมือของแต่ละ Agent
+│   ├── tools/         # ชั้นบริการ: ตรรกะทางธุรกิจ ตัวคำนวณ CRUD
+│   ├── rag/           # ChromaDB, embedding, retriever
+│   ├── database/      # โมเดล SQLAlchemy และ CRUD
+│   ├── line/          # LINE chatbot (webhook, การผูกบัญชี, push)
+│   ├── evaluation/    # ชุดประเมินผล
+│   ├── core/          # การตั้งค่า log ความปลอดภัยของ API
+│   ├── static/        # หน้าเว็บ (HTML/JS/CSS ที่ FastAPI ให้บริการ)
+│   └── main.py        # จุดเริ่มต้นของแอป FastAPI
+├── tests/             # test (โครงสร้างเหมือน src/)
+├── alembic/           # migration ของฐานข้อมูล
 ├── docs/
-│   ├── diagrams.md         # Architecture + sequence diagrams (Mermaid)
-│   └── knowledge_base/     # RAG source documents (Thai finance)
-├── scripts/                # Utility scripts (eval, PDF generation)
-├── .github/workflows/      # CI/CD pipeline
-├── pyproject.toml          # Dependencies and tool configs
-├── Makefile                # Common commands
-└── README.md
+│   ├── knowledge_base/  # เอกสารต้นทางของ RAG
+│   ├── gurus/           # โปรไฟล์และแหล่งข้อมูลของกูรู
+│   ├── evaluation/      # บันทึกและรายงานผลการประเมิน
+│   └── diagrams.md      # แผนภาพสถาปัตยกรรม
+├── scripts/           # สคริปต์ช่วยงาน (ประเมินผล ข้อมูลตัวอย่าง)
+├── render.yaml        # การตั้งค่า deploy บน Render
+├── Makefile
+└── pyproject.toml
 ```
 
-## พัฒนาต่อ
+## สำหรับนักพัฒนา
 
-### ตั้งค่า Development Environment
+### คำสั่ง Make
 
 ```bash
-# Install pre-commit hooks
-pre-commit install
-
-# Run all quality checks
-make check
-
-# Run specific checks
-make format      # Auto-format code
-make lint        # Run linter
-make typecheck   # Check type hints
-make test        # Run tests
+make install       # ติดตั้ง dependency และ pre-commit hook
+make init-db       # สร้างตารางในฐานข้อมูล
+make migrate       # สร้าง migration ใหม่
+make dev           # รันโหมดพัฒนา (พอร์ต 8080)
+make run           # รันโหมด production
+make test          # รัน test พร้อม coverage
+make coverage      # สร้างรายงาน coverage แบบ HTML
+make format        # จัดรูปแบบโค้ดด้วย black
+make lint          # ตรวจโค้ดด้วย pylint
+make typecheck     # ตรวจ type ด้วย mypy
+make check         # รันทุกการตรวจ
+make guru-index    # สร้างคลังความรู้ของกูรู
+make clean         # ลบไฟล์ที่สร้างขึ้นระหว่างทำงาน
 ```
 
-### มาตรฐานคุณภาพโค้ด
+### มาตรฐานโค้ด
 
-โปรเจกต์นี้ตั้งมาตรฐานไว้เข้ม:
+- ทุกฟังก์ชันมี type hint และ docstring
+- ฟังก์ชันยาวไม่เกิน 20 บรรทัด
+- ใช้ `Decimal` กับตัวเงินทุกจุด ไม่ใช้ `float`
+- เขียน test ก่อนโค้ด (TDD) coverage มากกว่า 90%
+- pylint มากกว่า 9.0 และ mypy ไม่มี error
 
-- ทุก function มี type hints
-- Test coverage >90%
-- Lint score >9.0/10
-- Function สั้นไม่เกิน 20 บรรทัด
-- ทุก function มี docstring
+## โมเดลภาษาที่รองรับ
 
-### คำสั่ง Make ที่ใช้ได้
+ตั้งค่าใน `.env`
 
-```bash
-make install          # Install dependencies (+ pre-commit hooks)
-make init-db          # Initialize database (run Alembic migrations)
-make migrate          # Create a new Alembic migration (prompts for a message)
-make dev              # Run development server with auto-reload (port 8080)
-make run              # Run production server (port 8080, 4 workers)
-make test             # Run tests with coverage
-make coverage         # Generate HTML coverage report (htmlcov/)
-make lint             # Run pylint
-make format           # Format code with black
-make format-check     # Check formatting without writing (CI mode)
-make typecheck        # Type checking with mypy
-make check            # Run all checks (format, lint, typecheck, test)
-make shell            # Open an IPython shell with app context
-make clean            # Clean generated files
-make evaluate         # Run the full evaluation framework
-make evaluate-routing # Run routing evaluation only
-make evaluate-rag     # Run RAG evaluation only
-make evaluate-compare # Compare multiple LLM providers
-```
-
-## LLM Providers
-
-รองรับหลาย provider (ตั้งค่าใน `.env`):
-
-| Provider | Config key | Production model |
+| Provider | ค่าที่ตั้ง | โมเดล |
 |---|---|---|
-| OpenRouter (ค่าเริ่มต้นที่ใช้งานจริง, ใช้ทำ OCR ด้วย) | `llm_provider=openrouter` | `minimax/minimax-m3` |
-| Google Gemini | `llm_provider=google` | `gemini-3.5-flash` |
-| Ollama Cloud | `llm_provider=ollama` | `minimax-m3` |
+| Google Gemini (ใช้งานจริง ทั้งแชตและ OCR) | `LLM_PROVIDER=google` | `gemini-3.5-flash` |
+| Ollama | `LLM_PROVIDER=ollama` | `minimax-m3` |
+| OpenRouter | `LLM_PROVIDER=openrouter` | ตั้งผ่าน `OPENROUTER_MODEL` |
 
-## งานวิจัยและผลการประเมิน
+## การ Deploy
 
-Evaluation framework 6 มิตินี้เป็นฐานของบทที่ 4 ในวิทยานิพนธ์
-ร่างผลลัพธ์พร้อมตารางเต็มอยู่ที่ `docs/thesis-results/`:
-
-| บท | หัวข้อ | ผลสำคัญ |
-|---|---|---|
-| [4.1](./docs/thesis-results/4.1-routing-ablation.md) | ความแม่นยำของ Router + feature ablation (810 calls, 3 รอบ) | base 0.943; multi-turn 0.733 → **1.000** เมื่อเปิด chat history |
-| [4.2](./docs/thesis-results/4.2-answer-correctness.md) | ความถูกต้องของคำตอบ (ความแม่นภาษี + hallucination) | ภาษีแม่นยำ **95%** (MAE 3,000 บาท); hallucination headline **10/10** |
-| [4.3](./docs/thesis-results/4.3-retrieval-quality.md) | คุณภาพการดึงข้อมูล RAG (39 queries, index 1,586 chunks แบบ one-shot) | Recall@3 **0.897**, MRR **0.808** |
-| [4.4](./docs/thesis-results/4.4-architecture-comparison.md) | เปรียบเทียบสถาปัตยกรรม (Hub-and-Spoke vs P2P/Hierarchical) | routing calls **1.0** vs 1.8/2.0; coupling O(N) vs O(N²) |
-| [เปรียบเทียบ model](./docs/model-comparison.md) | Benchmark หลาย provider (routing/คำตอบ) | minimax-m3 0.94, gemini-3.5-flash 0.91 (±0.05) |
-
-รันการประเมินเองได้:
-
-```bash
-make evaluate-routing   # router accuracy + ablation (see docs/deployment.md flags)
-make evaluate-rag       # RAG retrieval metrics
-make evaluate-compare   # multi-provider comparison
-```
-
-## Deployment
-
-คู่มือเต็ม (Render free tier + Neon Postgres, Environment Variables, การแก้ปัญหา):
-[docs/deployment.md](./docs/deployment.md) Render blueprint อยู่ที่
-[`render.yaml`](./render.yaml) (LLM + OCR ผ่าน OpenRouter, RAG embeddings ผ่าน Google)
+คู่มือเต็ม (Render + Neon Postgres, ตัวแปรสภาพแวดล้อม, การแก้ปัญหา) อยู่ที่ [docs/deployment.md](./docs/deployment.md)
+การตั้งค่า Render อยู่ใน [`render.yaml`](./render.yaml)
 
 ## ร่วมพัฒนา
 
 1. Fork repository
-2. สร้าง feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit การเปลี่ยนแปลง (`git commit -m 'Add amazing feature'`)
-4. Push ขึ้น branch (`git push origin feature/amazing-feature`)
+2. สร้าง branch ใหม่ (`git checkout -b feature/ชื่อฟีเจอร์`)
+3. Commit การเปลี่ยนแปลง
+4. Push ขึ้น branch ของตัวเอง
 5. เปิด Pull Request
 
-PR ทุกอันต้อง:
-- ผ่าน test ทั้งหมด (`make check`)
-- Coverage >90%
-- ผ่าน linting (score >9.0)
-- ผ่าน type checking
+ทุก PR ต้องผ่าน `make check` (test, coverage มากกว่า 90%, lint, type check)
 
-## License
+## สัญญาอนุญาต
 
-โปรเจกต์นี้อนุญาตให้ใช้เพื่อ **ส่วนตัวและการศึกษาเท่านั้น**
-(ดูรายละเอียดในไฟล์ [LICENSE](./LICENSE)) การใช้เชิงพาณิชย์ต้องได้รับ
-อนุญาตเป็นลายลักษณ์อักษรจากผู้ถือสิทธิก่อน และนี่ไม่ใช่คำแนะนำทางการเงิน
+ใช้ได้เพื่อ **ส่วนตัวและการศึกษาเท่านั้น** (รายละเอียดใน [LICENSE](./LICENSE))
+การใช้เชิงพาณิชย์ต้องได้รับอนุญาตเป็นลายลักษณ์อักษรจากเจ้าของสิทธิก่อน
 
-## ขอบคุณแหล่งข้อมูล
+## แหล่งข้อมูลและเครื่องมือที่ใช้
 
-- Agent orchestration: [LangGraph](https://github.com/langchain-ai/langgraph)
-- LLM: [OpenRouter](https://openrouter.ai/) (หรือ Google Gemini / Ollama)
-- Vector store: [ChromaDB](https://www.trychroma.com/)
+- จัดการ Agent: [LangGraph](https://github.com/langchain-ai/langgraph)
+- โมเดลภาษา: [Google Gemini](https://ai.google.dev/) (หรือ Ollama / OpenRouter)
+- ฐานข้อมูลเวกเตอร์: [ChromaDB](https://www.trychroma.com/)
 - ข้อมูลตลาด: [yfinance](https://github.com/ranaroussi/yfinance), [SET](https://www.set.or.th/), [AIMC](https://www.aimc.or.th/)
 - กฎภาษี: [กรมสรรพากร](https://www.rd.go.th/)
 
 ---
 
-**ข้อจำกัดความรับผิดชอบ**: เครื่องมือนี้จัดทำขึ้นเพื่อให้ข้อมูลเท่านั้น ไม่ใช่คำแนะนำทางการเงิน
-ควรปรึกษาผู้เชี่ยวชาญด้านการเงินก่อนตัดสินใจลงทุนทุกครั้ง การคำนวณภาษีอ้างอิงกฎหมายภาษีไทยฉบับปัจจุบัน
-และอาจไม่รวมการเปลี่ยนแปลงล่าสุด
+**ข้อจำกัดความรับผิดชอบ:** ระบบนี้ให้ข้อมูลเพื่อการศึกษาเท่านั้น ไม่ใช่คำแนะนำทางการเงิน
+ควรปรึกษาผู้เชี่ยวชาญก่อนตัดสินใจลงทุน การคำนวณภาษีอ้างอิงกฎหมายภาษีไทยปี 2569 และอาจไม่รวมการเปลี่ยนแปลงหลังจากนั้น
