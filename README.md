@@ -18,6 +18,27 @@
 | **คุณภาพโค้ด** | test 3,314 ตัว, coverage 96.6%, mypy strict, pylint, เขียนแบบ TDD ทั้งโปรเจกต์ |
 | **การใช้งานจริง** | FastAPI บน Render + Neon Postgres, Google Gemini 3.5 Flash, LINE chatbot, OCR ใบเสร็จและ statement ธนาคาร |
 
+## ภาพตัวอย่าง
+
+![แชตคำนวณภาษี](./docs/screenshots/chat-tax.jpg)
+*ถามภาษีในแชต Agent เรียกเครื่องมือคำนวณแล้วตอบเป็นตารางพร้อมรายละเอียด*
+
+<table>
+  <tr>
+    <td width="50%"><img src="./docs/screenshots/dash-charts.jpg" alt="แดชบอร์ด"><br><sub>แดชบอร์ด: รายจ่ายแยกหมวด พอร์ตลงทุน และคะแนนสุขภาพการเงิน</sub></td>
+    <td width="50%"><img src="./docs/screenshots/guru-panel-answer.jpg" alt="ถามกูรู"><br><sub>ถามกูรูหลายคนพร้อมกัน แต่ละคนตอบจากแหล่งข้อมูลของตัวเอง</sub></td>
+  </tr>
+  <tr>
+    <td width="50%"><img src="./docs/screenshots/asset-search.jpg" alt="ค้นหาสินทรัพย์"><br><sub>ค้นหาสินทรัพย์ เพิ่มลงพอร์ต หรือกดติดตามข่าว</sub></td>
+    <td width="50%"><img src="./docs/screenshots/import-review.jpg" alt="เพิ่มรายการจากไฟล์"><br><sub>อัปโหลดใบเสร็จหรือ statement แล้วตรวจรายการก่อนบันทึก</sub></td>
+  </tr>
+</table>
+
+<p align="center">
+  <img src="./docs/screenshots/line-answer.jpg" alt="LINE chatbot" width="300"><br>
+  <sub>คุยผ่าน LINE ได้ ระบบตอบรับทันทีแล้วส่งคำตอบตามมา</sub>
+</p>
+
 ## โปรเจกต์นี้ทำอะไรได้บ้าง
 
 ผู้ช่วยการเงินที่คุยด้วยภาษาไทยได้ ทั้งผ่านเว็บและ LINE
