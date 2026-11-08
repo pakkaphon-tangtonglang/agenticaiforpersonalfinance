@@ -125,20 +125,54 @@ ChromaDB มี 2 collection
 
 ## สถาปัตยกรรม
 
-```mermaid
-flowchart LR
-    LINE["แอป LINE"] & WEB["เว็บแอป"] --> API["FastAPI<br/>(Render)"]
-    API --> ROUTER["Router<br/>(แยกหลายเรื่อง)"]
-    API --> GURU["Guru Agent"]
-    ROUTER --> AG["Agent เฉพาะทาง 6 ตัว<br/>(LangGraph 1.x)"]
-    AG & GURU --> TL["ชั้นเครื่องมือและบริการ"]
-    TL --> DB[("Neon<br/>PostgreSQL")]
-    TL --> CH[("ChromaDB<br/>2 คลังความรู้")]
-    TL --> YF["Yahoo Finance<br/>Google News"]
-    AG & GURU --> LLM["Google Gemini<br/>(หรือ Ollama / OpenRouter)"]
-```
+แผนภาพทั้งหมดมาจากบทที่ 3 ของปริญญานิพนธ์
 
-แผนภาพฉบับเต็มและ sequence diagram: [docs/diagrams.md](./docs/diagrams.md)
+### ภาพรวมของระบบ
+
+![สถาปัตยกรรมภาพรวมของระบบแบบหลาย Agent](./docs/architecture/3.03-system-overview.png)
+
+### การกำหนดเส้นทางของ Router Agent
+
+Router เรียกโมเดลภาษา 1 ครั้งเพื่อจำแนกเจตนา ถ้าข้อความถามหลายเรื่องจะแยกเป็นงานย่อยให้หลาย Agent ถ้าความมั่นใจต่ำกว่า 0.7 จะถามกลับพร้อมปุ่มตัวเลือก
+
+![การกำหนดเส้นทางของ Router Agent](./docs/architecture/3.05-router-routing.png)
+
+### การตอบข้อความที่ถามหลายเรื่อง
+
+![การตอบข้อความที่ถามหลายด้าน](./docs/architecture/3.15-multi-topic.png)
+
+### วงจร ReAct ภายใน Agent (ตัวอย่าง Tax Agent)
+
+![วงจร ReAct ภายใน Tax Agent](./docs/architecture/3.16-react-loop-tax-agent.png)
+
+### RAG: การสร้างดัชนีและการค้นคืน
+
+![ขั้นตอนการสร้างดัชนีและการค้นคืนข้อมูลของ RAG](./docs/architecture/3.18-rag-index-retrieval.png)
+
+### Guru Agent
+
+![การทำงานของ Guru Agent](./docs/architecture/3.08-guru-agent.png)
+
+<details>
+<summary><b>แผนภาพอื่น ๆ (กดเพื่อดู)</b></summary>
+
+| รูป | แผนภาพ |
+|---|---|
+| 3.1 | [Use Case Diagram ของระบบ](./docs/architecture/3.01-use-case.png) |
+| 3.2 | [การติดตั้งระบบบนคลาวด์](./docs/architecture/3.02-cloud-deployment.png) |
+| 3.4 | [ชั้นรับข้อมูลจากผู้ใช้งาน](./docs/architecture/3.04-input-layer.png) |
+| 3.6 | [การเชื่อมต่อระหว่าง Agent กับฐานข้อมูลและ API ภายนอก](./docs/architecture/3.06-agent-db-external-api.png) |
+| 3.7 | [ความสัมพันธ์ระหว่าง Agent เครื่องมือ และตารางในฐานข้อมูล](./docs/architecture/3.07-agent-tool-table.png) |
+| 3.9 | [กระบวนการทำงาน ReAct ของ Agent](./docs/architecture/3.09-react-process.png) |
+| 3.10 | [ขั้นตอนการรับคำถามและจำแนกเจตนา](./docs/architecture/3.10-intent-classification.png) |
+| 3.11 | [โครงสร้างกราฟ LangGraph ของ Agent แต่ละประเภท](./docs/architecture/3.11-langgraph-graphs.png) |
+| 3.12 | [การบันทึกและการใช้ประวัติการสนทนา](./docs/architecture/3.12-conversation-history.png) |
+| 3.13 | [การประกอบคำสั่งและการจำแนกเจตนาของ Router Agent](./docs/architecture/3.13-router-prompt.png) |
+| 3.14 | [การส่งคำถามให้ Agent ตัวเดียวและการใช้เครื่องมือข้าม Agent](./docs/architecture/3.14-single-agent-cross-tools.png) |
+| 3.17 | [การนำเสนอคำตอบผ่านเว็บและ LINE](./docs/architecture/3.17-response-web-line.png) |
+| 3.19 | [สถาปัตยกรรมแบบ Hub-and-Spoke](./docs/architecture/3.19-hub-and-spoke.png) |
+
+</details>
 
 ## ผลการประเมิน
 
