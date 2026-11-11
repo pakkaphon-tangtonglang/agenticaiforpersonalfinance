@@ -264,3 +264,6 @@ docs/*statement*.pdf
 docs/evaluation/report/*.aux
 docs/evaluation/report/*.out
 docs/evaluation/report/*.toc
+
+# Original guru photos (cropped avatars live in src/finance_ai/static/gurus/)
+Guru Photo/

@@ -1,7 +1,8 @@
 /* Personal Finance AI — Guru tab
    Chat with one guru lens, or ask the whole panel and compare.
-   Reuses app.js helpers via window.FinanceApp. No photos of real people:
-   cards use initials only, and every answer carries a disclaimer.
+   Reuses app.js helpers via window.FinanceApp. Avatars show the guru's
+   photo (static/gurus/<id>.jpg), falling back to initials; every answer
+   carries a disclaimer.
 */
 (function () {
   "use strict";
@@ -35,6 +36,19 @@
     const latin = name.match(/[A-Z]/g);
     if (latin && latin.length >= 2) return latin.slice(0, 2).join("");
     return name.replace(/^(ดร\.|โค้ช)/, "").trim().slice(0, 2);
+  }
+
+  const PHOTO_IDS = new Set(["buffett", "dalio", "niwes", "coach_noom"]);
+
+  // Round avatar: the guru's photo when one exists, otherwise initials.
+  function guruAvatar(guruId, extraClass) {
+    const el = app().el;
+    const cls = "guru-avatar" + (extraClass ? " " + extraClass : "");
+    const label = guruId === PANEL_ID ? "วง" : initials(guruName(guruId));
+    if (!PHOTO_IDS.has(guruId)) return el("span", { class: cls, "aria-hidden": "true" }, label);
+    const img = el("img", { class: cls + " guru-photo", src: `gurus/${guruId}.jpg`, alt: "", loading: "lazy" });
+    img.addEventListener("error", () => img.replaceWith(el("span", { class: cls, "aria-hidden": "true" }, label)), { once: true });
+    return img;
   }
 
   function guruName(guruId) {
@@ -84,7 +98,7 @@
         "aria-pressed": String(active),
         onclick: () => onCardClick(g.guru_id),
       },
-      el("span", { class: "guru-avatar", "aria-hidden": "true" }, initials(g.display_name)),
+      guruAvatar(g.guru_id),
       el("span", { class: "guru-card-text" },
         el("span", { class: "guru-card-name" }, g.display_name),
         el("span", { class: "guru-card-tagline" }, g.tagline))));
@@ -140,8 +154,7 @@
 
   // ─── History (sidebar list, shared with the main chat) ───
   function historyAvatar(conv) {
-    const label = conv.guru_id === PANEL_ID ? "วง" : initials(guruName(conv.guru_id));
-    return app().el("span", { class: "guru-avatar guru-avatar-sm conv-avatar", "aria-hidden": "true" }, label);
+    return guruAvatar(conv.guru_id, "guru-avatar-sm conv-avatar");
   }
 
   function renderHistory() {
@@ -244,7 +257,7 @@
     const body = el("div", { class: "msg-bubble msg-cursor" });
     const card = el("article", { class: "guru-panel-card", dataset: { guruId } },
       el("header", { class: "guru-panel-head" },
-        el("span", { class: "guru-avatar guru-avatar-sm", "aria-hidden": "true" }, initials(guruName(guruId))),
+        guruAvatar(guruId, "guru-avatar-sm"),
         el("span", {}, guruName(guruId))),
       body);
     return { card, body };
