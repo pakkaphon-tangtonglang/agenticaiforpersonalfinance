@@ -53,6 +53,7 @@ def _make_client(test_engine: Engine, monkeypatch: Any) -> TestClient:
     monkeypatch.setenv("LINE_CHANNEL_SECRET", CHANNEL_SECRET)
     monkeypatch.setenv("LINE_CHANNEL_ACCESS_TOKEN", ACCESS_TOKEN)
     monkeypatch.setattr("finance_ai.main._session_factory", sessionmaker(bind=test_engine))
+    monkeypatch.setattr("finance_ai.main.get_chat_model", lambda: None)
     monkeypatch.setattr(
         "finance_ai.line.line_bot_service.orchestrate_query",
         lambda **kwargs: {"intent": "tax", "response": "คำตอบภาษี"},

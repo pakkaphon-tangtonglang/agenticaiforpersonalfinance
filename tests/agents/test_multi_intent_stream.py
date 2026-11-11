@@ -224,6 +224,7 @@ class TestOrchestrateQueryStream:
             return OrchestratorDecision(intent="general", confidence=Decimal("0.9"))
 
         monkeypatch.setattr(stream_utils, "classify_query", fake_classify)
+        monkeypatch.setattr(stream_utils, "_get_agent_graph", lambda intent, model: None)
         monkeypatch.setattr(
             stream_utils,
             "execute_general_chat",
