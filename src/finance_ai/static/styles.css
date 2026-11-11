@@ -1210,6 +1210,7 @@ svg.i {
   font-size: var(--text-body-sm); font-weight: var(--fw-medium);
 }
 .guru-avatar-sm { width: 24px; height: 24px; font-size: var(--text-caption); }
+.guru-photo { object-fit: cover; background: var(--surface-2, var(--primary)); }
 .guru-card-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .guru-card-name { font-size: var(--text-body); font-weight: var(--fw-medium); color: var(--ink); }
 /* Full description, no clamp: people pick a guru by reading it */
