@@ -110,7 +110,7 @@ layout หรือดาวน์โหลดไม่ได้ แหล่ง
 - **Secrets อยู่บนเซิร์ฟเวอร์เท่านั้น** — `GOOGLE_API_KEY` / `OCR_API_KEY` (Gemini),
   `DB_URL` และ LINE secrets มีเฉพาะใน environment variables ของ Render
   ห้ามใส่ใน repo หรือไฟล์หน้าเว็บ
-- **Rate limiting** — จำกัด 30 requests/นาที/IP ผ่าน `RATE_LIMIT_PER_MINUTE`
+- **Rate limiting** — ปิดไว้บน Render (`RATE_LIMIT_PER_MINUTE=0`); ตั้งเป็นตัวเลข เช่น 60 เพื่อจำกัด requests/นาที/IP
   (`src/finance_ai/core/api_security.py`) ส่วน `API_KEY` (header `X-API-Key`)
   ปล่อยว่างไว้: key ที่ใส่ในหน้าเว็บสาธารณะไม่เป็นความลับ และถ้าตั้งไว้หน้าเว็บจะใช้ไม่ได้
   ใช้เฉพาะเมื่อเปิด API ให้สคริปต์หรือระบบอื่นที่ไม่ผ่านหน้าเว็บ
@@ -226,7 +226,7 @@ automatically when the vector store is already populated.
 - **Secrets stay server-side.** `GOOGLE_API_KEY` / `OCR_API_KEY` (Gemini),
   `DB_URL` and the LINE secrets exist only as Render environment
   variables — never in the repository or the web UI files.
-- **Rate limiting** caps each IP at 30 requests/minute via
+- **Rate limiting** is off on Render (`RATE_LIMIT_PER_MINUTE=0`); set a number such as 60 to cap requests/minute per IP via
   `RATE_LIMIT_PER_MINUTE` (`src/finance_ai/core/api_security.py`).
   `API_KEY` (`X-API-Key` header) stays unset: a key embedded in a public web
   page is not secret, and setting it would block the web UI. Use it only if
