@@ -16,8 +16,13 @@ services:
     plan: free
     region: singapore # closest region to Thailand
     branch: main
-    buildCommand: pip install uv && uv sync --frozen --all-extras --no-dev
-    startCommand: uv run python scripts/bootstrap_runtime.py && uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT
+    # No `embeddings` extra: sentence-transformers pulls in transformers +
+    # torch, and langchain_core imports transformers whenever it is installed
+    # (~360 MB extra RAM, over the 512 MB free limit). Prod embeds via Gemini.
+    # --no-sync at start: keep the lean build env (plain `uv run` would add
+    # the dev group back).
+    buildCommand: pip install uv && uv sync --frozen --extra openrouter --extra ollama --no-dev
+    startCommand: uv run --no-sync python scripts/bootstrap_runtime.py && uv run --no-sync uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT
     envVars:
       # Runtime
       - key: PYTHON_VERSION
