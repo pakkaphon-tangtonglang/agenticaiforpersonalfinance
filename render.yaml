@@ -80,10 +80,12 @@ services:
       # on the asset page. Without it, fund search and fund prices are off.
       - key: SEC_API_KEY
         sync: false
-      # Public API protection: per-IP rate limit. No API_KEY: the web UI is
-      # served from this same host, and a key shipped in public JavaScript
-      # would not be secret. (Setting API_KEY would block the web UI.)
+      # Per-IP rate limit: 0 = off. It counted static files too, so a few
+      # people on one Wi-Fi got 429s on page load. Low-traffic demo site;
+      # set e.g. "60" again if the public URL starts getting abused.
+      # No API_KEY: the web UI is served from this same host, and a key
+      # shipped in public JavaScript would not be secret.
       - key: RATE_LIMIT_PER_MINUTE
-        value: "30"
+        value: "0"
       # Optional (add later via dashboard Environment tab):
       #   LANGSMITH_TRACING / LANGSMITH_API_KEY / LANGSMITH_PROJECT — tracing.
