@@ -41,8 +41,8 @@ Neon solves this (set up with the Neon CLI; migrations run via
    | การตั้งค่า | ค่า |
    |---|---|
    | Runtime | Python 3.13 |
-   | Build command | `pip install uv && uv sync --frozen --all-extras --no-dev` |
-   | Start command | `uv run python scripts/bootstrap_runtime.py && uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT` |
+   | Build command | `pip install uv && uv sync --frozen --extra openrouter --extra ollama --no-dev` |
+   | Start command | `uv run --no-sync python scripts/bootstrap_runtime.py && uv run --no-sync uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT` |
 
    Free plan has no pre-deploy/release command (`preDeployCommand`),
    so bootstrap is folded into the start command.
@@ -165,8 +165,8 @@ the Neon URL).
    | Setting | Value |
    |---|---|
    | Runtime | Python 3.13 |
-   | Build command | `pip install uv && uv sync --frozen --all-extras --no-dev` |
-   | Start command | `uv run python scripts/bootstrap_runtime.py && uv run uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT` |
+   | Build command | `pip install uv && uv sync --frozen --extra openrouter --extra ollama --no-dev` |
+   | Start command | `uv run --no-sync python scripts/bootstrap_runtime.py && uv run --no-sync uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT` |
 
    Free plan has no pre-deploy/release command (`preDeployCommand`),
    so bootstrap is folded into the start command.
