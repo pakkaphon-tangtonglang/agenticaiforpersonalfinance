@@ -20,10 +20,15 @@ services:
     # torch, and langchain_core imports transformers whenever it is installed
     # (~360 MB extra RAM, over the 512 MB free limit). Prod embeds via Gemini.
     # --no-sync at start: keep the lean build env (plain `uv run` would add
-    # the dev group back).
+    # the dev group back). --workers 1: uvicorn otherwise reads Render's
+    # WEB_CONCURRENCY, and each worker loads the full app (~260 MB).
     buildCommand: pip install uv && uv sync --frozen --extra openrouter --extra ollama --no-dev
-    startCommand: uv run --no-sync python scripts/bootstrap_runtime.py && uv run --no-sync uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT
+    startCommand: uv run --no-sync python scripts/bootstrap_runtime.py && uv run --no-sync uvicorn finance_ai.main:app --host 0.0.0.0 --port $PORT --workers 1
     envVars:
+      # glibc gives every thread its own malloc arena (up to 8 x CPUs), which
+      # inflates RSS on Linux; 2 arenas keeps the threaded app well under 512 MB.
+      - key: MALLOC_ARENA_MAX
+        value: "2"
       # Runtime
       - key: PYTHON_VERSION
         value: "3.13"
